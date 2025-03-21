@@ -133,6 +133,9 @@ sub start_session {
         }
     );
 
+    # Ensure rightPlaceList is an array reference, even if empty
+    $rightPlaceList = [] unless defined $rightPlaceList;
+
     my ( $location_data, $iTotalRecords ) = GetItemsForInventory(
         {
             minlocation         => $minLocation,
@@ -151,6 +154,8 @@ sub start_session {
         }
     );
 
+    # Ensure location_data is an array reference, even if empty
+    $location_data = [] unless defined $location_data;
 
  #Modify the keys in location_data to conform to the required format
 foreach my $item (@$location_data) {
