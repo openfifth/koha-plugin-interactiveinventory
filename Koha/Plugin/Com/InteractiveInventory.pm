@@ -47,14 +47,9 @@ sub tool {
     my ( $self, $args ) = @_;
     my $cgi = $self->{cgi};
 
-    my ( $template, $borrowernumber, $cookie ) = get_template_and_user(
-        {
-            template_name => $self->bundle_path . '/InteractiveInventory.tt',
-            query         => $cgi,
-            type          => "intranet",
-            flagsrequired => { tools => 'inventory' },
-        }
-    );
+    # Get template using get_template() method
+    my $template = $self->get_template({ file => 'InteractiveInventory.tt' });
+
     my @class_sources = Koha::ClassSources->search( { used => 1 } )->as_list;
     my $pref_class    = C4::Context->preference("DefaultClassificationSource");
 
@@ -64,16 +59,7 @@ sub tool {
         pref_class    => $pref_class,
     );
 
-    output_html_with_http_headers $cgi, $cookie, $template->output;
-}
-
-
-sub tool_start {
-    my ( $self, $args ) = @_;
-    my $cgi = $self->{'cgi'};
-
-    my $template = $self->get_template( { file => 'InteractiveInventory.tt' } );
-
+    # Output the template
     $self->output_html( $template->output() );
 }
 
