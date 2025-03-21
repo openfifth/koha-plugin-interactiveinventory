@@ -34,10 +34,10 @@
         <h2>End Session</h2>
         <p v-if="uniqueBarcodesCount <= expectedUniqueBarcodes">Scanned {{ uniqueBarcodesCount }} unique barcodes of an expected {{ expectedUniqueBarcodes }} are you sure you want to end the session?</p>
         <div class="modal-checkboxes">
-          <input type="checkbox" id="exportToCSV" v-model="exportToCSV"> Export to CSV </input>
+          <input type="checkbox" id="exportToCSV" v-model="exportToCSV"> Export to CSV
         </div>
         <div class="modal-checkboxes">
-          <input type="checkbox" v-model="markMissingItems" id="mark-missing-items"> Mark "loststatus" as missing for any expected items not scanned </input>
+          <input type="checkbox" v-model="markMissingItems" id="mark-missing-items"> Mark "loststatus" as missing for any expected items not scanned
         </div>
         <span v-if="markMissingItems" style="color: red;">(This can take a while for large numbers of missing items)</span>
         <button @click="endSession" class="end-session-modal-button">End Session</button>
