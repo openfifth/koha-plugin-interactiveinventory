@@ -1,8 +1,8 @@
 {
-  "/item/fields": {
+  "/item/field": {
     "post": {
-      "x-mojo-to": "Com::InteractiveInventory::Controllers::Items#modifyItemFields",
-      "operationId": "modifyItemFields",
+      "x-mojo-to": "Com::InteractiveInventory::Controllers::Items#modifyItemField",
+      "operationId": "modifyItemField",
       "tags": [
         "inventory"
       ],
@@ -14,10 +14,10 @@
       ],
       "parameters": [
         {
-          "name": "item",
+          "name": "body",
           "in": "body",
           "required": true,
-          "description": "Item fields modification data",
+          "description": "Single item field modification data",
           "schema": {
             "type": "object",
             "required": [
@@ -46,10 +46,13 @@
           "schema": {
             "type": "object",
             "properties": {
-              "success": {
-                "type": "boolean"
+              "barcode": {
+                "type": "string"
               },
-              "message": {
+              "status": {
+                "type": "integer"
+              },
+              "success": {
                 "type": "string"
               }
             }
@@ -60,6 +63,93 @@
         },
         "404": {
           "description": "Item not found"
+        }
+      }
+    }
+  },
+  "/item/fields": {
+    "post": {
+      "x-mojo-to": "Com::InteractiveInventory::Controllers::Items#modifyItemFields",
+      "operationId": "modifyItemFields",
+      "tags": [
+        "inventory"
+      ],
+      "produces": [
+        "application/json"
+      ],
+      "consumes": [
+        "application/json"
+      ],
+      "parameters": [
+        {
+          "name": "body",
+          "in": "body",
+          "required": true,
+          "description": "Multiple items field modification data",
+          "schema": {
+            "type": "object",
+            "required": [
+              "items"
+            ],
+            "properties": {
+              "items": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "barcode",
+                    "fields"
+                  ],
+                  "properties": {
+                    "barcode": {
+                      "type": "string",
+                      "description": "The barcode of the item to modify"
+                    },
+                    "fields": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      },
+                      "description": "The fields to update with their new values"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "Items updated successfully",
+          "schema": {
+            "type": "object",
+            "properties": {
+              "results": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "barcode": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer"
+                    },
+                    "success": {
+                      "type": "string"
+                    },
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "400": {
+          "description": "Missing items data"
         }
       }
     }
@@ -79,7 +169,7 @@
       ],
       "parameters": [
         {
-          "name": "item",
+          "name": "body",
           "in": "body",
           "required": true,
           "description": "Item check-in data",
@@ -96,7 +186,6 @@
               },
               "date": {
                 "type": "string",
-                "format": "date-time",
                 "description": "The date of check-in"
               }
             }
@@ -116,37 +205,13 @@
           }
         },
         "400": {
-          "description": "Invalid input",
-          "schema": {
-            "type": "object",
-            "properties": {
-              "error": {
-                "type": "string"
-              }
-            }
-          }
+          "description": "Invalid input"
         },
         "404": {
-          "description": "Item not found",
-          "schema": {
-            "type": "object",
-            "properties": {
-              "error": {
-                "type": "string"
-              }
-            }
-          }
+          "description": "Item not found"
         },
         "500": {
-          "description": "Internal server error",
-          "schema": {
-            "type": "object",
-            "properties": {
-              "error": {
-                "type": "string"
-              }
-            }
-          }
+          "description": "Internal server error"
         }
       }
     }
