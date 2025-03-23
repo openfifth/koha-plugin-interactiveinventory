@@ -211,9 +211,9 @@ export default {
           isExpanded: index === 0 // Only expand the first item
         }));
 
-      // Update the item status
+      // Update the item status - using the single item endpoint
       if (Object.keys(fieldsToAmend).length > 0) {
-        await this.updateItemStatus([{ barcode: combinedData.external_id, fields: fieldsToAmend }]);
+        await this.updateSingleItemStatus(combinedData.external_id, fieldsToAmend);
       }
 
         // Clear the barcode input and focus on it
@@ -248,13 +248,14 @@ export default {
     },
   async updateItemStatus(items = []) {
     try {
-      console.log('Updating item statuses:', items);
+      console.log('Updating multiple item statuses:', items);
       const response = await fetch(
         `/api/v1/contrib/interactiveinventory/item/fields`,
         {
           method: 'POST',
           headers: {
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
           },
           body: JSON.stringify({
             items: items
@@ -262,7 +263,9 @@ export default {
         }
       );
       if (!response.ok) {
-        throw new Error('Network response was not ok');
+        const errorData = await response.json();
+        console.error('Error response:', errorData);
+        throw new Error(`Network response was not ok: ${errorData?.errors?.[0]?.message || response.statusText}`);
       }
       const data = await response.json();
       EventBus.emit('message', { text: 'Item statuses updated successfully', type: 'status' });
@@ -270,6 +273,36 @@ export default {
       EventBus.emit('message', { text: `Error updating item statuses: ${error.message}`, type: 'error' });
     }
   },
+    async updateSingleItemStatus(barcode, fields) {
+      try {
+        console.log('Updating single item status:', barcode, fields);
+        const response = await fetch(
+          `/api/v1/contrib/interactiveinventory/item/field`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json'
+            },
+            body: JSON.stringify({
+              barcode: barcode,
+              fields: fields
+            })
+          }
+        );
+        
+        if (!response.ok) {
+          const errorData = await response.json();
+          console.error('Error response:', errorData);
+          throw new Error(`Network response was not ok: ${errorData?.error || response.statusText}`);
+        }
+        
+        const data = await response.json();
+        EventBus.emit('message', { text: 'Item status updated successfully', type: 'status' });
+      } catch (error) {
+        EventBus.emit('message', { text: `Error updating item status: ${error.message}`, type: 'error' });
+      }
+    },
     async initiateInventorySession(sessionData) {
       this.sessionData = sessionData;
       this.sessionStarted = true;
