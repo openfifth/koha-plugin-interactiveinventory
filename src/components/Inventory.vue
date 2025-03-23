@@ -63,7 +63,7 @@ export default {
         return uniqueBarcodes.size;
       },
     expectedUniqueBarcodes() {
-      return this.sessionData.response_data.total_records || 0;
+      return this.sessionData && this.sessionData.response_data ? (this.sessionData.response_data.total_records || 0) : 0;
     }
   },
   data() {
@@ -88,11 +88,10 @@ export default {
     }
 
     if (this.markMissingItems) {
-      // Identify items in the expected list that have not been scanned
-      const expectedBarcodesSet = new Set(this.sessionData.response_data.location_data.map(item => item.barcode));
+      // Add defensive check for location_data
+      const locationData = this.sessionData.response_data.location_data || [];
       const scannedBarcodesSet = new Set(this.items.map(item => item.external_id));
-      const missingItems = this.sessionData.response_data.location_data.filter(item => !scannedBarcodesSet.has(item.barcode));
-
+      const missingItems = locationData.filter(item => !scannedBarcodesSet.has(item.barcode));
       // Mark missing items
       const itemsToUpdate = missingItems.map(item => ({
         barcode: item.barcode,
@@ -169,7 +168,9 @@ export default {
 
         // If set to compare barcodes, check if the scanned barcode is in the expected list.
         // If not, show an alert and return.
-        const isInRightPlaceList = this.sessionData.response_data.right_place_list.some(item => item.barcode === combinedData.external_id);
+        // Add defensive check before accessing right_place_list
+        const rightPlaceList = this.sessionData.response_data.right_place_list || [];
+        const isInRightPlaceList = rightPlaceList.some(item => item.barcode === combinedData.external_id);
         if (this.sessionData.compareBarcodes && !isInRightPlaceList) {
           combinedData.wrongPlace = true; // Flag the item as in the wrong place
         }
