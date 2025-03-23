@@ -356,83 +356,85 @@ export default {
       // Create a map of scanned items using their barcodes
       const scannedItemsMap = new Map(this.items.map(item => [item.external_id, item]));
 
-      const expectedBarcodesSet = new Set(this.sessionData.response_data.location_data.map(item => item.barcode));
+      // Add defensive check for location_data
+      const locationData = this.sessionData.response_data.location_data || [];
+      const expectedBarcodesSet = new Set(locationData.map(item => item.barcode));
 
-// Combine expected items and scanned items
-const combinedItems = [
-  ...this.sessionData.response_data.location_data,
-  ...this.items.filter(item => !expectedBarcodesSet.has(item.external_id))
-];
-console.log(combinedItems);
+      // Combine expected items and scanned items
+      const combinedItems = [
+        ...locationData,
+        ...this.items.filter(item => !expectedBarcodesSet.has(item.external_id))
+      ];
+      console.log(combinedItems);
 
-const csvContent = [
-  headers.join(','),
-  ...combinedItems.map(item => {
-    const scannedItem = scannedItemsMap.get(item.barcode);
-    const combinedItem = { ...item };
+      const csvContent = [
+        headers.join(','),
+        ...combinedItems.map(item => {
+          const scannedItem = scannedItemsMap.get(item.barcode);
+          const combinedItem = { ...item };
 
-    if (scannedItem) {
-      for (const key in scannedItem) {
-        if (!combinedItem.hasOwnProperty(key) || combinedItem[key] === null || combinedItem[key] === undefined) {
-          combinedItem[key] = scannedItem[key];
-        }
+          if (scannedItem) {
+            for (const key in scannedItem) {
+              if (!combinedItem.hasOwnProperty(key) || combinedItem[key] === null || combinedItem[key] === undefined) {
+                combinedItem[key] = scannedItem[key];
+              }
+            }
+          }
+          const wasScanned = scannedItem || combinedItem.wasScanned;
+
+          return [
+            `"${combinedItem.barcode || combinedItem.external_id}"`,
+            `"${combinedItem.itemnumber || combinedItem.item_id}"`,
+            `"${combinedItem.biblionumber || combinedItem.biblio_id}"`,
+            `"${combinedItem.title || (combinedItem.biblio && combinedItem.biblio.title) || 'N/A'}"`,
+            `"${combinedItem.author || (combinedItem.biblio && combinedItem.biblio.author) || 'N/A'}"`,
+            `"${(combinedItem.biblio && combinedItem.biblio.publication_year) || 'N/A'}"`,
+            `"${(combinedItem.biblio && combinedItem.biblio.publisher) || 'N/A'}"`,
+            `"${(combinedItem.biblio && combinedItem.biblio.isbn) || 'N/A'}"`,
+            `"${(combinedItem.biblio && combinedItem.biblio.pages) || 'N/A'}"`,
+            `"${combinedItem.location}"`,
+            `"${combinedItem.acquisition_date || 'N/A'}"`,
+            `"${combinedItem.datelastseen || combinedItem.last_seen_date || 'N/A'}"`,
+            `"${window.location.origin}/cgi-bin/koha/catalogue/detail.pl?biblionumber=${combinedItem.biblionumber || combinedItem.biblio_id}"`,
+            `"${combinedItem.wasLost === '1' ? 'Yes' : 'No'}"`,
+            `"${combinedItem.wrongPlace ? 'Yes' : 'No'}"`,
+            `"${combinedItem.checked_out_date ? 'Yes' : 'No'}"`,
+            `"${combinedItem.outOfOrder ? 'Yes' : 'No'}"`,
+            `"${combinedItem.invalidStatus ? 'Yes' : 'No'}"`,
+            `"${wasScanned ? 'Yes' : 'NOT SCANNED'}"`
+          ].join(',');
+        })
+      ].join('\n');
+
+
+
+      const blob = new Blob([csvContent], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'inventory.csv';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    },
+    checkItemStatuses(item, selectedStatuses) {
+    const statusKeyValuePairs = {
+      'items.itemlost': item.lost_status,
+      'items.notforloan': item.damaged_status,
+      'items.withdrawn': item.withdrawn,
+      'items.damaged': item.not_for_loan_status,
+    };
+
+    for (const [key, value] of Object.entries(statusKeyValuePairs)) {
+      if (value != "0" && (!selectedStatuses[key].includes(String(value)))) {
+        console.log('Invalid status:', key, value);
+        item.invalidStatus['key'] = key; // Flag the item as having an invalid status
+        item.invalidStatus['value'] = value;
+        break;
       }
     }
-    const wasScanned = scannedItem || combinedItem.wasScanned;
-
-    return [
-      `"${combinedItem.barcode || combinedItem.external_id}"`,
-      `"${combinedItem.itemnumber || combinedItem.item_id}"`,
-      `"${combinedItem.biblionumber || combinedItem.biblio_id}"`,
-      `"${combinedItem.title || (combinedItem.biblio && combinedItem.biblio.title) || 'N/A'}"`,
-      `"${combinedItem.author || (combinedItem.biblio && combinedItem.biblio.author) || 'N/A'}"`,
-      `"${(combinedItem.biblio && combinedItem.biblio.publication_year) || 'N/A'}"`,
-      `"${(combinedItem.biblio && combinedItem.biblio.publisher) || 'N/A'}"`,
-      `"${(combinedItem.biblio && combinedItem.biblio.isbn) || 'N/A'}"`,
-      `"${(combinedItem.biblio && combinedItem.biblio.pages) || 'N/A'}"`,
-      `"${combinedItem.location}"`,
-      `"${combinedItem.acquisition_date || 'N/A'}"`,
-      `"${combinedItem.datelastseen || combinedItem.last_seen_date || 'N/A'}"`,
-      `"${window.location.origin}/cgi-bin/koha/catalogue/detail.pl?biblionumber=${combinedItem.biblionumber || combinedItem.biblio_id}"`,
-      `"${combinedItem.wasLost === '1' ? 'Yes' : 'No'}"`,
-      `"${combinedItem.wrongPlace ? 'Yes' : 'No'}"`,
-      `"${combinedItem.checked_out_date ? 'Yes' : 'No'}"`,
-      `"${combinedItem.outOfOrder ? 'Yes' : 'No'}"`,
-      `"${combinedItem.invalidStatus ? 'Yes' : 'No'}"`,
-      `"${wasScanned ? 'Yes' : 'NOT SCANNED'}"`
-    ].join(',');
-  })
-].join('\n');
-
-
-
-    const blob = new Blob([csvContent], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'inventory.csv';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  },
-  checkItemStatuses(item, selectedStatuses) {
-  const statusKeyValuePairs = {
-    'items.itemlost': item.lost_status,
-    'items.notforloan': item.damaged_status,
-    'items.withdrawn': item.withdrawn,
-    'items.damaged': item.not_for_loan_status,
-  };
-
-  for (const [key, value] of Object.entries(statusKeyValuePairs)) {
-    if (value != "0" && (!selectedStatuses[key].includes(String(value)))) {
-      console.log('Invalid status:', key, value);
-      item.invalidStatus['key'] = key; // Flag the item as having an invalid status
-      item.invalidStatus['value'] = value;
-      break;
-    }
   }
-}
   }
 }
 </script>
