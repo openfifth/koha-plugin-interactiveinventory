@@ -1,8 +1,6 @@
 <template>
   <div class="container">
-    <InventorySetupForm 
-      @start-session="initiateInventorySession" 
-      :fetchAuthorizedValues="fetchAuthorizedValues"
+    <InventorySetupForm @start-session="initiateInventorySession" :fetchAuthorizedValues="fetchAuthorizedValues"
       v-if="!sessionStarted" />
     <div v-else>
       <form @submit.prevent="submitBarcode" class="barcode-form">
@@ -11,46 +9,43 @@
         <button type="submit">Submit</button>
       </form>
       <div id="inventory_results" class="items-list">
-        <InventoryItem
-          v-for="(item, index) in items"
-          :key="`${index}-${item.id}`"
-          :item="item"
-          :index="index"
-          :isExpanded="item.isExpanded"
-          @toggleExpand="handleToggleExpand"
-          :fetchAuthorizedValues="fetchAuthorizedValues"
-          :sessionData="sessionData"
+        <InventoryItem v-for="(item, index) in items" :key="`${index}-${item.id}`" :item="item" :index="index"
+          :isExpanded="item.isExpanded" @toggleExpand="handleToggleExpand"
+          :fetchAuthorizedValues="fetchAuthorizedValues" :sessionData="sessionData"
           :currentItemWithHighestCallNumber="itemWithHighestCallNumber"
-          :currentBiblioWithHighestCallNumber="biblioWithHighestCallNumber"
-        />  
+          :currentBiblioWithHighestCallNumber="biblioWithHighestCallNumber" />
       </div>
     </div>
-  <button v-if="sessionStarted" @click="showEndSessionModal = true" class="end-session-button">End Session</button>
+    <button v-if="sessionStarted" @click="showEndSessionModal = true" class="end-session-button">End Session</button>
 
     <!-- End Session Modal -->
     <div v-if="showEndSessionModal" class="modal">
       <div class="modal-content">
         <span @click="showEndSessionModal = false" class="close">&times;</span>
         <h2>End Session</h2>
-        <p v-if="uniqueBarcodesCount <= expectedUniqueBarcodes">Scanned {{ uniqueBarcodesCount }} unique barcodes of an expected {{ expectedUniqueBarcodes }} are you sure you want to end the session?</p>
+        <p v-if="uniqueBarcodesCount <= expectedUniqueBarcodes">Scanned {{ uniqueBarcodesCount }} unique barcodes of an
+          expected {{ expectedUniqueBarcodes }} are you sure you want to end the session?</p>
         <div class="modal-checkboxes">
           <input type="checkbox" id="exportToCSV" v-model="exportToCSV"> Export to CSV
         </div>
         <div class="modal-checkboxes">
-          <input type="checkbox" v-model="markMissingItems" id="mark-missing-items"> Mark "loststatus" as missing for any expected items not scanned
+          <input type="checkbox" v-model="markMissingItems" id="mark-missing-items"> Mark "loststatus" as missing for
+          any expected items not scanned
         </div>
-        <span v-if="markMissingItems" style="color: red;">(This can take a while for large numbers of missing items)</span>
+        <span v-if="markMissingItems" style="color: red;">(This can take a while for large numbers of missing
+          items)</span>
         <button @click="endSession" class="end-session-modal-button">End Session</button>
       </div>
     </div>
   </div>
-  
+
 </template>
 
 <script>
 import InventorySetupForm from './InventorySetupForm.vue'
 import InventoryItem from './InventoryItem.vue'
 import { EventBus } from './eventBus'
+import { sessionStorage } from '../services/sessionStorage'
 
 export default {
   components: {
@@ -59,9 +54,9 @@ export default {
   },
   computed: {
     uniqueBarcodesCount() {
-        const uniqueBarcodes = new Set(this.items.map(item => item.external_id));
-        return uniqueBarcodes.size;
-      },
+      const uniqueBarcodes = new Set(this.items.map(item => item.external_id));
+      return uniqueBarcodes.size;
+    },
     expectedUniqueBarcodes() {
       return this.sessionData && this.sessionData.response_data ? (this.sessionData.response_data.total_records || 0) : 0;
     }
@@ -80,33 +75,179 @@ export default {
       markMissingItems: false,
     };
   },
+  mounted() {
+    // Check for existing session on component mount
+    this.checkForExistingSession();
+  },
   methods: {
-    async endSession() {
-    if (this.exportToCSV) {
-      // Logic to export data to CSV
-      await this.exportDataToCSV();
-    }
+    checkForExistingSession() {
+      if (sessionStorage.isSessionActive()) {
+        const savedSessionData = sessionStorage.getSession();
+        const savedItems = sessionStorage.getItems();
 
-    if (this.markMissingItems) {
-      // Add defensive check for location_data
-      const locationData = this.sessionData.response_data.location_data || [];
-      const scannedBarcodesSet = new Set(this.items.map(item => item.external_id));
-      const missingItems = locationData.filter(item => !scannedBarcodesSet.has(item.barcode));
-      // Mark missing items
-      const itemsToUpdate = missingItems.map(item => ({
-        barcode: item.barcode,
-        fields: { itemlost: 4 }
-      }));
+        if (savedSessionData) {
+          this.sessionData = savedSessionData;
+          this.sessionStarted = true;
 
-      if (itemsToUpdate.length > 0) {
-        await this.updateItemStatus(itemsToUpdate);
+          if (savedItems) {
+            this.items = savedItems;
+
+            // Restore the highest call number tracking
+            this.updateHighestCallNumber();
+          }
+
+          EventBus.emit('message', { text: 'Session restored successfully', type: 'status' });
+
+          // Focus on barcode input after a short delay to ensure the DOM is ready
+          this.$nextTick(() => {
+            if (this.$refs.barcodeInput) {
+              this.$refs.barcodeInput.focus();
+            }
+          });
+        }
       }
-    }
-
-    // Logic to end the session
-    this.showEndSessionModal = false;
-    // Additional session ending logic
     },
+
+    updateHighestCallNumber() {
+      // Find the item with the highest call number sort value
+      if (this.items.length > 0) {
+        let highestSortValue = '';
+        let highestItemBarcode = '';
+        let highestBiblioId = '';
+
+        this.items.forEach(item => {
+          if (item.call_number_sort > highestSortValue) {
+            highestSortValue = item.call_number_sort;
+            highestItemBarcode = item.external_id;
+            highestBiblioId = item.biblio_id;
+          }
+        });
+
+        this.highestCallNumberSort = highestSortValue;
+        this.itemWithHighestCallNumber = highestItemBarcode;
+        this.biblioWithHighestCallNumber = highestBiblioId;
+      }
+    },
+
+    async endSession() {
+      try {
+        let operationsCompleted = false;
+
+        // Disable the button to prevent multiple clicks during processing
+        const endSessionButton = document.querySelector('.end-session-modal-button');
+        if (endSessionButton) {
+          endSessionButton.disabled = true;
+          endSessionButton.textContent = 'Processing...';
+        }
+
+        if (this.exportToCSV) {
+          // Export to CSV first
+          await this.exportDataToCSV();
+        }
+
+        if (this.markMissingItems) {
+          // Add defensive check for location_data
+          const locationData = this.sessionData.response_data.location_data || [];
+          const scannedBarcodesSet = new Set(this.items.map(item => item.external_id));
+          const missingItems = locationData.filter(item => !scannedBarcodesSet.has(item.barcode));
+
+          if (missingItems.length > 0) {
+            // Show processing message
+            EventBus.emit('message', { text: `Processing ${missingItems.length} missing items...`, type: 'status' });
+
+            // Mark missing items
+            const itemsToUpdate = missingItems.map(item => ({
+              barcode: item.barcode,
+              fields: { itemlost: 4 }
+            }));
+
+            try {
+              // Wait for the update to complete
+              await this.updateItemStatus(itemsToUpdate);
+              // Signal completion
+              EventBus.emit('message', { text: 'Items marked as missing successfully', type: 'status' });
+            } catch (error) {
+              EventBus.emit('message', { text: `Error marking items as missing: ${error.message}`, type: 'error' });
+              throw error; // Re-throw to prevent page reload if marking items fails
+            }
+          } else {
+            EventBus.emit('message', { text: 'No missing items to mark', type: 'status' });
+          }
+        }
+
+        // Mark operations as completed
+        operationsCompleted = true;
+
+        // Clear session storage
+        sessionStorage.clearSession();
+
+        // Close the modal
+        this.showEndSessionModal = false;
+
+        // Reset component state
+        this.sessionStarted = false;
+        this.sessionData = null;
+        this.items = [];
+
+        // Wait a moment to make sure the user sees the success message
+        await new Promise(resolve => setTimeout(resolve, 1500));
+
+        // Reload the page to start fresh
+        window.location.reload();
+      } catch (error) {
+        // Re-enable the button on error
+        const endSessionButton = document.querySelector('.end-session-modal-button');
+        if (endSessionButton) {
+          endSessionButton.disabled = false;
+          endSessionButton.textContent = 'End Session';
+        }
+
+        EventBus.emit('message', { text: `Error ending session: ${error.message}`, type: 'error' });
+      }
+    },
+
+    async updateItemStatus(items = []) {
+      if (!items || items.length === 0) {
+        return; // No items to update
+      }
+
+      try {
+        console.log('Updating multiple item statuses:', items);
+
+        // Add progress indicator for large batches
+        if (items.length > 50) {
+          EventBus.emit('message', { text: `Processing ${items.length} items, please wait...`, type: 'status' });
+        }
+
+        const response = await fetch(
+          `/api/v1/contrib/interactiveinventory/item/fields`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json'
+            },
+            body: JSON.stringify({
+              items: items
+            })
+          }
+        );
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          console.error('Error response:', errorData);
+          throw new Error(`Network response was not ok: ${errorData?.errors?.[0]?.message || response.statusText}`);
+        }
+
+        const data = await response.json();
+        return data; // Return the response data
+      } catch (error) {
+        console.error('Error updating item statuses:', error);
+        EventBus.emit('message', { text: `Error updating item statuses: ${error.message}`, type: 'error' });
+        throw error; // Re-throw the error to be handled by the caller
+      }
+    },
+
     async fetchAuthorizedValues(category) {
       const response = await fetch(`/api/v1/authorised_value_categories/${category}/authorised_values`, {
         method: 'GET',
@@ -120,7 +261,7 @@ export default {
       const data = await response.json();
       return data;
     },
-    
+
     async submitBarcode() {
       try {
         // Fetch item data
@@ -175,7 +316,7 @@ export default {
           combinedData.wrongPlace = true; // Flag the item as in the wrong place
         }
 
-        if (combinedData.checked_out_date && !this.sessionData.doNotCheckIn){
+        if (combinedData.checked_out_date && !this.sessionData.doNotCheckIn) {
           await this.checkInItem(combinedData.external_id);
         }
 
@@ -183,12 +324,12 @@ export default {
         if (combinedData.lost_status != "0") {
           combinedData.wasLost = true; // Flag the item as previously lost
           //add the key-value pair to the fields to amend object
-          if (!this.sessionData.ignoreLostStatus){
+          if (!this.sessionData.ignoreLostStatus) {
             fieldsToAmend["itemlost"] = '0';
           }
         }
 
-        if (this.sessionData.checkShelvedOutOfOrder && combinedData.call_number_sort < this.highestCallNumberSort){
+        if (this.sessionData.checkShelvedOutOfOrder && combinedData.call_number_sort < this.highestCallNumberSort) {
           combinedData.outOfOrder = 1;
         } else {
           this.highestCallNumberSort = combinedData.call_number_sort;
@@ -196,7 +337,7 @@ export default {
           this.biblioWithHighestCallNumber = combinedData.biblio_id;
         }
 
-        if (this.sessionData.selectedStatuses && Object.values(this.sessionData.selectedStatuses).some(statusArray => statusArray.length > 0)){
+        if (this.sessionData.selectedStatuses && Object.values(this.sessionData.selectedStatuses).some(statusArray => statusArray.length > 0)) {
           this.checkItemStatuses(combinedData, this.sessionData.selectedStatuses);
         }
 
@@ -212,10 +353,13 @@ export default {
           isExpanded: index === 0 // Only expand the first item
         }));
 
-      // Update the item status - using the single item endpoint
-      if (Object.keys(fieldsToAmend).length > 0) {
-        await this.updateSingleItemStatus(combinedData.external_id, fieldsToAmend);
-      }
+        // Update the item status - using the single item endpoint
+        if (Object.keys(fieldsToAmend).length > 0) {
+          await this.updateSingleItemStatus(combinedData.external_id, fieldsToAmend);
+        }
+
+        // Save updated items to session storage
+        sessionStorage.saveItems(this.items);
 
         // Clear the barcode input and focus on it
         this.barcode = '';
@@ -228,17 +372,17 @@ export default {
     async checkInItem(barcode) {
       try {
         const response = await fetch(
-          `/api/v1/contrib/interactiveinventory/item/checkin`, 
+          `/api/v1/contrib/interactiveinventory/item/checkin`,
           {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            barcode: barcode,
-            date: this.sessionData.inventoryDate
-          })
-        });
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              barcode: barcode,
+              date: this.sessionData.inventoryDate
+            })
+          });
         if (!response.ok) {
           throw new Error('Network response was not ok');
         }
@@ -247,33 +391,6 @@ export default {
         EventBus.emit('message', { text: `Error checking in item: ${error.message}`, type: 'error' });
       }
     },
-  async updateItemStatus(items = []) {
-    try {
-      console.log('Updating multiple item statuses:', items);
-      const response = await fetch(
-        `/api/v1/contrib/interactiveinventory/item/fields`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json'
-          },
-          body: JSON.stringify({
-            items: items
-          })
-        }
-      );
-      if (!response.ok) {
-        const errorData = await response.json();
-        console.error('Error response:', errorData);
-        throw new Error(`Network response was not ok: ${errorData?.errors?.[0]?.message || response.statusText}`);
-      }
-      const data = await response.json();
-      EventBus.emit('message', { text: 'Item statuses updated successfully', type: 'status' });
-    } catch (error) {
-      EventBus.emit('message', { text: `Error updating item statuses: ${error.message}`, type: 'error' });
-    }
-  },
     async updateSingleItemStatus(barcode, fields) {
       try {
         console.log('Updating single item status:', barcode, fields);
@@ -291,13 +408,13 @@ export default {
             })
           }
         );
-        
+
         if (!response.ok) {
           const errorData = await response.json();
           console.error('Error response:', errorData);
           throw new Error(`Network response was not ok: ${errorData?.error || response.statusText}`);
         }
-        
+
         const data = await response.json();
         EventBus.emit('message', { text: 'Item status updated successfully', type: 'status' });
       } catch (error) {
@@ -322,6 +439,15 @@ export default {
         }
         const data = await response.json();
         this.sessionData.response_data = data; // Add this line to include the response data in sessionData
+
+        // Save session data to session storage
+        sessionStorage.saveSession(this.sessionData);
+
+        // Clear any existing items
+        this.items = [];
+        sessionStorage.saveItems(this.items);
+
+        EventBus.emit('message', { text: 'Inventory session started', type: 'status' });
 
       } catch (error) {
         EventBus.emit('message', { text: `Error starting inventory session ${error.message}`, type: 'error' });
@@ -350,7 +476,7 @@ export default {
     },
     exportDataToCSV() {
       const headers = [
-        'Barcode','Item ID', 'Biblio ID', 'Title', 'Author', 'Publication Year', 'Publisher', 'ISBN', 'Pages', 'Location', 'Acquisition Date', 'Last Seen Date', 'URL', 'Was Lost', 'Wrong Place', 'Was Checked Out', 'Scanned Out of Order', 'Had Invalid "Not for loan" Status','Scanned'
+        'Barcode', 'Item ID', 'Biblio ID', 'Title', 'Author', 'Publication Year', 'Publisher', 'ISBN', 'Pages', 'Location', 'Acquisition Date', 'Last Seen Date', 'URL', 'Was Lost', 'Wrong Place', 'Was Checked Out', 'Scanned Out of Order', 'Had Invalid "Not for loan" Status', 'Scanned'
       ];
 
       // Create a map of scanned items using their barcodes
@@ -419,22 +545,25 @@ export default {
       URL.revokeObjectURL(url);
     },
     checkItemStatuses(item, selectedStatuses) {
-    const statusKeyValuePairs = {
-      'items.itemlost': item.lost_status,
-      'items.notforloan': item.damaged_status,
-      'items.withdrawn': item.withdrawn,
-      'items.damaged': item.not_for_loan_status,
-    };
+      // Initialize invalidStatus as an object
+      item.invalidStatus = {};
 
-    for (const [key, value] of Object.entries(statusKeyValuePairs)) {
-      if (value != "0" && (!selectedStatuses[key].includes(String(value)))) {
-        console.log('Invalid status:', key, value);
-        item.invalidStatus['key'] = key; // Flag the item as having an invalid status
-        item.invalidStatus['value'] = value;
-        break;
+      const statusKeyValuePairs = {
+        'items.itemlost': item.lost_status,
+        'items.notforloan': item.damaged_status,
+        'items.withdrawn': item.withdrawn,
+        'items.damaged': item.not_for_loan_status,
+      };
+
+      for (const [key, value] of Object.entries(statusKeyValuePairs)) {
+        if (value != "0" && (!selectedStatuses[key].includes(String(value)))) {
+          console.log('Invalid status:', key, value);
+          item.invalidStatus['key'] = key; // Flag the item as having an invalid status
+          item.invalidStatus['value'] = value;
+          break;
+        }
       }
     }
-  }
   }
 }
 </script>
@@ -493,7 +622,8 @@ export default {
   border-radius: 5px;
   cursor: pointer;
   font-size: 16px;
-  z-index: 1000; /* Ensure it stays above other content */
+  z-index: 1000;
+  /* Ensure it stays above other content */
 }
 
 /* Modal Styles */
@@ -565,5 +695,4 @@ label {
   flex: 1;
   word-wrap: break-word;
 }
-
 </style>
