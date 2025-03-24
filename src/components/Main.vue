@@ -1,11 +1,12 @@
 <template>
-    <div v-if="message" :class="['message', message.type]">{{ message.text }}</div>
-    <Inventory/>
+  <div v-if="message" :class="['message', message.type]">{{ message.text }}</div>
+  <Inventory />
 </template>
 
 <script>
 import Inventory from './Inventory.vue'
 import { EventBus } from './eventBus'
+import { sessionStorage } from '../services/sessionStorage'
 
 export default {
   name: 'Main',
@@ -19,6 +20,15 @@ export default {
   },
   created() {
     EventBus.on('message', this.displayMessage);
+
+    // Extend session expiry if the app is being used
+    if (sessionStorage.isSessionActive()) {
+      // If session exists, extend its expiry time
+      const currentSession = sessionStorage.getSession();
+      if (currentSession) {
+        sessionStorage.saveSession(currentSession);
+      }
+    }
   },
   methods: {
     displayMessage(message) {
@@ -44,17 +54,28 @@ export default {
   z-index: 1000;
   animation: fadeOut 3s forwards;
 }
+
 .message.error {
   background-color: #f44336;
   color: white;
 }
+
 .message.status {
   background-color: #4caf50;
   color: white;
 }
+
 @keyframes fadeOut {
-  0% { opacity: 1; }
-  90% { opacity: 1; }
-  100% { opacity: 0; }
+  0% {
+    opacity: 1;
+  }
+
+  90% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 0;
+  }
 }
 </style>
