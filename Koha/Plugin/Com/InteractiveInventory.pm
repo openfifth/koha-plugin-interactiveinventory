@@ -19,13 +19,13 @@ use C4::Items  qw( GetItemsForInventory );
 use Koha::Items;
 use Koha::ItemTypes;
 
-our $VERSION = 0.1;
+our $VERSION = 1.0;
 
 our $metadata = {
     name            => 'Interactive Inventory',
     author          => 'Jacob O\'Mara',
     date_authored   => '2024-06-12',
-    date_updated    => "2024-06-12",
+    date_updated    => "2025-03-24",
     minimum_version => '21.11.00.000',
     maximum_version => undef,
     version         => $VERSION,
