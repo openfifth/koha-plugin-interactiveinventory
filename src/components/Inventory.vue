@@ -1,22 +1,75 @@
 <template>
   <div class="container">
-    <InventorySetupForm @start-session="initiateInventorySession" :fetchAuthorizedValues="fetchAuthorizedValues"
-      v-if="!sessionStarted" />
+    <InventorySetupForm ref="setupForm" @start-session="initiateInventorySession"
+      :fetchAuthorizedValues="fetchAuthorizedValues" v-if="!sessionStarted" />
     <div v-else>
-      <form @submit.prevent="submitBarcode" class="barcode-form">
-        <label for="barcode_input">Scan Barcode:</label>
-        <input type="text" v-model="barcode" id="barcode_input" ref="barcodeInput" />
-        <button type="submit">Submit</button>
-      </form>
-      <div id="inventory_results" class="items-list">
-        <InventoryItem v-for="(item, index) in items" :key="`${index}-${item.id}`" :item="item" :index="index"
-          :isExpanded="item.isExpanded" @toggleExpand="handleToggleExpand"
-          :fetchAuthorizedValues="fetchAuthorizedValues" :sessionData="sessionData"
-          :currentItemWithHighestCallNumber="itemWithHighestCallNumber"
-          :currentBiblioWithHighestCallNumber="biblioWithHighestCallNumber" />
+      <div class="barcode-input-container">
+        <form @submit.prevent="submitBarcode" class="barcode-form">
+          <div class="input-group">
+            <input type="text" v-model="barcode" id="barcode_input" ref="barcodeInput" autocomplete="off"
+              placeholder="Enter or scan a barcode..." :disabled="scannerMode" />
+            <button type="button" @click="toggleScannerMode" class="camera-button" :class="{ active: scannerMode }">
+              <span v-if="scannerMode">❌</span>
+              <span v-else>📷</span>
+            </button>
+            <button type="submit" :disabled="scannerMode">Submit</button>
+          </div>
+        </form>
+      </div>
+
+      <!-- Scanner and latest scan in a flex container for desktop -->
+      <div v-if="scannerMode" class="scanner-with-results">
+        <div class="scanner-panel">
+          <BarcodeScanner @barcode-detected="onBarcodeDetected" />
+          <div class="scanner-help-text">
+            <p>Point your camera at a barcode to scan it automatically.</p>
+          </div>
+        </div>
+
+        <div v-if="latestItem" class="latest-scan-panel">
+          <h3>Latest Scan</h3>
+          <InventoryItem :item="latestItem" :index="0" :isExpanded="true" @toggleExpand="() => { }"
+            :fetchAuthorizedValues="fetchAuthorizedValues" :sessionData="sessionData"
+            :currentItemWithHighestCallNumber="itemWithHighestCallNumber"
+            :currentBiblioWithHighestCallNumber="biblioWithHighestCallNumber" />
+        </div>
+      </div>
+
+      <!-- Manual mode - full width layout -->
+      <div v-if="!scannerMode" class="manual-mode-results">
+        <div v-if="latestItem" class="latest-scan-panel">
+          <h3>Latest Scan</h3>
+          <InventoryItem :item="latestItem" :index="0" :isExpanded="true" @toggleExpand="() => { }"
+            :fetchAuthorizedValues="fetchAuthorizedValues" :sessionData="sessionData"
+            :currentItemWithHighestCallNumber="itemWithHighestCallNumber"
+            :currentBiblioWithHighestCallNumber="biblioWithHighestCallNumber" />
+        </div>
+
+        <div id="inventory_results" class="items-list">
+          <h3>Previous Scans</h3>
+          <p v-if="previousItems.length === 0" class="no-items-message">No previous scans yet.</p>
+          <InventoryItem v-for="(item, index) in previousItems" :key="`${index}-${item.id}`" :item="item"
+            :index="index + 1" :isExpanded="item.isExpanded" @toggleExpand="handleToggleExpand"
+            :fetchAuthorizedValues="fetchAuthorizedValues" :sessionData="sessionData"
+            :currentItemWithHighestCallNumber="itemWithHighestCallNumber"
+            :currentBiblioWithHighestCallNumber="biblioWithHighestCallNumber" />
+        </div>
+      </div>
+
+      <!-- Only show this in scanner mode -->
+      <div v-if="scannerMode" class="result-panel">
+        <div id="inventory_results" class="items-list">
+          <h3>Previous Scans</h3>
+          <p v-if="previousItems.length === 0" class="no-items-message">No previous scans yet.</p>
+          <InventoryItem v-for="(item, index) in previousItems" :key="`${index}-${item.id}`" :item="item"
+            :index="index + 1" :isExpanded="item.isExpanded" @toggleExpand="handleToggleExpand"
+            :fetchAuthorizedValues="fetchAuthorizedValues" :sessionData="sessionData"
+            :currentItemWithHighestCallNumber="itemWithHighestCallNumber"
+            :currentBiblioWithHighestCallNumber="biblioWithHighestCallNumber" />
+        </div>
       </div>
     </div>
-    <button v-if="sessionStarted" @click="showEndSessionModal = true" class="end-session-button">End Session</button>
+    <button v-if="sessionStarted" @click="toggleEndSessionModal" class="end-session-button">End Session</button>
 
     <!-- End Session Modal -->
     <div v-if="showEndSessionModal" class="modal">
@@ -38,12 +91,12 @@
       </div>
     </div>
   </div>
-
 </template>
 
 <script>
 import InventorySetupForm from './InventorySetupForm.vue'
 import InventoryItem from './InventoryItem.vue'
+import BarcodeScanner from './BarcodeScanner.vue'
 import { EventBus } from './eventBus'
 import { sessionStorage } from '../services/sessionStorage'
 import { apiService } from '../services/apiService'
@@ -51,7 +104,8 @@ import { apiService } from '../services/apiService'
 export default {
   components: {
     InventorySetupForm,
-    InventoryItem
+    InventoryItem,
+    BarcodeScanner
   },
   computed: {
     uniqueBarcodesCount() {
@@ -60,11 +114,18 @@ export default {
     },
     expectedUniqueBarcodes() {
       return this.sessionData && this.sessionData.response_data ? (this.sessionData.response_data.total_records || 0) : 0;
+    },
+    latestItem() {
+      return this.items.length > 0 ? this.items[0] : null;
+    },
+    previousItems() {
+      return this.items.slice(1);
     }
   },
   data() {
     return {
       barcode: '',
+      scannerMode: false,
       items: [],
       sessionData: null,
       sessionStarted: false,
@@ -74,11 +135,23 @@ export default {
       showEndSessionModal: false,
       exportToCSV: false,
       markMissingItems: false,
+      isMobileView: false
     };
   },
   mounted() {
     // Check for existing session on component mount
     this.checkForExistingSession();
+
+    // Check if the user is on a mobile device
+    this.checkDeviceType();
+
+    // Add a resize listener to update the layout when window size changes
+    window.addEventListener('resize', this.checkDeviceType);
+  },
+
+  beforeUnmount() {
+    // Clean up the resize event listener
+    window.removeEventListener('resize', this.checkDeviceType);
   },
   methods: {
     checkForExistingSession() {
@@ -106,6 +179,13 @@ export default {
             }
           });
         }
+      } else {
+        // Only load form data if we're showing the form (no active session)
+        this.$nextTick(() => {
+          if (this.$refs.setupForm) {
+            this.$refs.setupForm.loadFormData();
+          }
+        });
       }
     },
 
@@ -251,7 +331,24 @@ export default {
 
     async fetchAuthorizedValues(category, options = {}) {
       try {
-        // Add progress tracking by default
+        // If we're in an active session, handle differently for efficiency
+        if (this.sessionStarted && !options.forceLoad) {
+          const cacheKey = `authorizedValues_${category}`;
+          const cachedValues = localStorage.getItem(cacheKey);
+
+          if (cachedValues) {
+            const parsedValues = JSON.parse(cachedValues);
+            if (options.onValuesUpdate) {
+              options.onValuesUpdate(parsedValues);
+            }
+            return parsedValues;
+          }
+
+          // In scanner mode, just return empty object if no cache to avoid API call
+          return {};
+        }
+
+        // Otherwise proceed with normal implementation for setup form
         const combinedOptions = {
           ...options,
           onProgress: (progress) => {
@@ -276,9 +373,13 @@ export default {
         EventBus.emit('message', { type: 'status', text: 'Searching for item...' });
 
         // First get all items with this barcode (usually just one)
-        const items = await apiService.fetchAllPaginated(
-          `/api/v1/items?external_id=${encodeURIComponent(this.barcode)}`
-        );
+        let response = await fetch(`/api/v1/items?external_id=${encodeURIComponent(this.barcode)}`);
+
+        if (!response.ok) {
+          throw new Error(`Failed to fetch items: ${response.statusText}`);
+        }
+
+        const items = await response.json();
 
         if (!items || items.length === 0) {
           throw new Error('Item not found: ' + this.barcode);
@@ -292,10 +393,18 @@ export default {
 
         EventBus.emit('message', { type: 'status', text: 'Fetching bibliographic details...' });
 
-        // This is actually a single resource by ID - fetchSingle would be better
-        const biblioData = await apiService.fetchSingle(
-          `/api/v1/biblios/${itemData.biblio_id}`
-        );
+        // Fetch the biblio data - Add Accept header to fix the Not Acceptable error
+        response = await fetch(`/api/v1/biblios/${itemData.biblio_id}`, {
+          headers: {
+            'Accept': 'application/json'
+          }
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed to fetch biblio: ${response.statusText}`);
+        }
+
+        const biblioData = await response.json();
 
         // Combine item data and biblio data
         const combinedData = { ...itemData, biblio: biblioData };
@@ -307,7 +416,6 @@ export default {
           fieldsToAmend["datelastseen"] = this.sessionData.inventoryDate;
 
         // If set to compare barcodes, check if the scanned barcode is in the expected list.
-        // If not, show an alert and return.
         // Add defensive check before accessing right_place_list
         const rightPlaceList = this.sessionData.response_data.right_place_list || [];
         const isInRightPlaceList = rightPlaceList.some(item => item.barcode === combinedData.external_id);
@@ -341,7 +449,6 @@ export default {
         }
 
         combinedData.wasScanned = true;
-        window.combinedData = combinedData;
 
         // Prepend the combined data to the items array
         this.items.unshift(combinedData);
@@ -362,12 +469,17 @@ export default {
 
         // Clear the barcode input and focus on it
         this.barcode = '';
-        this.$refs.barcodeInput.focus();
+        if (this.$refs.barcodeInput) {
+          this.$refs.barcodeInput.focus();
+        }
+
+        EventBus.emit('message', { type: 'status', text: 'Item scanned successfully' });
       } catch (error) {
         console.error(error);
         EventBus.emit('message', { text: `Error scanning barcode: ${error.message}`, type: 'error' });
       }
     },
+
     async checkInItem(barcode) {
       try {
         const response = await fetch(
@@ -390,6 +502,7 @@ export default {
         EventBus.emit('message', { text: `Error checking in item: ${error.message}`, type: 'error' });
       }
     },
+
     async updateSingleItemStatus(barcode, fields) {
       try {
         console.log('Updating single item status:', barcode, fields);
@@ -420,6 +533,7 @@ export default {
         EventBus.emit('message', { text: `Error updating item status: ${error.message}`, type: 'error' });
       }
     },
+
     async initiateInventorySession(sessionData) {
       this.sessionData = sessionData;
       this.sessionStarted = true;
@@ -447,17 +561,18 @@ export default {
         sessionStorage.saveItems(this.items);
 
         EventBus.emit('message', { text: 'Inventory session started', type: 'status' });
-
       } catch (error) {
         EventBus.emit('message', { text: `Error starting inventory session ${error.message}`, type: 'error' });
       }
     },
+
     handleToggleExpand(itemId) {
       this.items = this.items.map((item, index) => ({
         ...item,
         isExpanded: `${index}-${item.id}` === itemId ? !item.isExpanded : false // Toggle the clicked item, collapse others
       }));
     },
+
     exportDataToCSV() {
       const headers = [
         'Barcode', 'Item ID', 'Biblio ID', 'Title', 'Author', 'Publication Year', 'Publisher', 'ISBN', 'Pages', 'Location', 'Acquisition Date', 'Last Seen Date', 'URL', 'Was Lost', 'Wrong Place', 'Was Checked Out', 'Scanned Out of Order', 'Had Invalid "Not for loan" Status', 'Scanned'
@@ -516,8 +631,6 @@ export default {
         })
       ].join('\n');
 
-
-
       const blob = new Blob([csvContent], { type: 'text/csv' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -528,6 +641,7 @@ export default {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
     },
+
     checkItemStatuses(item, selectedStatuses) {
       // Initialize invalidStatus as an object
       item.invalidStatus = {};
@@ -547,6 +661,45 @@ export default {
           break;
         }
       }
+    },
+
+    toggleScannerMode() {
+      // First, force the scanner to stop and release camera
+      if (this.scannerMode) {
+        // If we're currently in scanner mode, make sure it's cleaned up
+        try {
+          EventBus.emit('stop-scanner');
+          // Give time for camera to release before toggling mode
+          setTimeout(() => {
+            this.scannerMode = false;
+          }, 200);
+        } catch (e) {
+          this.scannerMode = false;
+        }
+      } else {
+        // If we're not in scanner mode, we can switch immediately
+        this.scannerMode = true;
+      }
+    },
+
+    onBarcodeDetected(code) {
+      this.barcode = code;
+      this.submitBarcode();
+
+      // Show confirmation to the user
+      EventBus.emit('message', {
+        type: 'status',
+        text: `Barcode detected: ${code}`
+      });
+    },
+
+    checkDeviceType() {
+      this.isMobileView = window.innerWidth < 768;
+    },
+
+    toggleEndSessionModal() {
+      console.log('Toggle modal', this.showEndSessionModal);
+      this.showEndSessionModal = !this.showEndSessionModal;
     }
   }
 }
@@ -554,45 +707,184 @@ export default {
 
 <style scoped>
 .container {
-  max-width: 800px;
+  max-width: 1000px;
   margin: 0 auto;
   padding: 20px;
   font-family: Arial, sans-serif;
 }
 
-.barcode-form {
-  display: flex;
-  flex-direction: column;
+.barcode-input-container {
   margin-bottom: 20px;
 }
 
-.barcode-form label {
-  margin-bottom: 5px;
-  font-weight: bold;
+.barcode-form {
+  width: 100%;
 }
 
-.barcode-form input {
+.input-group {
+  display: flex;
+  width: 100%;
+}
+
+.input-group input {
+  flex: 1;
   padding: 10px;
-  margin-bottom: 10px;
   border: 1px solid #ccc;
-  border-radius: 4px;
+  border-radius: 4px 0 0 4px;
+  font-size: 16px;
 }
 
-.barcode-form button {
-  padding: 10px 20px;
+.camera-button {
+  background-color: #f8f9fa;
+  border: 1px solid #ccc;
+  border-left: none;
+  padding: 0 15px;
+  cursor: pointer;
+  font-size: 18px;
+  transition: all 0.2s ease;
+}
+
+.camera-button.active {
+  background-color: #ff5252;
+  color: white;
+}
+
+.camera-button:hover {
+  background-color: #e9ecef;
+}
+
+.camera-button.active:hover {
+  background-color: #ff3838;
+}
+
+.input-group button[type="submit"] {
+  padding: 10px 15px;
   border: none;
   background-color: #007bff;
   color: white;
-  border-radius: 4px;
+  border-radius: 0 4px 4px 0;
   cursor: pointer;
 }
 
-.barcode-form button:hover {
+.input-group button[type="submit"]:hover {
   background-color: #0056b3;
+}
+
+.result-panel {
+  display: flex;
+  flex-direction: column;
+}
+
+.scanner-panel {
+  flex: 1;
+  min-width: 0;
+  /* Important for flex items with nested content */
+}
+
+.latest-scan-panel {
+  flex: 1;
+  min-width: 0;
+  /* Important for flex items with nested content */
+}
+
+.scanner-panel {
+  margin-bottom: 20px;
+}
+
+.result-panel.with-scanner {
+  margin-top: 20px;
+}
+
+.latest-scan-panel {
+  margin-bottom: 20px;
 }
 
 .items-list {
   margin-top: 20px;
+}
+
+h3 {
+  margin: 0 0 15px 0;
+  color: #555;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 5px;
+}
+
+.scanner-help-text {
+  text-align: center;
+  margin-top: 10px;
+  color: #555;
+  font-size: 0.9rem;
+}
+
+.scanner-with-results {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  margin-bottom: 20px;
+}
+
+.no-items-message {
+  color: #666;
+  font-style: italic;
+  padding: 10px 0;
+}
+
+/* Add/update these styles */
+.manual-mode-results {
+  width: 100%;
+}
+
+.manual-mode-results .latest-scan-panel {
+  width: 100%;
+}
+
+/* Media queries for responsive layout */
+@media (min-width: 768px) {
+  .container {
+    max-width: 1200px;
+    /* Wider container for desktop */
+  }
+
+  .scanner-with-results {
+    flex-direction: row;
+    align-items: flex-start;
+  }
+
+  .scanner-panel {
+    width: 48%;
+  }
+
+  .latest-scan-panel {
+    width: 48%;
+  }
+}
+
+@media (max-width: 768px) {
+  .input-group {
+    flex-wrap: wrap;
+  }
+
+  .input-group input {
+    flex: 1 0 70%;
+  }
+
+  .camera-button {
+    flex: 0 0 auto;
+  }
+
+  .input-group button[type="submit"] {
+    flex: 0 0 auto;
+  }
+
+  .scanner-with-results {
+    flex-direction: column;
+  }
+
+  .scanner-panel,
+  .latest-scan-panel {
+    width: 100%;
+  }
 }
 
 .end-session-button {
@@ -610,45 +902,8 @@ export default {
   /* Ensure it stays above other content */
 }
 
-/* Modal Styles */
-.modal {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 1000;
-}
-
-.modal-content {
-  background: #fff;
-  padding: 20px;
-  border-radius: 8px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-  width: 500px;
-  max-width: 90%;
-}
-
-.close {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  font-size: 24px;
-  cursor: pointer;
-}
-
-h2 {
-  margin-top: 0;
-}
-
-label {
-  display: block;
-  margin: 20px 0;
-  font-size: 16px;
+.end-session-button:hover {
+  background-color: #d32f2f;
 }
 
 .end-session-modal-button {
@@ -665,18 +920,37 @@ label {
   background-color: #d32f2f;
 }
 
-.modal-checkboxes {
+/* Modal Styles */
+.modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.5);
   display: flex;
+  justify-content: center;
   align-items: center;
-  margin-bottom: 10px;
+  z-index: 1100;
+  /* Ensure this is higher than the end-session-button z-index */
 }
 
-.modal-checkboxes input[type="checkbox"] {
-  margin-right: 10px;
+.modal-content {
+  background: #fff;
+  padding: 20px;
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  width: 500px;
+  max-width: 90%;
+  position: relative;
+  /* Ensure proper stacking context */
 }
 
-.modal-checkboxes label {
-  flex: 1;
-  word-wrap: break-word;
+.close {
+  position: absolute;
+  top: 10px;
+  right: 15px;
+  font-size: 24px;
+  cursor: pointer;
 }
 </style>
