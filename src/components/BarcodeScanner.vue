@@ -86,7 +86,12 @@ export default {
                             "ean_8_reader",
                             "code_39_reader",
                             "upc_reader",
-                            "upc_e_reader"
+                            "upc_e_reader",
+                            "codabar_reader",
+                            "i2of5_reader",
+                            "2of5_reader",
+                            "code_93_reader",
+                            "code_32_reader"
                         ]
                     }
                 }, function(err) {
