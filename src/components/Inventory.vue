@@ -46,6 +46,7 @@ import InventorySetupForm from './InventorySetupForm.vue'
 import InventoryItem from './InventoryItem.vue'
 import { EventBus } from './eventBus'
 import { sessionStorage } from '../services/sessionStorage'
+import { apiService } from '../services/apiService'
 
 export default {
   components: {
@@ -248,55 +249,53 @@ export default {
       }
     },
 
-    async fetchAuthorizedValues(category) {
-      const response = await fetch(`/api/v1/authorised_value_categories/${category}/authorised_values?_per_page=-1`, {
-        method: 'GET',
-        headers: {
-          'Accept': 'application/json'
-        }
-      });
-      if (!response.ok) {
-        throw new Error(`Failed to fetch authorized values for ${category}`);
+    async fetchAuthorizedValues(category, options = {}) {
+      try {
+        // Add progress tracking by default
+        const combinedOptions = {
+          ...options,
+          onProgress: (progress) => {
+            if (progress.loaded % 100 === 0 || progress.loaded === progress.total) {
+              EventBus.emit('message', {
+                type: 'status',
+                text: `Loading ${category} values: ${progress.loaded}${progress.total ? '/' + progress.total : ''}`
+              });
+            }
+          }
+        };
+
+        return await apiService.fetchAuthorizedValues(category, combinedOptions);
+      } catch (error) {
+        EventBus.emit('message', { type: 'error', text: `Error fetching authorized values: ${error.message}` });
+        throw error;
       }
-      const data = await response.json();
-      return data;
     },
 
     async submitBarcode() {
       try {
-        // Fetch item data
-        const itemResponse = await fetch(
-          `/api/v1/items?external_id=${encodeURIComponent(this.barcode)}`,
-          {
-            method: 'GET',
-            headers: {
-              'Accept': 'application/json'
-            }
-          }
-        );
-        if (!itemResponse.ok) {
-          throw new Error('Network response was not ok');
-        }
-        const itemText = await itemResponse.text();
-        const itemsArray = itemText ? JSON.parse(itemText) : [];
-        const itemData = itemsArray[0] || {};
+        EventBus.emit('message', { type: 'status', text: 'Searching for item...' });
 
-        // Fetch biblio data using biblio_id from item data
-        const biblioResponse = await fetch(
-          `/api/v1/biblios/${itemData.biblio_id}`,
-          {
-            method: 'GET',
-            headers: {
-              'Accept': 'application/json'
-            }
-          }
+        // First get all items with this barcode (usually just one)
+        const items = await apiService.fetchAllPaginated(
+          `/api/v1/items?external_id=${encodeURIComponent(this.barcode)}`
         );
-        if (!biblioResponse.ok) {
-          throw new Error('Network response was not ok');
+
+        if (!items || items.length === 0) {
+          throw new Error('Item not found: ' + this.barcode);
         }
-        const biblioText = await biblioResponse.text();
-        const biblioData = biblioText ? JSON.parse(biblioText) : {};
-        window.biblioData = biblioData;
+
+        const itemData = items[0];
+
+        if (!itemData.biblio_id) {
+          throw new Error('Item found but missing biblio data: ' + this.barcode);
+        }
+
+        EventBus.emit('message', { type: 'status', text: 'Fetching bibliographic details...' });
+
+        // This is actually a single resource by ID - fetchSingle would be better
+        const biblioData = await apiService.fetchSingle(
+          `/api/v1/biblios/${itemData.biblio_id}`
+        );
 
         // Combine item data and biblio data
         const combinedData = { ...itemData, biblio: biblioData };
@@ -458,21 +457,6 @@ export default {
         ...item,
         isExpanded: `${index}-${item.id}` === itemId ? !item.isExpanded : false // Toggle the clicked item, collapse others
       }));
-    },
-    fetchAuthorizedValues(field) {
-      return fetch(`/api/v1/authorised_value_categories/${field}/authorised_values?_per_page=-1`)
-        .then(response => response.json())
-        .then(data => {
-          const values = {};
-          data.forEach(item => {
-            values[item.value] = item.description;
-          });
-          return values;
-        })
-        .catch(error => {
-          EventBus.emit('message', { type: 'error', text: `Error fetching authorized values: ${error.message}` });
-          throw error;
-        });
     },
     exportDataToCSV() {
       const headers = [
