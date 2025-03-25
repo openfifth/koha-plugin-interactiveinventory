@@ -229,7 +229,7 @@ export default {
   },
   async fetchLibraries() {
       try {
-        const response = await fetch('/api/v1/public/libraries');
+        const response = await fetch('/api/v1/public/libraries?_per_page=-1');
         const data = await response.json();
         this.libraries = data;
       } catch (error) {
@@ -238,7 +238,7 @@ export default {
     },
     async fetchItemTypes() {
       try {
-        const response = await fetch('/api/v1/item_types');
+        const response = await fetch('/api/v1/item_types?_per_page=-1');
         const data = await response.json();
         this.iTypes = data;
       } catch (error) {

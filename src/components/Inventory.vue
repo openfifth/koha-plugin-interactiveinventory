@@ -249,7 +249,7 @@ export default {
     },
 
     async fetchAuthorizedValues(category) {
-      const response = await fetch(`/api/v1/authorised_value_categories/${category}/authorised_values`, {
+      const response = await fetch(`/api/v1/authorised_value_categories/${category}/authorised_values?_per_page=-1`, {
         method: 'GET',
         headers: {
           'Accept': 'application/json'
@@ -460,7 +460,7 @@ export default {
       }));
     },
     fetchAuthorizedValues(field) {
-      return fetch(`/api/v1/authorised_value_categories/${field}/authorised_values`)
+      return fetch(`/api/v1/authorised_value_categories/${field}/authorised_values?_per_page=-1`)
         .then(response => response.json())
         .then(data => {
           const values = {};
