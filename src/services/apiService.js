@@ -11,34 +11,31 @@ export const apiService = {
     },
 
     /**
-     * Fetches all results from a paginated API endpoint
+     * Fetches all results from a paginated API endpoint with more robust error handling
      * @param {string} endpoint - The API endpoint to fetch from
      * @param {object} options - Additional options for the request
-     * @param {number} options.pageSize - Optional override for server's default page size
-     * @param {function} options.onProgress - Callback for progress updates
-     * @param {function} options.onPageFetched - Callback that receives each page's items as they're fetched
-     * @param {boolean} options.usePagination - Whether to use pagination or fetch all at once
-     * @param {number} options.artificialDelay - Milliseconds to delay between pages (for demo purposes)
      * @returns {Promise<Array>} - All items from all pages
      */
     async fetchAllPaginated(endpoint, options = {}) {
         const {
-            pageSize = null, // Don't set a default, use server's setting
+            pageSize = null,
             onProgress = null,
-            onPageFetched = null, // New callback for incremental results
+            onPageFetched = null,
             usePagination = true,
-            artificialDelay = 0 // No delay by default
+            artificialDelay = 0
         } = options;
 
         if (!usePagination) {
-            // If pagination is disabled, fetch all results at once
             try {
                 const response = await fetch(`${endpoint}?_per_page=-1`);
                 if (!response.ok) {
-                    throw new Error(`Failed to fetch from ${endpoint}`);
+                    const errorText = await response.text();
+                    console.error(`API Error (${response.status}):`, errorText);
+                    throw new Error(`Failed to fetch from ${endpoint}: ${response.statusText}`);
                 }
                 return await response.json();
             } catch (error) {
+                console.error('Fetch error:', error);
                 EventBus.emit('message', {
                     type: 'error',
                     text: `Error fetching data: ${error.message}`
@@ -53,33 +50,32 @@ export const apiService = {
 
         try {
             while (hasMorePages) {
-                // Build URL with pagination parameters
                 let url = `${endpoint}?_page=${currentPage}`;
-
-                // Only add page size if explicitly specified
                 if (pageSize !== null) {
                     url += `&_per_page=${pageSize}`;
                 }
 
+                console.log(`Fetching page ${currentPage} from ${url}`);
                 const response = await fetch(url);
 
                 if (!response.ok) {
-                    throw new Error(`Failed to fetch page ${currentPage} from ${endpoint}`);
+                    const errorText = await response.text();
+                    console.error(`API Error (${response.status}):`, errorText);
+                    throw new Error(`Failed to fetch page ${currentPage} from ${endpoint}: ${response.statusText}`);
                 }
 
                 const items = await response.json();
+                console.log(`Received ${items.length} items from page ${currentPage}`);
 
                 if (items.length === 0) {
                     hasMorePages = false;
                 } else {
-                    // If onPageFetched callback is provided, send this page's items immediately
                     if (onPageFetched && typeof onPageFetched === 'function') {
                         onPageFetched(items, currentPage);
                     }
 
                     allItems = [...allItems, ...items];
 
-                    // Check for next page link in headers
                     const linkHeader = response.headers.get('Link');
                     hasMorePages = linkHeader && linkHeader.includes('rel="next"');
 
@@ -93,7 +89,6 @@ export const apiService = {
                         });
                     }
 
-                    // Add artificial delay if specified (for demo purposes)
                     if (artificialDelay > 0 && hasMorePages) {
                         await this.delay(artificialDelay);
                     }
@@ -104,6 +99,7 @@ export const apiService = {
 
             return allItems;
         } catch (error) {
+            console.error('Pagination error:', error);
             EventBus.emit('message', {
                 type: 'error',
                 text: `Error fetching paginated data: ${error.message}`
@@ -120,7 +116,7 @@ export const apiService = {
      */
     async fetchAuthorizedValues(category, options = {}) {
         const cacheKey = `authorizedValues_${category}`;
-        const cachedValues = sessionStorage.getItem(cacheKey);
+        const cachedValues = localStorage.getItem(cacheKey);
 
         if (cachedValues && !options.bypassCache) {
             const parsedValues = JSON.parse(cachedValues);
@@ -157,7 +153,7 @@ export const apiService = {
                 }
             ).then(allItems => {
                 // When all items are fetched, cache the result
-                sessionStorage.setItem(cacheKey, JSON.stringify(values));
+                localStorage.setItem(cacheKey, JSON.stringify(values));
                 resolve(values);
             }).catch(error => {
                 EventBus.emit('message', {

@@ -130,6 +130,7 @@
 <script>
 import { EventBus } from './eventBus';
 import { apiService } from '../services/apiService';
+import { sessionStorage } from '../services/sessionStorage';
 
 export default {
   props: {
@@ -179,13 +180,20 @@ export default {
     };
   },
   created() {
-    this.createStatuses();
-    this.fetchLibraries();
-    this.fetchCollectionCodes();
-    this.fetchItemTypes();
-    this.fetchShelvingLocations();
+    // We don't need to load anything in the setup form if it won't be shown
+    // (Don't call loadFormData here - it will be called by the parent if needed)
   },
   methods: {
+    // New method to load all form data
+    loadFormData() {
+      console.log('Loading form data for setup form');
+      this.createStatuses();
+      this.fetchLibraries();
+      this.fetchCollectionCodes();
+      this.fetchItemTypes();
+      this.fetchShelvingLocations();
+    },
+
     checkForm() {
       if (!(this.branchLoop || this.locationLoop || this.ccode || this.minLocation || this.maxLocation || this.classSource || this.selectedStatuses.length)) {
         return confirm(

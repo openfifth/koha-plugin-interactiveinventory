@@ -114,11 +114,13 @@ export default {
     },
     async fetchAndSetAuthorizedValues(field) {
       try {
-        // Pass a callback that will update the local state
+        // Pass a flag to indicate this is for the item component, not the form
         const values = await this.fetchAuthorizedValues(field, {
           onValuesUpdate: (updatedValues) => {
             this.authorizedValues = { ...updatedValues };
-          }
+          },
+          // This indicates we don't need to force a fetch in inventory mode
+          forceLoad: false
         });
 
         // This will only be reached after all values are fetched

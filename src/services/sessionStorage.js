@@ -44,5 +44,18 @@ export const sessionStorage = {
     isSessionActive() {
         const expiryTime = parseInt(localStorage.getItem(SESSION_EXPIRY_KEY));
         return expiryTime && Date.now() < expiryTime && localStorage.getItem(SESSION_KEY);
+    },
+
+    // Add these new methods to match the expected interface
+    getItem(key) {
+        return localStorage.getItem(key);
+    },
+
+    setItem(key, value) {
+        localStorage.setItem(key, value);
+    },
+
+    removeItem(key) {
+        localStorage.removeItem(key);
     }
 };
