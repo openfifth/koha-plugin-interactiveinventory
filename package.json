@@ -17,6 +17,7 @@
     "format": "prettier --write src/"
   },
   "dependencies": {
+    "@ericblade/quagga2": "^1.8.4",
     "mitt": "^3.0.1",
     "vue": "^3.4.30",
     "vue-router": "^4.3.0",
