@@ -215,5 +215,77 @@
         }
       }
     }
+  },
+  "/item/resolve_transit": {
+    "post": {
+      "x-mojo-to": "Com::InteractiveInventory::Controllers::Items#resolveTransit",
+      "operationId": "resolveTransit",
+      "tags": [
+        "inventory"
+      ],
+      "produces": [
+        "application/json"
+      ],
+      "consumes": [
+        "application/json"
+      ],
+      "parameters": [
+        {
+          "name": "body",
+          "in": "body",
+          "required": true,
+          "description": "Transit resolution data",
+          "schema": {
+            "type": "object",
+            "required": [
+              "barcode"
+            ],
+            "properties": {
+              "barcode": {
+                "type": "string",
+                "description": "The barcode of the in-transit item"
+              },
+              "branchCode": {
+                "type": "string",
+                "description": "The target branch code (defaults to current branch if not provided)"
+              }
+            }
+          }
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "Transit resolved successfully",
+          "schema": {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "400": {
+          "description": "Missing barcode or invalid request"
+        },
+        "404": {
+          "description": "Item not found or not in transit"
+        },
+        "500": {
+          "description": "Error resolving transit",
+          "schema": {
+            "type": "object",
+            "properties": {
+              "error": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    }
   }
 }

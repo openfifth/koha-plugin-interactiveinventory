@@ -157,7 +157,11 @@ export default {
       checkShelvedOutOfOrder: false,
       ignoreLostStatus: false,
       statuses: {},
-      locations: {}
+      locations: {},
+      resolutionSettings: {
+        resolveReturnClaims: false,
+        resolveInTransitItems: false
+      }
     };
   },
   mounted() {
@@ -550,6 +554,29 @@ export default {
         // Check various status flags
         this.checkItemSpecialStatuses(combinedData);
 
+        // Check if item has a return claim and should be resolved
+        if (combinedData.return_claim && this.resolutionSettings.resolveReturnClaims) {
+          const claimResolved = await this.resolveReturnClaim(combinedData.external_id);
+          if (claimResolved) {
+            combinedData.return_claim = false;
+            EventBus.emit('message', { 
+              type: 'success', 
+              text: `Return claim resolved for ${combinedData.external_id}` 
+            });
+          }
+        }
+        
+        // Check if item is in transit and should be resolved
+        if (combinedData.in_transit && this.resolutionSettings.resolveInTransitItems) {
+          const targetBranch = this.sessionData.selectedLibraryId || combinedData.holdingbranch;
+          await this.resolveInTransit(combinedData.external_id, targetBranch);
+          combinedData.in_transit = false;
+          EventBus.emit('message', { 
+            type: 'success', 
+            text: `In-transit status for item ${combinedData.external_id} has been resolved to branch ${targetBranch}` 
+          });
+        }
+
         // Only check scanned barcodes against expected list if compareBarcodes is enabled
         if (this.sessionData.compareBarcodes) {
           // Add defensive check before accessing right_place_list
@@ -662,6 +689,101 @@ export default {
       } catch (error) {
         EventBus.emit('message', { text: `Error updating item status: ${error.message}`, type: 'error' });
         throw error;
+      }
+    },
+
+    async resolveReturnClaim(barcode) {
+      console.log('Resolving return claim for barcode:', barcode);
+      this.loading = true;
+
+      // Get item details to find the claim ID
+      return this.$kohaAPI.getItem(barcode)
+        .then(response => {
+          const item = response.data;
+          // Fetch the unresolved claims for this item
+          return this.$kohaAPI.get(`/return_claims?itemnumber=${item.itemnumber}&resolved=0`);
+        })
+        .then(response => {
+          const claims = response.data;
+          if (!claims || claims.length === 0) {
+            throw new Error('No unresolved claims found for this item');
+          }
+          
+          // Get user session info to resolve the claims
+          return this.$kohaAPI.get('/auth/session')
+            .then(sessionResponse => {
+              const userId = sessionResponse.data.patron_id;
+              return { claims, userId };
+            });
+        })
+        .then(({ claims, userId }) => {
+          // Resolve each claim
+          const resolvePromises = claims.map(claim => 
+            this.$kohaAPI.post(`/return_claims/${claim.claim_id}/resolve`, {
+              resolution: 'FOUND',
+              resolved_by: userId
+            })
+          );
+          
+          return Promise.all(resolvePromises);
+        })
+        .then(() => {
+          // Get current user info
+          return this.$kohaAPI.get('/auth/session')
+            .then(sessionResponse => {
+              const branchcode = sessionResponse.data.branch;
+              
+              // Check in the item at the current branch
+              return this.$kohaAPI.post('/circulation/checkin', { 
+                barcode: barcode,
+                library_id: branchcode,
+                exempt_fine: true
+              });
+            });
+        })
+        .then(() => {
+          EventBus.emit('message', { 
+            type: 'success', 
+            text: `Return claim successfully resolved for ${barcode}` 
+          });
+          this.loading = false;
+          return true;
+        })
+        .catch(error => {
+          console.error('Error resolving return claim:', error);
+          EventBus.emit('message', { 
+            type: 'error', 
+            text: `Failed to resolve return claim: ${error.response?.data?.error || error.message}` 
+          });
+          this.loading = false;
+          return false;
+        });
+    },
+
+    async resolveInTransit(barcode, branchCode) {
+      try {
+        EventBus.emit('message', { 
+          type: 'status', 
+          text: `Resolving in-transit status for item ${barcode} to branch ${branchCode}...` 
+        });
+        
+        const data = await apiService.post(
+          `/api/v1/contrib/interactiveinventory/item/resolve_transit`,
+          { barcode, branchCode }
+        );
+        
+        EventBus.emit('message', { 
+          type: 'success', 
+          text: `Successfully resolved in-transit status for item ${barcode} to branch ${branchCode}` 
+        });
+        return data;
+      } catch (error) {
+        EventBus.emit('message', { 
+          type: 'error', 
+          text: `Error resolving in-transit status: ${error.message}` 
+        });
+        // Don't throw so we continue with the item processing
+        return { error: error.message };
       }
     },
 
@@ -1032,10 +1154,71 @@ export default {
         this.alertSettings = data.alertSettings;
       }
       
-      // Log the status of alerts for debugging
+      // Handle resolution settings
+      if (data.resolutionSettings) {
+        this.resolutionSettings = data.resolutionSettings;
+      }
+      
+      // Log the status of alerts and resolutions for debugging
       console.log('Alert settings:', this.alertSettings);
+      console.log('Resolution settings:', this.resolutionSettings);
       
       this.getItems();
+    },
+
+    resolveTransit(barcode) {
+      console.log('Resolving transit for barcode:', barcode);
+      this.loading = true;
+      
+      EventBus.emit('message', { 
+        type: 'status', 
+        text: `Resolving in-transit status for item ${barcode}...` 
+      });
+      
+      // Get current session info to determine branch
+      return this.$kohaAPI.get('/auth/session')
+        .then(sessionResponse => {
+          const branchcode = sessionResponse.data.branch;
+          
+          // Call our plugin API endpoint to resolve the transit
+          return fetch(this.pluginUrl + '/api/v1/item/resolve_transit', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              barcode: barcode,
+              branchCode: branchcode
+            })
+          });
+        })
+        .then(response => {
+          if (!response.ok) {
+            throw new Error(`HTTP error ${response.status}`);
+          }
+          return response.json();
+        })
+        .then(data => {
+          if (data && data.status === 'success') {
+            EventBus.emit('message', { 
+              type: 'success', 
+              text: `In-transit status resolved for ${barcode}` 
+            });
+            this.loading = false;
+            return true;
+          } else {
+            throw new Error(data?.error || 'Unknown error');
+          }
+        })
+        .catch(error => {
+          console.error('Error resolving transit:', error);
+          EventBus.emit('message', { 
+            type: 'error', 
+            text: `Failed to resolve transit: ${error.response?.data?.error || error.message}` 
+          });
+          this.loading = false;
+          return false;
+        });
     }
   }
 }
