@@ -538,6 +538,17 @@ export default {
       this.sessionData = sessionData;
       this.sessionStarted = true;
       try {
+        // Display filter information to the user
+        if (sessionData.shelvingLocation) {
+          const locationName = sessionData.shelvingLocations && sessionData.shelvingLocations[sessionData.shelvingLocation]
+            ? sessionData.shelvingLocations[sessionData.shelvingLocation]
+            : sessionData.shelvingLocation;
+          EventBus.emit('message', { 
+            type: 'status', 
+            text: `Applying shelving location filter: ${locationName}` 
+          });
+        }
+        
         const response = await fetch(
           `/cgi-bin/koha/plugins/run.pl?class=Koha::Plugin::Com::InteractiveInventory&method=start_session&session_data=${encodeURIComponent(JSON.stringify(sessionData))}`,
           {
