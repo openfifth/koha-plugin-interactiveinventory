@@ -166,6 +166,72 @@ export const apiService = {
     },
 
     /**
+     * Safely parses a JSON string with proper error handling
+     * @param {string} text - The JSON string to parse
+     * @param {string} contextInfo - Additional context for error messages
+     * @returns {Object} The parsed JSON object
+     * @throws {Error} If parsing fails
+     */
+    safeParseJSON(text, contextInfo = '') {
+        if (!text) {
+            throw new Error('Empty response received');
+        }
+
+        try {
+            return JSON.parse(text);
+        } catch (error) {
+            console.error(`JSON Parse Error${contextInfo ? ' in ' + contextInfo : ''}:`, error);
+            console.debug('Failed text content:', text.substring(0, 500) + (text.length > 500 ? '...' : ''));
+            throw new Error(`Invalid JSON response: ${error.message}`);
+        }
+    },
+
+    /**
+     * Safely extracts data from a fetch response with robust error handling
+     * @param {Response} response - The fetch response object
+     * @param {string} contextInfo - Additional context for error messages
+     * @returns {Promise<Object>} The parsed response data
+     * @throws {Error} If response processing fails
+     */
+    async handleResponse(response, contextInfo = '') {
+        // First check if the response is OK
+        if (!response.ok) {
+            const contentType = response.headers.get('content-type');
+
+            // Try to get detailed error information if available
+            if (contentType && contentType.includes('application/json')) {
+                try {
+                    const errorText = await response.text();
+                    const errorData = this.safeParseJSON(errorText, 'error response');
+                    throw new Error(errorData.error || errorData.message ||
+                        `Server error: ${response.status} ${response.statusText}`);
+                } catch (jsonError) {
+                    // If JSON parsing fails, throw the original error
+                    if (jsonError.message.includes('Invalid JSON')) {
+                        throw new Error(`Server error: ${response.status} ${response.statusText}`);
+                    }
+                    throw jsonError;
+                }
+            } else {
+                // Not a JSON response, just get the text
+                const errorText = await response.text();
+                throw new Error(`Error: ${response.status} ${response.statusText}${errorText ? ' - ' + errorText : ''}`);
+            }
+        }
+
+        // Handle successful response
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+            const text = await response.text();
+            return this.safeParseJSON(text, contextInfo);
+        } else {
+            // Not a JSON response
+            const text = await response.text();
+            return { text, isPlainText: true };
+        }
+    },
+
+    /**
      * Performs a POST request to an API endpoint
      * @param {string} endpoint - The API endpoint
      * @param {object} data - The data to send
@@ -184,18 +250,7 @@ export const apiService = {
                 body: JSON.stringify(data)
             });
 
-            if (!response.ok) {
-                let errorMessage = response.statusText;
-                try {
-                    const errorData = await response.json();
-                    errorMessage = errorData?.error || errorData?.errors?.[0]?.message || errorMessage;
-                } catch (e) {
-                    // If response cannot be parsed as JSON, use the status text
-                }
-                throw new Error(`Network response was not ok: ${errorMessage}`);
-            }
-
-            return await response.json();
+            return await this.handleResponse(response, `POST ${endpoint}`);
         } catch (error) {
             EventBus.emit('message', {
                 type: 'error',
@@ -221,11 +276,7 @@ export const apiService = {
                 }
             });
 
-            if (!response.ok) {
-                throw new Error(`Failed to fetch from ${endpoint}`);
-            }
-
-            return await response.json();
+            return await this.handleResponse(response, `GET ${endpoint}`);
         } catch (error) {
             EventBus.emit('message', {
                 type: 'error',

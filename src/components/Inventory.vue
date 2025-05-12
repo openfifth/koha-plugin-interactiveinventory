@@ -300,27 +300,12 @@ export default {
           EventBus.emit('message', { text: `Processing ${items.length} items, please wait...`, type: 'status' });
         }
 
-        const response = await fetch(
+        // Use the improved apiService instead of direct fetch
+        const data = await apiService.post(
           `/api/v1/contrib/interactiveinventory/item/fields`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Accept': 'application/json'
-            },
-            body: JSON.stringify({
-              items: items
-            })
-          }
+          { items }
         );
 
-        if (!response.ok) {
-          const errorData = await response.json();
-          console.error('Error response:', errorData);
-          throw new Error(`Network response was not ok: ${errorData?.errors?.[0]?.message || response.statusText}`);
-        }
-
-        const data = await response.json();
         return data; // Return the response data
       } catch (error) {
         console.error('Error updating item statuses:', error);
@@ -482,55 +467,38 @@ export default {
 
     async checkInItem(barcode) {
       try {
-        const response = await fetch(
+        const data = await apiService.post(
           `/api/v1/contrib/interactiveinventory/item/checkin`,
           {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-              barcode: barcode,
-              date: this.sessionData.inventoryDate
-            })
-          });
-        if (!response.ok) {
-          throw new Error('Network response was not ok');
-        }
+            barcode: barcode,
+            date: this.sessionData.inventoryDate
+          }
+        );
+        
         EventBus.emit('message', { text: 'Item checked in successfully', type: 'status' });
+        return data;
       } catch (error) {
         EventBus.emit('message', { text: `Error checking in item: ${error.message}`, type: 'error' });
+        // Don't throw - we want to continue processing other items even if check-in fails
+        return { error: error.message };
       }
     },
 
     async updateSingleItemStatus(barcode, fields) {
       try {
         console.log('Updating single item status:', barcode, fields);
-        const response = await fetch(
+        
+        // Use the improved apiService
+        const data = await apiService.post(
           `/api/v1/contrib/interactiveinventory/item/field`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Accept': 'application/json'
-            },
-            body: JSON.stringify({
-              barcode: barcode,
-              fields: fields
-            })
-          }
+          { barcode, fields }
         );
-
-        if (!response.ok) {
-          const errorData = await response.json();
-          console.error('Error response:', errorData);
-          throw new Error(`Network response was not ok: ${errorData?.error || response.statusText}`);
-        }
-
-        const data = await response.json();
+        
         EventBus.emit('message', { text: 'Item status updated successfully', type: 'status' });
+        return data;
       } catch (error) {
         EventBus.emit('message', { text: `Error updating item status: ${error.message}`, type: 'error' });
+        throw error;
       }
     },
 
@@ -549,20 +517,69 @@ export default {
           });
         }
         
+        EventBus.emit('message', { type: 'status', text: 'Starting inventory session...' });
+        
+        // Make the API request with improved error handling
         const response = await fetch(
           `/cgi-bin/koha/plugins/run.pl?class=Koha::Plugin::Com::InteractiveInventory&method=start_session&session_data=${encodeURIComponent(JSON.stringify(sessionData))}`,
           {
             method: 'GET',
             headers: {
-              'Content-Type': 'application/json'
+              'Content-Type': 'application/json',
+              'Accept': 'application/json'
             }
           }
         );
+
+        // Check for HTTP errors
         if (!response.ok) {
-          throw new Error('Network response was not ok');
+          const contentType = response.headers.get('content-type');
+          if (contentType && contentType.includes('application/json')) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || `Server error: ${response.status} ${response.statusText}`);
+          } else {
+            const errorText = await response.text();
+            throw new Error(`Non-JSON error response: ${errorText || response.statusText}`);
+          }
         }
-        const data = await response.json();
-        this.sessionData.response_data = data; // Add this line to include the response data in sessionData
+
+        // Parse the JSON response with error handling
+        let data;
+        try {
+          const responseText = await response.text();
+          try {
+            data = JSON.parse(responseText);
+          } catch (jsonError) {
+            console.error('JSON Parse Error:', jsonError, 'Response text:', responseText);
+            throw new Error(`Invalid JSON response: ${jsonError.message}`);
+          }
+        } catch (textError) {
+          console.error('Error reading response text:', textError);
+          throw new Error('Unable to read response data');
+        }
+
+        // Validate response data
+        if (!data) {
+          throw new Error('Empty response received');
+        }
+        
+        // Check for API error in the response
+        if (data.error) {
+          throw new Error(`API error: ${data.error}`);
+        }
+
+        // Validate expected data structure
+        if (!data.location_data || !Array.isArray(data.location_data)) {
+          console.warn('Invalid location_data in response:', data);
+          data.location_data = [];
+        }
+        
+        if (!data.right_place_list || !Array.isArray(data.right_place_list)) {
+          console.warn('Invalid right_place_list in response:', data);
+          data.right_place_list = [];
+        }
+
+        this.sessionData.response_data = data;
 
         // Save session data to session storage
         sessionStorage.saveSession(this.sessionData);
@@ -571,9 +588,27 @@ export default {
         this.items = [];
         sessionStorage.saveItems(this.items);
 
-        EventBus.emit('message', { text: 'Inventory session started', type: 'status' });
+        EventBus.emit('message', { 
+          text: `Inventory session started with ${data.total_records || 0} items`, 
+          type: 'status' 
+        });
       } catch (error) {
-        EventBus.emit('message', { text: `Error starting inventory session ${error.message}`, type: 'error' });
+        console.error('Inventory session error:', error);
+        this.sessionStarted = false;
+        this.sessionData = null;
+        
+        EventBus.emit('message', { 
+          text: `Error starting inventory session: ${error.message}`, 
+          type: 'error' 
+        });
+        
+        // Show additional guidance if JSON parsing failed
+        if (error.message.includes('JSON')) {
+          EventBus.emit('message', { 
+            text: 'There was a problem with the server response. Please try again or contact support.', 
+            type: 'error' 
+          });
+        }
       }
     },
 

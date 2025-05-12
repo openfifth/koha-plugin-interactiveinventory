@@ -99,125 +99,164 @@ sub lookup_item_by_barcode {
 sub start_session {
     my ( $self, $args ) = @_;
 
-    my $session_data_encoded = $self->{cgi}->param('session_data');
-    my $session_data_json    = uri_unescape($session_data_encoded);
-    my $session_data         = decode_json($session_data_json);
-    my @itemtypes            = Koha::ItemTypes->search->as_list;
-    my @itemtype_codes       = map { $_->itemtype } @itemtypes;
+    my $cgi = $self->{cgi};
+    print $cgi->header('application/json');
 
-    # Quote each item type manually
-    my @quoted_itemtypes = map { "'$_'" } @itemtype_codes;
-    warn Dumper(@itemtype_codes);
-
-    my $minLocation        = $session_data->{'minLocation'};
-    my $maxLocation        = $session_data->{'maxLocation'};
-    $maxLocation=$minLocation.'Z' unless ( $maxLocation || ! $minLocation );
-    my $locationLoop       = $session_data->{'locationLoop'};
-    my $branchLoop         = $session_data->{'branchLoop'};
-    my $dateLastSeen       = $session_data->{'dateLastSeen'};
-    my $ccode              = $session_data->{'ccode'};
-    my $classSource        = $session_data->{'classSource'};
-    my $selectedStatuses   = $session_data->{'selectedStatuses'};
-    my $ignoreIssued       = $session_data->{'ignoreIssued'};
-    my $ignoreWaitingHolds = $session_data->{'ignoreWaitingHolds'};
-    my @selectedItypes = map { "'$_'" } @{ $session_data->{'selectedItypes'} };
-    my $selectedbranchcode = $session_data->{'selectedLibraryId'};
-    my $shelvingLocation = $session_data->{'shelvingLocation'};
-
-    # Add debug logging
-    warn "Shelving location filter: " . ($shelvingLocation || 'not set');
-    warn "Session data: " . Dumper($session_data);
-
-    # Build common parameters for both queries
-    my $common_params = {
-        minlocation  => $minLocation,
-        maxlocation  => $maxLocation,
-        branch       => 'homebranch',
-        ccode        => $ccode,
-    };
-
-    # If shelving location is set, use it as the location parameter
-    if ($shelvingLocation) {
-        $common_params->{location} = $shelvingLocation;
-        # Replace locationLoop with shelving location if both are set
-        warn "Applying shelving location filter: $shelvingLocation (replacing location: " . ($locationLoop || 'none') . ")";
+    eval {
+        my $session_data_encoded = $cgi->param('session_data');
         
-        # Log that we're using the shelving location filter
-        warn "Using shelving location filter in location parameter: $shelvingLocation";
-    } elsif ($locationLoop) {
-        $common_params->{location} = $locationLoop;
-    }
+        unless (defined $session_data_encoded) {
+            die "Missing session_data parameter";
+        }
+        
+        my $session_data_json = uri_unescape($session_data_encoded);
+        
+        # Validate JSON before parsing
+        my $session_data;
+        eval {
+            $session_data = decode_json($session_data_json);
+        };
+        if ($@) {
+            die "Invalid JSON in session_data: $@";
+        }
+        
+        # Validate required session data
+        unless ($session_data && ref($session_data) eq 'HASH') {
+            die "Session data must be a valid object";
+        }
+        
+        my @itemtypes = Koha::ItemTypes->search->as_list;
+        my @itemtype_codes = map { $_->itemtype } @itemtypes;
 
-    # Add debug logging for parameters
-    warn "Common parameters: " . Dumper($common_params);
+        # Quote each item type manually
+        my @quoted_itemtypes = map { "'$_'" } @itemtype_codes;
+        warn Dumper(@itemtype_codes);
 
-    my ( $rightPlaceList ) = GetItemsForInventory($common_params);
+        # Extract and validate session parameters with defaults
+        my $minLocation = $session_data->{'minLocation'} || '';
+        my $maxLocation = $session_data->{'maxLocation'} || '';
+        $maxLocation = $minLocation.'Z' unless ($maxLocation || !$minLocation);
+        my $locationLoop = $session_data->{'locationLoop'} || '';
+        my $branchLoop = $session_data->{'branchLoop'} || '';
+        my $dateLastSeen = $session_data->{'dateLastSeen'} || '';
+        my $ccode = $session_data->{'ccode'} || '';
+        my $classSource = $session_data->{'classSource'} || '';
+        my $selectedStatuses = $session_data->{'selectedStatuses'} || {};
+        my $ignoreIssued = $session_data->{'ignoreIssued'} || 0;
+        my $ignoreWaitingHolds = $session_data->{'ignoreWaitingHolds'} || 0;
+        
+        # Ensure selectedItypes is an array
+        my @selectedItypes;
+        if (defined $session_data->{'selectedItypes'} && ref($session_data->{'selectedItypes'}) eq 'ARRAY') {
+            @selectedItypes = map { "'$_'" } @{ $session_data->{'selectedItypes'} };
+        }
+        
+        my $selectedbranchcode = $session_data->{'selectedLibraryId'} || '';
+        my $shelvingLocation = $session_data->{'shelvingLocation'} || '';
 
-    # Add debug logging for right place list
-    warn "Right place list count: " . ($rightPlaceList ? scalar(@$rightPlaceList) : 0);
+        # Add debug logging
+        warn "Shelving location filter: " . ($shelvingLocation || 'not set');
+        warn "Session data: " . Dumper($session_data);
 
-    # Ensure rightPlaceList is an array reference, even if empty
-    $rightPlaceList = [] unless defined $rightPlaceList;
+        # Build common parameters for both queries
+        my $common_params = {
+            minlocation  => $minLocation,
+            maxlocation  => $maxLocation,
+            branch       => 'homebranch',
+            ccode        => $ccode,
+        };
 
-    # Build parameters for location data query
-    my $location_params = {
-        %$common_params,  # Include common parameters
-        class_source        => $classSource,
-        ignoreissued        => $ignoreIssued,
-        datelastseen        => $dateLastSeen,
-        branchcode          => $selectedbranchcode,
-        offset              => 0,
-        statushash          => $selectedStatuses,
-        ignore_waiting_holds=> $ignoreWaitingHolds,
-        itemtypes           => \@selectedItypes,
+        # If shelving location is set, use it as the location parameter
+        if ($shelvingLocation) {
+            $common_params->{location} = $shelvingLocation;
+            # Replace locationLoop with shelving location if both are set
+            warn "Applying shelving location filter: $shelvingLocation (replacing location: " . ($locationLoop || 'none') . ")";
+            
+            # Log that we're using the shelving location filter
+            warn "Using shelving location filter in location parameter: $shelvingLocation";
+        } elsif ($locationLoop) {
+            $common_params->{location} = $locationLoop;
+        }
+
+        # Add debug logging for parameters
+        warn "Common parameters: " . Dumper($common_params);
+
+        my ($rightPlaceList) = GetItemsForInventory($common_params);
+
+        # Add debug logging for right place list
+        warn "Right place list count: " . ($rightPlaceList ? scalar(@$rightPlaceList) : 0);
+
+        # Ensure rightPlaceList is an array reference, even if empty
+        $rightPlaceList = [] unless defined $rightPlaceList;
+
+        # Build parameters for location data query
+        my $location_params = {
+            %$common_params,  # Include common parameters
+            class_source        => $classSource,
+            ignoreissued        => $ignoreIssued,
+            datelastseen        => $dateLastSeen,
+            branchcode          => $selectedbranchcode,
+            offset              => 0,
+            statushash          => $selectedStatuses,
+            ignore_waiting_holds=> $ignoreWaitingHolds,
+            itemtypes           => \@selectedItypes,
+        };
+
+        # Add debug logging for location parameters
+        warn "Location parameters: " . Dumper($location_params);
+
+        my ($location_data, $iTotalRecords) = GetItemsForInventory($location_params);
+
+        # Add debug logging for location data
+        warn "Location data count: " . ($location_data ? scalar(@$location_data) : 0);
+        warn "Total records: " . ($iTotalRecords || 0);
+        warn "Using location parameter: " . ($common_params->{location} || 'not set');
+
+        # Ensure location_data is an array reference, even if empty
+        $location_data = [] unless defined $location_data;
+
+        # Modify the keys in location_data to conform to the required format
+        foreach my $item (@$location_data) {
+            foreach my $key (keys %$item) {
+                my $new_key = $key;
+                $new_key =~ s/[^a-zA-Z0-9_-]/_/g;  # Replace invalid characters with underscores
+                $new_key = lcfirst($new_key);       # Ensure it starts with a lowercase letter
+                if ($new_key ne $key) {
+                    $item->{$new_key} = delete $item->{$key};
+                }
+            }
+        }
+        
+        # Do the same for rightPlaceList
+        foreach my $item (@$rightPlaceList) {
+            foreach my $key (keys %$item) {
+                my $new_key = $key;
+                $new_key =~ s/[^a-zA-Z0-9_-]/_/g;  # Replace invalid characters with underscores
+                $new_key = lcfirst($new_key);       # Ensure it starts with a lowercase letter
+                if ($new_key ne $key) {
+                    $item->{$new_key} = delete $item->{$key};
+                }
+            }
+        }
+
+        my $response = {
+            location_data => $location_data,
+            total_records => $iTotalRecords,
+            right_place_list => $rightPlaceList,
+        };
+
+        # Return the JSON response
+        print encode_json($response);
     };
-
-    # Add debug logging for location parameters
-    warn "Location parameters: " . Dumper($location_params);
-
-    my ( $location_data, $iTotalRecords ) = GetItemsForInventory($location_params);
-
-    # Add debug logging for location data
-    warn "Location data count: " . ($location_data ? scalar(@$location_data) : 0);
-    warn "Total records: " . ($iTotalRecords || 0);
-    warn "Using location parameter: " . ($common_params->{location} || 'not set');
-
-    # Ensure location_data is an array reference, even if empty
-    $location_data = [] unless defined $location_data;
-
- #Modify the keys in location_data to conform to the required format
-foreach my $item (@$location_data) {
-    foreach my $key (keys %$item) {
-        my $new_key = $key;
-        $new_key =~ s/[^a-zA-Z0-9_-]/_/g;  # Replace invalid characters with underscores
-        $new_key = lcfirst($new_key);       # Ensure it starts with a lowercase letter
-        if ($new_key ne $key) {
-            $item->{$new_key} = delete $item->{$key};
-        }
+    
+    # Handle any errors that occurred during processing
+    if ($@) {
+        warn "Error in start_session: $@";
+        print encode_json({ 
+            error => "Error processing request: $@",
+            success => 0
+        });
     }
-}
-## do the same for rightPlaceList
-foreach my $item (@$rightPlaceList) {
-    foreach my $key (keys %$item) {
-        my $new_key = $key;
-        $new_key =~ s/[^a-zA-Z0-9_-]/_/g;  # Replace invalid characters with underscores
-        $new_key = lcfirst($new_key);       # Ensure it starts with a lowercase letter
-        if ($new_key ne $key) {
-            $item->{$new_key} = delete $item->{$key};
-        }
-    }
-}
-
-my $response = {
-    location_data => $location_data,
-    total_records => $iTotalRecords,
-    right_place_list => $rightPlaceList,
-};
-
-
-# Print the JSON-encoded response
-print "Content-Type: application/json\n\n";
-print encode_json($response);
 }
 
 =head3
