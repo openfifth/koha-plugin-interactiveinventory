@@ -1,6 +1,7 @@
 const SESSION_KEY = 'koha_inventory_session';
 const ITEMS_KEY = 'koha_inventory_items';
 const SESSION_EXPIRY_KEY = 'koha_inventory_expiry';
+const MISSING_ITEMS_KEY = 'koha_inventory_marked_missing';
 const SESSION_DURATION = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
 
 export const sessionStorage = {
@@ -35,10 +36,26 @@ export const sessionStorage = {
         return items ? JSON.parse(items) : null;
     },
 
+    saveMarkedMissingItems(barcodes) {
+        localStorage.setItem(MISSING_ITEMS_KEY, JSON.stringify(barcodes));
+    },
+
+    getMarkedMissingItems() {
+        const expiryTime = parseInt(localStorage.getItem(SESSION_EXPIRY_KEY));
+        if (!expiryTime || Date.now() > expiryTime) {
+            this.clearSession();
+            return null;
+        }
+
+        const barcodes = localStorage.getItem(MISSING_ITEMS_KEY);
+        return barcodes ? JSON.parse(barcodes) : [];
+    },
+
     clearSession() {
         localStorage.removeItem(SESSION_KEY);
         localStorage.removeItem(ITEMS_KEY);
         localStorage.removeItem(SESSION_EXPIRY_KEY);
+        localStorage.removeItem(MISSING_ITEMS_KEY);
     },
 
     isSessionActive() {

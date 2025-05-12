@@ -70,6 +70,10 @@
       </div>
     </div>
     <button v-if="sessionStarted" @click="toggleEndSessionModal" class="end-session-button">End Session</button>
+    <button v-if="sessionStarted" @click="toggleMissingItemsModal" class="missing-items-button">
+      Missing Items
+      <span v-if="getMissingItemsCount() > 0" class="missing-count">{{ getMissingItemsCount() }}</span>
+    </button>
 
     <!-- End Session Modal -->
     <div v-if="showEndSessionModal" class="modal">
@@ -80,6 +84,10 @@
           expected {{ expectedUniqueBarcodes }} are you sure you want to end the session?</p>
         <div class="modal-checkboxes">
           <input type="checkbox" id="exportToCSV" v-model="exportToCSV"> Export to CSV
+        </div>
+        <div class="modal-checkboxes">
+          <input type="checkbox" id="exportMissingOnly" v-model="exportMissingOnly" v-if="exportToCSV"> 
+          Export missing items only (items not scanned)
         </div>
         <div class="modal-checkboxes">
           <input type="checkbox" v-model="markMissingItems" id="mark-missing-items"> Mark "loststatus" as missing for
@@ -101,6 +109,17 @@
       @close="closeResolutionModal"
       @resolved="handleResolutionComplete"
     />
+    
+    <!-- Missing Items Modal -->
+    <MissingItemsModal
+      v-if="showMissingItemsModal"
+      :show="showMissingItemsModal"
+      :sessionData="sessionData"
+      :scannedItems="items"
+      @close="closeMissingItemsModal"
+      @item-marked-missing="handleItemMarkedMissing"
+      @items-marked-missing="handleItemsMarkedMissing"
+    />
   </div>
 </template>
 
@@ -109,6 +128,7 @@ import InventorySetupForm from './InventorySetupForm.vue'
 import InventoryItem from './InventoryItem.vue'
 import BarcodeScanner from './BarcodeScanner.vue'
 import ResolutionModal from './ResolutionModal.vue'
+import MissingItemsModal from './MissingItemsModal.vue'
 import { EventBus } from './eventBus'
 import { sessionStorage } from '../services/sessionStorage'
 import { apiService } from '../services/apiService'
@@ -118,7 +138,8 @@ export default {
     InventorySetupForm,
     InventoryItem,
     BarcodeScanner,
-    ResolutionModal
+    ResolutionModal,
+    MissingItemsModal
   },
   computed: {
     uniqueBarcodesCount() {
@@ -147,6 +168,7 @@ export default {
       biblioWithHighestCallNumber: '',
       showEndSessionModal: false,
       exportToCSV: false,
+      exportMissingOnly: false,
       markMissingItems: false,
       isMobileView: false,
       skipCheckedOutItems: true,
@@ -176,10 +198,12 @@ export default {
         resolveInTransitItems: false
       },
       showResolutionModal: false,
+      showMissingItemsModal: false,
       currentResolutionItem: null,
       currentResolutionType: '',
       currentPatronName: '',
       manualResolutionEnabled: true,
+      markedMissingItems: new Set(),
     };
   },
   mounted() {
@@ -202,6 +226,7 @@ export default {
       if (sessionStorage.isSessionActive()) {
         const savedSessionData = sessionStorage.getSession();
         const savedItems = sessionStorage.getItems();
+        const savedMarkedMissingItems = sessionStorage.getMarkedMissingItems();
 
         if (savedSessionData) {
           this.sessionData = savedSessionData;
@@ -212,6 +237,11 @@ export default {
 
             // Restore the highest call number tracking
             this.updateHighestCallNumber();
+          }
+          
+          // Restore marked missing items if available
+          if (savedMarkedMissingItems && Array.isArray(savedMarkedMissingItems)) {
+            this.markedMissingItems = new Set(savedMarkedMissingItems);
           }
 
           EventBus.emit('message', { text: 'Session restored successfully', type: 'status' });
@@ -282,6 +312,11 @@ export default {
               return false;
             }
             
+            // Skip items that have already been marked as missing
+            if (this.markedMissingItems.has(item.barcode)) {
+              return false;
+            }
+            
             // Skip items that are checked out if the session is configured to do so
             if (this.sessionData.skipCheckedOutItems && item.checked_out) {
               console.log(`Skipping checked out item: ${item.barcode}`);
@@ -316,6 +351,10 @@ export default {
             try {
               // Wait for the update to complete
               await this.updateItemStatus(itemsToUpdate);
+              
+              // Add all marked items to our tracking set
+              itemsToUpdate.forEach(item => this.markedMissingItems.add(item.barcode));
+              
               // Signal completion
               EventBus.emit('message', { text: 'Items marked as missing successfully', type: 'status' });
               
@@ -379,6 +418,7 @@ export default {
         this.sessionStarted = false;
         this.sessionData = null;
         this.items = [];
+        this.markedMissingItems = new Set();
 
         // Wait a moment to make sure the user sees the success message
         await new Promise(resolve => setTimeout(resolve, 1500));
@@ -1048,7 +1088,7 @@ export default {
 
     exportDataToCSV() {
       const headers = [
-        'Barcode', 'Item ID', 'Biblio ID', 'Title', 'Author', 'Publication Year', 'Publisher', 'ISBN', 'Pages', 'Location', 'Acquisition Date', 'Last Seen Date', 'URL', 'Was Lost', 'Wrong Place', 'Was Checked Out', 'Scanned Out of Order', 'Had Invalid "Not for loan" Status', 'Scanned'
+        'Barcode', 'Item ID', 'Biblio ID', 'Title', 'Author', 'Publication Year', 'Publisher', 'ISBN', 'Pages', 'Location', 'Acquisition Date', 'Last Seen Date', 'URL', 'Was Lost', 'Wrong Place', 'Was Checked Out', 'Scanned Out of Order', 'Had Invalid "Not for loan" Status', 'Scanned', 'Status'
       ];
 
       // Create a map of scanned items using their barcodes
@@ -1059,11 +1099,21 @@ export default {
       const expectedBarcodesSet = new Set(locationData.map(item => item.barcode));
 
       // Combine expected items and scanned items
-      const combinedItems = [
+      let combinedItems = [
         ...locationData,
         ...this.items.filter(item => !expectedBarcodesSet.has(item.external_id))
       ];
-      console.log(combinedItems);
+      
+      // Filter for missing items only if requested
+      if (this.exportMissingOnly) {
+        combinedItems = combinedItems.filter(item => {
+          const barcode = item.barcode || item.external_id;
+          // Item is missing if it was expected but not scanned
+          return expectedBarcodesSet.has(barcode) && !scannedItemsMap.has(barcode);
+        });
+      }
+      
+      console.log(`Exporting ${combinedItems.length} items to CSV${this.exportMissingOnly ? ' (missing items only)' : ''}`);
 
       const csvContent = [
         headers.join(','),
@@ -1079,6 +1129,20 @@ export default {
             }
           }
           const wasScanned = scannedItem || combinedItem.wasScanned;
+          
+          // Determine item status
+          let status = 'OK';
+          if (!wasScanned && expectedBarcodesSet.has(combinedItem.barcode || combinedItem.external_id)) {
+            status = 'Missing';
+          } else if (combinedItem.wrongPlace) {
+            status = 'Wrong Place';
+          } else if (combinedItem.outOfOrder) {
+            status = 'Out of Order';
+          } else if (combinedItem.invalidStatus) {
+            status = 'Invalid Status';
+          } else if (combinedItem.wasLost) {
+            status = 'Was Lost';
+          }
 
           return [
             `"${combinedItem.barcode || combinedItem.external_id}"`,
@@ -1090,16 +1154,17 @@ export default {
             `"${(combinedItem.biblio && combinedItem.biblio.publisher) || 'N/A'}"`,
             `"${(combinedItem.biblio && combinedItem.biblio.isbn) || 'N/A'}"`,
             `"${(combinedItem.biblio && combinedItem.biblio.pages) || 'N/A'}"`,
-            `"${combinedItem.location}"`,
+            `"${combinedItem.location || 'N/A'}"`,
             `"${combinedItem.acquisition_date || 'N/A'}"`,
             `"${combinedItem.datelastseen || combinedItem.last_seen_date || 'N/A'}"`,
             `"${window.location.origin}/cgi-bin/koha/catalogue/detail.pl?biblionumber=${combinedItem.biblionumber || combinedItem.biblio_id}"`,
-            `"${combinedItem.wasLost === '1' ? 'Yes' : 'No'}"`,
+            `"${combinedItem.wasLost ? 'Yes' : 'No'}"`,
             `"${combinedItem.wrongPlace ? 'Yes' : 'No'}"`,
             `"${combinedItem.checked_out_date ? 'Yes' : 'No'}"`,
             `"${combinedItem.outOfOrder ? 'Yes' : 'No'}"`,
             `"${combinedItem.invalidStatus ? 'Yes' : 'No'}"`,
-            `"${wasScanned ? 'Yes' : 'NOT SCANNED'}"`
+            `"${wasScanned ? 'Yes' : 'NOT SCANNED'}"`,
+            `"${status}"`
           ].join(',');
         })
       ].join('\n');
@@ -1108,11 +1173,17 @@ export default {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = 'inventory.csv';
+      a.download = this.exportMissingOnly ? 'missing_items.csv' : 'inventory.csv';
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
+      
+      // Show a message with the count of exported items
+      EventBus.emit('message', { 
+        type: 'success', 
+        text: `Exported ${combinedItems.length} items to CSV${this.exportMissingOnly ? ' (missing items only)' : ''}`
+      });
     },
 
     checkItemStatuses(item, selectedStatuses) {
@@ -1223,6 +1294,63 @@ export default {
     toggleEndSessionModal() {
       console.log('Toggle modal', this.showEndSessionModal);
       this.showEndSessionModal = !this.showEndSessionModal;
+    },
+
+    toggleMissingItemsModal() {
+      this.showMissingItemsModal = !this.showMissingItemsModal;
+    },
+    
+    closeMissingItemsModal() {
+      this.showMissingItemsModal = false;
+    },
+    
+    handleItemMarkedMissing(barcode) {
+      // Add the barcode to the markedMissingItems set
+      this.markedMissingItems.add(barcode);
+      // Update session storage to keep track of marked items
+      sessionStorage.saveMarkedMissingItems(Array.from(this.markedMissingItems));
+    },
+    
+    handleItemsMarkedMissing(barcodes) {
+      // Add all barcodes to the markedMissingItems set
+      barcodes.forEach(barcode => this.markedMissingItems.add(barcode));
+      // Update session storage
+      sessionStorage.saveMarkedMissingItems(Array.from(this.markedMissingItems));
+    },
+    
+    getMissingItemsCount() {
+      if (!this.sessionData || !this.sessionData.response_data) return 0;
+      
+      const locationData = this.sessionData.response_data.location_data || [];
+      const scannedBarcodesSet = new Set(this.items.map(item => item.external_id));
+      
+      // Count items that are not scanned and not marked as missing already
+      return locationData.filter(item => {
+        // Skip items that have already been scanned
+        if (scannedBarcodesSet.has(item.barcode)) {
+          return false;
+        }
+        
+        // Skip items that have already been marked as missing
+        if (this.markedMissingItems.has(item.barcode)) {
+          return false;
+        }
+        
+        // Skip items based on session settings
+        if (this.sessionData.skipCheckedOutItems && item.checked_out) {
+          return false;
+        }
+        
+        if (this.sessionData.skipInTransitItems && item.in_transit) {
+          return false;
+        }
+        
+        if (this.sessionData.skipBranchMismatchItems && item.homebranch !== item.holdingbranch) {
+          return false;
+        }
+        
+        return true;
+      }).length;
     },
 
     setupStarted(data) {
@@ -1534,6 +1662,40 @@ h3 {
   background-color: #d32f2f;
 }
 
+.missing-items-button {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  padding: 10px 20px;
+  background-color: #ff9800;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 16px;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.missing-items-button:hover {
+  background-color: #f57c00;
+}
+
+.missing-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #f44336;
+  color: white;
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  font-size: 14px;
+  margin-left: 8px;
+}
+
 .end-session-modal-button {
   padding: 10px 20px;
   background-color: #f44336;
@@ -1542,10 +1704,6 @@ h3 {
   border-radius: 5px;
   cursor: pointer;
   font-size: 16px;
-}
-
-.end-session-modal-button:hover {
-  background-color: #d32f2f;
 }
 
 /* Modal Styles */
