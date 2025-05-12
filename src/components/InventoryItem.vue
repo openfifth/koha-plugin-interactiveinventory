@@ -2,15 +2,21 @@
   <div :class="['item', { 
        'highlight': hasIssue, 
        'checked-out': item.checked_out_date,
-       'in-transit': item.in_transit,
-       'branch-mismatch': item.homebranch !== item.holdingbranch
+       'in-transit': item.in_transit && alertSettings.showInTransitAlerts,
+       'branch-mismatch': item.homebranch !== item.holdingbranch && alertSettings.showBranchMismatchAlerts,
+       'withdrawn': item.withdrawn === '1' && alertSettings.showWithdrawnAlerts,
+       'on-hold': item.on_hold && alertSettings.showOnHoldAlerts,
+       'return-claim': item.return_claim && alertSettings.showReturnClaimAlerts
      }]" @click="toggleExpand">
     <p class="item-title">
       <span :class="issueIconClass" aria-hidden="true">{{ issueIcon }}</span>
       <span class="sr-only">{{ issueIconText }}</span>
       <span v-if="item.checked_out_date" class="checked-out-badge">CHECKED OUT</span>
-      <span v-if="item.in_transit" class="in-transit-badge">IN TRANSIT</span>
-      <span v-if="item.homebranch !== item.holdingbranch" class="branch-mismatch-badge">BRANCH MISMATCH</span>
+      <span v-if="item.in_transit && alertSettings.showInTransitAlerts" class="in-transit-badge">IN TRANSIT</span>
+      <span v-if="item.homebranch !== item.holdingbranch && alertSettings.showBranchMismatchAlerts" class="branch-mismatch-badge">BRANCH MISMATCH</span>
+      <span v-if="item.withdrawn === '1' && alertSettings.showWithdrawnAlerts" class="withdrawn-badge">WITHDRAWN</span>
+      <span v-if="item.on_hold && alertSettings.showOnHoldAlerts" class="on-hold-badge">ON HOLD</span>
+      <span v-if="item.return_claim && alertSettings.showReturnClaimAlerts" class="return-claim-badge">RETURN CLAIM</span>
       {{ item.biblio.title }} - {{ item.external_id }}
     </p>
     <div v-if="isExpanded" class="item-details">
@@ -51,13 +57,27 @@
             and has been checked in automatically.
           </span>
         </p>
-        <p v-if="item.in_transit" class="item-warning"><strong>Warning:</strong></p>
-        <p v-if="item.in_transit" class="item-warning">
+        <p v-if="item.in_transit && alertSettings.showInTransitAlerts" class="item-warning"><strong>Warning:</strong></p>
+        <p v-if="item.in_transit && alertSettings.showInTransitAlerts" class="item-warning">
           This item is currently in transit from {{ item.homebranch }} to {{ item.holdingbranch }}.
         </p>
-        <p v-if="item.homebranch !== item.holdingbranch" class="item-warning"><strong>Warning:</strong></p>
-        <p v-if="item.homebranch !== item.holdingbranch" class="item-warning">
+        <p v-if="item.homebranch !== item.holdingbranch && alertSettings.showBranchMismatchAlerts" class="item-warning"><strong>Warning:</strong></p>
+        <p v-if="item.homebranch !== item.holdingbranch && alertSettings.showBranchMismatchAlerts" class="item-warning">
           This item belongs to branch {{ item.homebranch }} but is currently held at branch {{ item.holdingbranch }}.
+        </p>
+        <p v-if="item.withdrawn === '1' && alertSettings.showWithdrawnAlerts" class="item-warning"><strong>Warning:</strong></p>
+        <p v-if="item.withdrawn === '1' && alertSettings.showWithdrawnAlerts" class="item-warning">
+          This item has been withdrawn from circulation.
+        </p>
+        <p v-if="item.on_hold && alertSettings.showOnHoldAlerts" class="item-warning"><strong>Warning:</strong></p>
+        <p v-if="item.on_hold && alertSettings.showOnHoldAlerts" class="item-warning">
+          This item is currently on hold{{ item.waiting ? ' and waiting for pickup' : '' }}. 
+          <span v-if="item.waiting">It should not be reshelved.</span>
+          <span v-if="item.hold_transit">It is in transit to fulfill a hold.</span>
+        </p>
+        <p v-if="item.return_claim && alertSettings.showReturnClaimAlerts" class="item-warning"><strong>Warning:</strong></p>
+        <p v-if="item.return_claim && alertSettings.showReturnClaimAlerts" class="item-warning">
+          This item has an unresolved return claim. The patron claims they returned it, but it is still checked out in the system.
         </p>
         <p v-if="item.outOfOrder" class="item-warning"><strong>Warning:</strong></p>
         <p v-if="item.outOfOrder" class="item-warning">This item has been scanned out of order. It should have been
@@ -88,6 +108,20 @@ export default {
     fetchAuthorizedValues: {
       type: Function,
       required: true
+    },
+    barcodeExpected: {
+      type: Boolean,
+      default: true
+    },
+    alertSettings: {
+      type: Object,
+      default: () => ({
+        showWithdrawnAlerts: true,
+        showOnHoldAlerts: true,
+        showInTransitAlerts: true,
+        showBranchMismatchAlerts: true,
+        showReturnClaimAlerts: true
+      })
     }
   },
   data() {
@@ -105,7 +139,11 @@ export default {
     hasIssue() {
       return this.item.wasLost || this.item.wrongPlace || this.item.checked_out_date || 
              this.item.outOfOrder || this.item.invalidStatus || 
-             this.item.in_transit || (this.item.homebranch !== this.item.holdingbranch);
+             (this.item.in_transit && this.alertSettings.showInTransitAlerts) || 
+             (this.item.homebranch !== this.item.holdingbranch && this.alertSettings.showBranchMismatchAlerts) ||
+             (this.item.withdrawn === '1' && this.alertSettings.showWithdrawnAlerts) || 
+             (this.item.on_hold && this.alertSettings.showOnHoldAlerts) ||
+             (this.item.return_claim && this.alertSettings.showReturnClaimAlerts);
     },
     issueIcon() {
       return this.hasIssue ? '✖' : '✔';
@@ -257,6 +295,54 @@ export default {
 .branch-mismatch-badge {
   display: inline-block;
   background-color: #3498db;
+  color: white;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.8em;
+  margin-right: 8px;
+  font-weight: bold;
+}
+
+.withdrawn {
+  border-left: 4px solid #9b59b6;
+  background-color: rgba(155, 89, 182, 0.1);
+}
+
+.withdrawn-badge {
+  display: inline-block;
+  background-color: #9b59b6;
+  color: white;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.8em;
+  margin-right: 8px;
+  font-weight: bold;
+}
+
+.on-hold {
+  border-left: 4px solid #27ae60;
+  background-color: rgba(39, 174, 96, 0.1);
+}
+
+.on-hold-badge {
+  display: inline-block;
+  background-color: #27ae60;
+  color: white;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.8em;
+  margin-right: 8px;
+  font-weight: bold;
+}
+
+.return-claim {
+  border-left: 4px solid #e67e22;
+  background-color: rgba(230, 126, 34, 0.1);
+}
+
+.return-claim-badge {
+  display: inline-block;
+  background-color: #e67e22;
   color: white;
   padding: 2px 6px;
   border-radius: 4px;

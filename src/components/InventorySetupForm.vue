@@ -143,6 +143,42 @@
         </div>
       </div>
     </div>
+    <div class="section-container">
+      <h2>Status Alerts</h2>
+      <div class="alert-options">
+        <div class="alert-option">
+          <label for="showWithdrawnAlerts">
+            <input type="checkbox" id="showWithdrawnAlerts" v-model="showWithdrawnAlerts" />
+            Show alerts for withdrawn items
+          </label>
+        </div>
+        <div class="alert-option">
+          <label for="showOnHoldAlerts">
+            <input type="checkbox" id="showOnHoldAlerts" v-model="showOnHoldAlerts" />
+            Show alerts for items on hold
+          </label>
+        </div>
+        <div class="alert-option">
+          <label for="showInTransitAlerts">
+            <input type="checkbox" id="showInTransitAlerts" v-model="showInTransitAlerts" />
+            Show alerts for in-transit items
+          </label>
+        </div>
+        <div class="alert-option">
+          <label for="showBranchMismatchAlerts">
+            <input type="checkbox" id="showBranchMismatchAlerts" v-model="showBranchMismatchAlerts" />
+            Show alerts for items belonging to different branches
+          </label>
+        </div>
+        <div class="alert-option">
+          <label for="showReturnClaimAlerts">
+            <input type="checkbox" id="showReturnClaimAlerts" v-model="showReturnClaimAlerts" />
+            Show alerts for unresolved return claims
+          </label>
+        </div>
+      </div>
+      <p class="help-text">These settings control which alert types are displayed during scanning.</p>
+    </div>
     <button type="submit">Submit</button>
   </form>
 </template>
@@ -186,6 +222,11 @@ export default {
       skipCheckedOutItems: true,
       skipInTransitItems: false,
       skipBranchMismatchItems: false,
+      showWithdrawnAlerts: true,
+      showOnHoldAlerts: true,
+      showInTransitAlerts: true,
+      showBranchMismatchAlerts: true,
+      showReturnClaimAlerts: true,
       statuses: {},
       libraries: [],
       selectedLibraryId: '',
@@ -352,6 +393,13 @@ export default {
         skipCheckedOutItems: this.skipCheckedOutItems,
         skipInTransitItems: this.skipInTransitItems,
         skipBranchMismatchItems: this.skipBranchMismatchItems,
+        alertSettings: {
+          showWithdrawnAlerts: this.showWithdrawnAlerts,
+          showOnHoldAlerts: this.showOnHoldAlerts,
+          showInTransitAlerts: this.showInTransitAlerts,
+          showBranchMismatchAlerts: this.showBranchMismatchAlerts,
+          showReturnClaimAlerts: this.showReturnClaimAlerts
+        }
       });
     },
 
@@ -664,6 +712,34 @@ fieldset {
   border-radius: 4px;
   font-size: 0.9rem;
   color: #0d47a1;
+}
+
+.alert-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 10px;
+  margin-bottom: 15px;
+}
+
+.alert-option {
+  padding: 8px;
+  border-radius: 4px;
+  background-color: #f8f9fa;
+  transition: background-color 0.2s;
+}
+
+.alert-option:hover {
+  background-color: #e9ecef;
+}
+
+.alert-option label {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+.alert-option input[type="checkbox"] {
+  margin-right: 10px;
 }
 
 /* Adding a subtle pulsing animation for loading states */

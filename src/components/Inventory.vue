@@ -31,7 +31,7 @@
           <InventoryItem :item="latestItem" :index="0" :isExpanded="true" @toggleExpand="() => { }"
             :fetchAuthorizedValues="fetchAuthorizedValues" :sessionData="sessionData"
             :currentItemWithHighestCallNumber="itemWithHighestCallNumber"
-            :currentBiblioWithHighestCallNumber="biblioWithHighestCallNumber" />
+            :currentBiblioWithHighestCallNumber="biblioWithHighestCallNumber" :alert-settings="alertSettings" />
         </div>
       </div>
 
@@ -42,7 +42,7 @@
           <InventoryItem :item="latestItem" :index="0" :isExpanded="true" @toggleExpand="() => { }"
             :fetchAuthorizedValues="fetchAuthorizedValues" :sessionData="sessionData"
             :currentItemWithHighestCallNumber="itemWithHighestCallNumber"
-            :currentBiblioWithHighestCallNumber="biblioWithHighestCallNumber" />
+            :currentBiblioWithHighestCallNumber="biblioWithHighestCallNumber" :alert-settings="alertSettings" />
         </div>
 
         <div id="inventory_results" class="items-list">
@@ -52,7 +52,7 @@
             :index="index + 1" :isExpanded="item.isExpanded" @toggleExpand="handleToggleExpand"
             :fetchAuthorizedValues="fetchAuthorizedValues" :sessionData="sessionData"
             :currentItemWithHighestCallNumber="itemWithHighestCallNumber"
-            :currentBiblioWithHighestCallNumber="biblioWithHighestCallNumber" />
+            :currentBiblioWithHighestCallNumber="biblioWithHighestCallNumber" :alert-settings="alertSettings" />
         </div>
       </div>
 
@@ -65,7 +65,7 @@
             :index="index + 1" :isExpanded="item.isExpanded" @toggleExpand="handleToggleExpand"
             :fetchAuthorizedValues="fetchAuthorizedValues" :sessionData="sessionData"
             :currentItemWithHighestCallNumber="itemWithHighestCallNumber"
-            :currentBiblioWithHighestCallNumber="biblioWithHighestCallNumber" />
+            :currentBiblioWithHighestCallNumber="biblioWithHighestCallNumber" :alert-settings="alertSettings" />
         </div>
       </div>
     </div>
@@ -135,7 +135,29 @@ export default {
       showEndSessionModal: false,
       exportToCSV: false,
       markMissingItems: false,
-      isMobileView: false
+      isMobileView: false,
+      skipCheckedOutItems: true,
+      skipInTransitItems: false,
+      skipBranchMismatchItems: false,
+      compareBarcodes: false,
+      locationCode: '',
+      rightPlaceList: [],
+      alertSettings: {
+        showWithdrawnAlerts: true,
+        showOnHoldAlerts: true,
+        showInTransitAlerts: true,
+        showBranchMismatchAlerts: true,
+        showReturnClaimAlerts: true
+      },
+      session_id: '',
+      inventoryDate: '',
+      currentLibrary: '',
+      shelvingLocation: '',
+      doNotCheckIn: false,
+      checkShelvedOutOfOrder: false,
+      ignoreLostStatus: false,
+      statuses: {},
+      locations: {}
     };
   },
   mounted() {
@@ -420,6 +442,17 @@ export default {
     },
 
     async submitBarcode() {
+      if (!this.barcode) {
+        return;
+      }
+
+      if (this.loading) {
+        return;
+      }
+
+      this.loading = true;
+      this.lastScannedBarcode = this.barcode;
+
       try {
         EventBus.emit('message', { type: 'status', text: 'Searching for item...' });
 
@@ -514,6 +547,9 @@ export default {
         if (this.sessionData.inventoryDate > combinedData.last_seen_date)
           fieldsToAmend["datelastseen"] = this.sessionData.inventoryDate;
 
+        // Check various status flags
+        this.checkItemSpecialStatuses(combinedData);
+
         // Only check scanned barcodes against expected list if compareBarcodes is enabled
         if (this.sessionData.compareBarcodes) {
           // Add defensive check before accessing right_place_list
@@ -587,6 +623,8 @@ export default {
       } catch (error) {
         console.error(error);
         EventBus.emit('message', { text: `Error scanning barcode: ${error.message}`, type: 'error' });
+      } finally {
+        this.loading = false;
       }
     },
 
@@ -884,6 +922,56 @@ export default {
       }
     },
 
+    checkItemSpecialStatuses(item) {
+      // Check for withdrawn items
+      if (item.withdrawn === '1' && this.alertSettings.showWithdrawnAlerts) {
+        EventBus.emit('message', {
+          type: 'warning',
+          text: `${item.title} (${item.barcode}) has been withdrawn from circulation`
+        });
+      }
+
+      // Check for holds
+      if (item.on_hold && this.alertSettings.showOnHoldAlerts) {
+        let holdMsg = `${item.title} (${item.barcode}) has a hold placed on it`;
+        
+        if (item.waiting) {
+          holdMsg += ' and is waiting for pickup';
+        } else if (item.in_transit) {
+          holdMsg += ' and is in transit to fulfill the hold';
+        }
+        
+        EventBus.emit('message', {
+          type: 'warning',
+          text: holdMsg
+        });
+      }
+
+      // Check for in transit items
+      if (item.in_transit && this.alertSettings.showInTransitAlerts) {
+        EventBus.emit('message', {
+          type: 'warning',
+          text: `${item.title} (${item.barcode}) is in transit from ${item.homebranch} to ${item.holdingbranch}`
+        });
+      }
+      
+      // Check for branch mismatch
+      if (item.homebranch !== item.holdingbranch && this.alertSettings.showBranchMismatchAlerts) {
+        EventBus.emit('message', {
+          type: 'info',
+          text: `${item.title} (${item.barcode}) belongs to ${item.homebranch} but is currently at ${item.holdingbranch}`
+        });
+      }
+
+      // Check for return claims
+      if (item.return_claim && this.alertSettings.showReturnClaimAlerts) {
+        EventBus.emit('message', {
+          type: 'warning',
+          text: `${item.title} (${item.barcode}) has an unresolved return claim. Patron claims they returned it, but it's still checked out.`
+        });
+      }
+    },
+
     toggleScannerMode() {
       // First, force the scanner to stop and release camera
       if (this.scannerMode) {
@@ -921,6 +1009,33 @@ export default {
     toggleEndSessionModal() {
       console.log('Toggle modal', this.showEndSessionModal);
       this.showEndSessionModal = !this.showEndSessionModal;
+    },
+
+    setupStarted(data) {
+      this.session_id = data.id;
+      this.inventoryDate = data.inventoryDate;
+      this.currentLibrary = data.library;
+      this.shelvingLocation = data.shelvingLocation;
+      this.skipCheckedOutItems = data.skipCheckedOutItems;
+      this.skipInTransitItems = data.skipInTransitItems;
+      this.skipBranchMismatchItems = data.skipBranchMismatchItems;
+      this.doNotCheckIn = data.doNotCheckIn;
+      this.checkShelvedOutOfOrder = data.checkShelvedOutOfOrder;
+      this.ignoreLostStatus = data.ignoreLostStatus;
+      this.statuses = data.statuses;
+      this.locations = data.locations;
+      this.compareBarcodes = data.compareBarcodes;
+      this.locationCode = data.collectionCode || '';
+      
+      // Handle alert settings
+      if (data.alertSettings) {
+        this.alertSettings = data.alertSettings;
+      }
+      
+      // Log the status of alerts for debugging
+      console.log('Alert settings:', this.alertSettings);
+      
+      this.getItems();
     }
   }
 }
