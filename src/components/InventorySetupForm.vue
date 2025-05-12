@@ -205,6 +205,34 @@
         </div>
       </div>
     </div>
+    
+    <div class="section-container">
+      <h2>Preview Settings</h2>
+      <div class="preview-options">
+        <div class="preview-option">
+          <label for="enableShelfPreview">
+            <input type="checkbox" id="enableShelfPreview" v-model="enableShelfPreview" />
+            Enable shelf preview functionality
+          </label>
+          <p class="help-text">Allows visualization of upcoming items on the shelf based on call number sequence.</p>
+        </div>
+        <div class="preview-option">
+          <label for="showItemIssues">
+            <input type="checkbox" id="showItemIssues" v-model="showItemIssues" />
+            Show item issues in preview
+          </label>
+          <p class="help-text">Highlights items with special statuses (checked out, on hold, etc.) in the preview.</p>
+        </div>
+        <div class="preview-option">
+          <label for="autoOpenPreview">
+            <input type="checkbox" id="autoOpenPreview" v-model="autoOpenPreview" />
+            Auto-open preview on first scan
+          </label>
+          <p class="help-text">Automatically opens the shelf preview when the first item is scanned.</p>
+        </div>
+      </div>
+    </div>
+    
     <button type="submit">Submit</button>
   </form>
 </template>
@@ -270,6 +298,9 @@ export default {
       collectionCodesLoading: true,
       shelvingLocationsLoading: true,
       enableManualResolution: true,
+      enableShelfPreview: true,
+      showItemIssues: true,
+      autoOpenPreview: false,
     };
   },
   created() {
@@ -433,6 +464,11 @@ export default {
           resolveReturnClaims: this.resolveReturnClaims,
           resolveInTransitItems: this.resolveInTransitItems,
           enableManualResolution: this.enableManualResolution
+        },
+        previewSettings: {
+          enableShelfPreview: this.enableShelfPreview,
+          showItemIssues: this.showItemIssues,
+          autoOpenPreview: this.autoOpenPreview
         }
       });
     },

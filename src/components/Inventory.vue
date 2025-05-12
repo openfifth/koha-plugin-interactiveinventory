@@ -74,6 +74,10 @@
       Missing Items
       <span v-if="getMissingItemsCount() > 0" class="missing-count">{{ getMissingItemsCount() }}</span>
     </button>
+    <button v-if="sessionStarted && previewEnabled" @click="toggleShelfPreview" class="shelf-preview-button">
+      Shelf Preview
+      <span v-if="upcomingItemsCount > 0" class="upcoming-count">{{ upcomingItemsCount }}</span>
+    </button>
 
     <!-- End Session Modal -->
     <div v-if="showEndSessionModal" class="modal">
@@ -120,6 +124,17 @@
       @item-marked-missing="handleItemMarkedMissing"
       @items-marked-missing="handleItemsMarkedMissing"
     />
+    
+    <!-- Shelf Preview Component -->
+    <ShelfPreview
+      v-if="showShelfPreview"
+      :show="showShelfPreview"
+      :sessionData="sessionData"
+      :lastScannedItem="latestItem"
+      :authorizedValueCategories="authorizedValueCategories"
+      @close="closeShelfPreview"
+      @items-loaded="handleUpcomingItemsLoaded"
+    />
   </div>
 </template>
 
@@ -129,6 +144,7 @@ import InventoryItem from './InventoryItem.vue'
 import BarcodeScanner from './BarcodeScanner.vue'
 import ResolutionModal from './ResolutionModal.vue'
 import MissingItemsModal from './MissingItemsModal.vue'
+import ShelfPreview from './ShelfPreview.vue'
 import { EventBus } from './eventBus'
 import { sessionStorage } from '../services/sessionStorage'
 import { apiService } from '../services/apiService'
@@ -139,7 +155,8 @@ export default {
     InventoryItem,
     BarcodeScanner,
     ResolutionModal,
-    MissingItemsModal
+    MissingItemsModal,
+    ShelfPreview
   },
   computed: {
     uniqueBarcodesCount() {
@@ -154,6 +171,9 @@ export default {
     },
     previousItems() {
       return this.items.slice(1);
+    },
+    previewEnabled() {
+      return this.sessionData?.previewSettings?.enableShelfPreview !== false;
     }
   },
   data() {
@@ -199,11 +219,14 @@ export default {
       },
       showResolutionModal: false,
       showMissingItemsModal: false,
+      showShelfPreview: false,
       currentResolutionItem: null,
       currentResolutionType: '',
       currentPatronName: '',
       manualResolutionEnabled: true,
       markedMissingItems: new Set(),
+      upcomingItemsCount: 0,
+      authorizedValueCategories: {},
     };
   },
   mounted() {
@@ -767,6 +790,12 @@ export default {
         // Save updated items to session storage
         sessionStorage.saveItems(this.items);
 
+        // Auto-open preview on first scan if enabled
+        if (this.items.length === 1 && this.sessionData?.previewSettings?.autoOpenPreview && this.previewEnabled) {
+          this.showShelfPreview = true;
+          this.loadAuthorizedValueCategories();
+        }
+
         // Clear the barcode input and focus on it
         this.barcode = '';
         if (this.$refs.barcodeInput) {
@@ -921,6 +950,11 @@ export default {
       // Set the manual resolution setting from sessionData
       this.manualResolutionEnabled = sessionData.resolutionSettings?.enableManualResolution !== undefined ? 
         sessionData.resolutionSettings.enableManualResolution : true;
+      
+      // Log preview settings if present
+      if (sessionData.previewSettings) {
+        console.log('Preview settings:', sessionData.previewSettings);
+      }
       
       try {
         // Display filter information to the user
@@ -1302,6 +1336,38 @@ export default {
     
     closeMissingItemsModal() {
       this.showMissingItemsModal = false;
+    },
+    
+    toggleShelfPreview() {
+      this.showShelfPreview = !this.showShelfPreview;
+      
+      if (this.showShelfPreview) {
+        // Load authorized values for location codes if not already loaded
+        this.loadAuthorizedValueCategories();
+      }
+    },
+    
+    closeShelfPreview() {
+      this.showShelfPreview = false;
+    },
+    
+    handleUpcomingItemsLoaded(count) {
+      this.upcomingItemsCount = count;
+    },
+    
+    async loadAuthorizedValueCategories() {
+      if (Object.keys(this.authorizedValueCategories).length === 0) {
+        try {
+          // Load location codes
+          const locValues = await this.fetchAuthorizedValues('LOC', { forceLoad: true });
+          this.authorizedValueCategories = {
+            ...this.authorizedValueCategories,
+            LOC: locValues
+          };
+        } catch (error) {
+          console.error('Error loading authorized value categories:', error);
+        }
+      }
     },
     
     handleItemMarkedMissing(barcode) {
@@ -1738,5 +1804,39 @@ h3 {
   right: 15px;
   font-size: 24px;
   cursor: pointer;
+}
+
+.shelf-preview-button {
+  position: fixed;
+  bottom: 20px;
+  right: 160px; /* Position to the left of the missing-items-button */
+  padding: 10px 20px;
+  background-color: #2196F3; /* Blue color to differentiate */
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 16px;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.shelf-preview-button:hover {
+  background-color: #1976D2;
+}
+
+.upcoming-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #4CAF50; /* Green color for the count badge */
+  color: white;
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  font-size: 14px;
+  margin-left: 8px;
 }
 </style>
