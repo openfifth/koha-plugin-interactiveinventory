@@ -232,6 +232,47 @@ export const apiService = {
     },
 
     /**
+     * Performs a GET request to an API endpoint with query parameters
+     * @param {string} endpoint - The API endpoint
+     * @param {object} params - The query parameters
+     * @param {object} options - Additional options
+     * @returns {Promise} - The response data
+     */
+    async get(endpoint, params = {}, options = {}) {
+        try {
+            // Convert params object to URL query string
+            const queryParams = new URLSearchParams();
+            Object.entries(params).forEach(([key, value]) => {
+                if (value !== undefined && value !== null) {
+                    queryParams.append(key, value);
+                }
+            });
+
+            const queryString = queryParams.toString();
+            const url = queryString ? `${endpoint}?${queryString}` : endpoint;
+
+            console.log(`API GET: ${url}`);
+
+            const response = await fetch(url, {
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/json',
+                    ...options.headers
+                }
+            });
+
+            return await this.handleResponse(response, `GET ${endpoint}`);
+        } catch (error) {
+            console.error('API GET error:', error);
+            EventBus.emit('message', {
+                type: 'error',
+                text: `Error fetching data: ${error.message}`
+            });
+            throw error;
+        }
+    },
+
+    /**
      * Performs a POST request to an API endpoint
      * @param {string} endpoint - The API endpoint
      * @param {object} data - The data to send
