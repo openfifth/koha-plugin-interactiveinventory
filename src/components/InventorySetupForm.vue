@@ -119,6 +119,11 @@
           <input type="checkbox" id="skipInTransitItems" v-model="skipInTransitItems" />
           <span class="help-text">(Items that are currently in transit will not appear in the inventory list)</span>
         </li>
+        <li>
+          <label for="skipBranchMismatchItems">Skip/filter branch mismatch items: </label>
+          <input type="checkbox" id="skipBranchMismatchItems" v-model="skipBranchMismatchItems" />
+          <span class="help-text">(Items where holdingbranch differs from homebranch will not appear in the inventory list)</span>
+        </li>
       </ul>
       <div class="form-group">
         <label>Item Types</label>
@@ -175,6 +180,7 @@ export default {
       ignoreLostStatus: false,
       skipCheckedOutItems: true,
       skipInTransitItems: false,
+      skipBranchMismatchItems: false,
       statuses: {},
       libraries: [],
       selectedLibraryId: '',
@@ -251,6 +257,14 @@ export default {
         });
       }
 
+      // Display status for branch mismatch items filter
+      if (this.skipBranchMismatchItems) {
+        EventBus.emit('message', { 
+          type: 'status', 
+          text: 'Items with holdingbranch different from homebranch will be filtered out from inventory' 
+        });
+      }
+
       // Pass the values to the inventory script
       this.$emit('start-session', {
         minLocation: this.minLocation,
@@ -273,6 +287,7 @@ export default {
         shelvingLocation: this.shelvingLocation,
         skipCheckedOutItems: this.skipCheckedOutItems,
         skipInTransitItems: this.skipInTransitItems,
+        skipBranchMismatchItems: this.skipBranchMismatchItems,
       });
     },
 

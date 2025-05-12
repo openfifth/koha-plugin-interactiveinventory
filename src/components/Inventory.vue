@@ -244,6 +244,18 @@ export default {
               return false;
             }
             
+            // Skip items that are in transit if the session is configured to do so
+            if (this.sessionData.skipInTransitItems && item.in_transit) {
+              console.log(`Skipping in-transit item: ${item.barcode}`);
+              return false;
+            }
+            
+            // Skip items that have branch mismatch if the session is configured to do so
+            if (this.sessionData.skipBranchMismatchItems && item.homebranch !== item.holdingbranch) {
+              console.log(`Skipping branch mismatch item: ${item.barcode} (homebranch: ${item.homebranch}, holdingbranch: ${item.holdingbranch})`);
+              return false;
+            }
+            
             return true;
           });
 
@@ -266,6 +278,7 @@ export default {
               // Count skipped items
               let skippedCheckedOut = 0;
               let skippedInTransit = 0;
+              let skippedBranchMismatch = 0;
               
               locationData.forEach(item => {
                 if (!scannedBarcodesSet.has(item.barcode) && !missingItems.includes(item)) {
@@ -273,6 +286,8 @@ export default {
                     skippedCheckedOut++;
                   } else if (this.sessionData.skipInTransitItems && item.in_transit) {
                     skippedInTransit++;
+                  } else if (this.sessionData.skipBranchMismatchItems && item.homebranch !== item.holdingbranch) {
+                    skippedBranchMismatch++;
                   }
                 }
               });
@@ -288,6 +303,13 @@ export default {
               if (skippedInTransit > 0) {
                 EventBus.emit('message', { 
                   text: `${skippedInTransit} in-transit items were skipped from being marked as missing`, 
+                  type: 'status' 
+                });
+              }
+              
+              if (skippedBranchMismatch > 0) {
+                EventBus.emit('message', { 
+                  text: `${skippedBranchMismatch} items with branch mismatch were skipped from being marked as missing`, 
                   type: 'status' 
                 });
               }
@@ -441,6 +463,22 @@ export default {
           EventBus.emit('message', { 
             type: 'warning', 
             text: `Item ${this.barcode} is currently in transit. Skipping according to settings.` 
+          });
+          
+          // Clear the barcode input and focus on it
+          this.barcode = '';
+          if (this.$refs.barcodeInput) {
+            this.$refs.barcodeInput.focus();
+          }
+          
+          return; // Skip processing this item
+        }
+
+        // Check if the item has branch mismatch and the user has chosen to skip such items
+        if (this.sessionData.skipBranchMismatchItems && itemData.homebranch !== itemData.holdingbranch) {
+          EventBus.emit('message', { 
+            type: 'warning', 
+            text: `Item ${this.barcode} has different holding branch (${itemData.holdingbranch}) than home branch (${itemData.homebranch}). Skipping according to settings.` 
           });
           
           // Clear the barcode input and focus on it

@@ -2,13 +2,15 @@
   <div :class="['item', { 
        'highlight': hasIssue, 
        'checked-out': item.checked_out_date,
-       'in-transit': item.in_transit
+       'in-transit': item.in_transit,
+       'branch-mismatch': item.homebranch !== item.holdingbranch
      }]" @click="toggleExpand">
     <p class="item-title">
       <span :class="issueIconClass" aria-hidden="true">{{ issueIcon }}</span>
       <span class="sr-only">{{ issueIconText }}</span>
       <span v-if="item.checked_out_date" class="checked-out-badge">CHECKED OUT</span>
       <span v-if="item.in_transit" class="in-transit-badge">IN TRANSIT</span>
+      <span v-if="item.homebranch !== item.holdingbranch" class="branch-mismatch-badge">BRANCH MISMATCH</span>
       {{ item.biblio.title }} - {{ item.external_id }}
     </p>
     <div v-if="isExpanded" class="item-details">
@@ -52,6 +54,10 @@
         <p v-if="item.in_transit" class="item-warning"><strong>Warning:</strong></p>
         <p v-if="item.in_transit" class="item-warning">
           This item is currently in transit from {{ item.homebranch }} to {{ item.holdingbranch }}.
+        </p>
+        <p v-if="item.homebranch !== item.holdingbranch" class="item-warning"><strong>Warning:</strong></p>
+        <p v-if="item.homebranch !== item.holdingbranch" class="item-warning">
+          This item belongs to branch {{ item.homebranch }} but is currently held at branch {{ item.holdingbranch }}.
         </p>
         <p v-if="item.outOfOrder" class="item-warning"><strong>Warning:</strong></p>
         <p v-if="item.outOfOrder" class="item-warning">This item has been scanned out of order. It should have been
@@ -97,7 +103,9 @@ export default {
       return `/cgi-bin/koha/catalogue/detail.pl?biblionumber=${this.currentBiblioWithHighestCallNumber}`;
     },
     hasIssue() {
-      return this.item.wasLost || this.item.wrongPlace || this.item.checked_out_date || this.item.outOfOrder || this.item.invalidStatus;
+      return this.item.wasLost || this.item.wrongPlace || this.item.checked_out_date || 
+             this.item.outOfOrder || this.item.invalidStatus || 
+             this.item.in_transit || (this.item.homebranch !== this.item.holdingbranch);
     },
     issueIcon() {
       return this.hasIssue ? '✖' : '✔';
@@ -233,6 +241,22 @@ export default {
 .in-transit-badge {
   display: inline-block;
   background-color: #f39c12;
+  color: white;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.8em;
+  margin-right: 8px;
+  font-weight: bold;
+}
+
+.branch-mismatch {
+  border-left: 4px solid #3498db;
+  background-color: rgba(52, 152, 219, 0.1);
+}
+
+.branch-mismatch-badge {
+  display: inline-block;
+  background-color: #3498db;
   color: white;
   padding: 2px 6px;
   border-radius: 4px;

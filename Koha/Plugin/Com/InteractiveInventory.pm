@@ -146,6 +146,7 @@ sub start_session {
         my $ignoreWaitingHolds = $session_data->{'ignoreWaitingHolds'} || 0;
         my $skipCheckedOutItems = $session_data->{'skipCheckedOutItems'} || 0;
         my $skipInTransitItems = $session_data->{'skipInTransitItems'} || 0;
+        my $skipBranchMismatchItems = $session_data->{'skipBranchMismatchItems'} || 0;
         
         # Log if we're skipping checked out items
         if ($skipCheckedOutItems) {
@@ -157,6 +158,11 @@ sub start_session {
         # Log if we're skipping in-transit items
         if ($skipInTransitItems) {
             warn "Skipping in-transit items is enabled";
+        }
+        
+        # Log if we're skipping branch mismatch items
+        if ($skipBranchMismatchItems) {
+            warn "Skipping items with holding branch different from home branch is enabled";
         }
         
         # Ensure selectedItypes is an array
@@ -219,6 +225,11 @@ sub start_session {
         # Add transit filtering if enabled
         if ($skipInTransitItems) {
             $location_params->{ignore_transit} = 1;
+        }
+        
+        # Add branch mismatch filtering if enabled
+        if ($skipBranchMismatchItems) {
+            $location_params->{homebranch_match_holdingbranch} = 1;
         }
 
         # Add debug logging for location parameters
