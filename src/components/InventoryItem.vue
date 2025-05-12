@@ -1,8 +1,14 @@
 <template>
-  <div :class="['item', { 'highlight': hasIssue }]" @click="toggleExpand">
+  <div :class="['item', { 
+       'highlight': hasIssue, 
+       'checked-out': item.checked_out_date,
+       'in-transit': item.in_transit
+     }]" @click="toggleExpand">
     <p class="item-title">
       <span :class="issueIconClass" aria-hidden="true">{{ issueIcon }}</span>
       <span class="sr-only">{{ issueIconText }}</span>
+      <span v-if="item.checked_out_date" class="checked-out-badge">CHECKED OUT</span>
+      <span v-if="item.in_transit" class="in-transit-badge">IN TRANSIT</span>
       {{ item.biblio.title }} - {{ item.external_id }}
     </p>
     <div v-if="isExpanded" class="item-details">
@@ -42,6 +48,10 @@
           <span v-else>
             and has been checked in automatically.
           </span>
+        </p>
+        <p v-if="item.in_transit" class="item-warning"><strong>Warning:</strong></p>
+        <p v-if="item.in_transit" class="item-warning">
+          This item is currently in transit from {{ item.homebranch }} to {{ item.holdingbranch }}.
         </p>
         <p v-if="item.outOfOrder" class="item-warning"><strong>Warning:</strong></p>
         <p v-if="item.outOfOrder" class="item-warning">This item has been scanned out of order. It should have been
@@ -197,5 +207,37 @@ export default {
   /* Ensure long text wraps within the column */
   overflow-wrap: break-word;
   /* Alternative property for word wrapping */
+}
+
+.checked-out {
+  border-left: 4px solid #e74c3c;
+  background-color: rgba(231, 76, 60, 0.1);
+}
+
+.checked-out-badge {
+  display: inline-block;
+  background-color: #e74c3c;
+  color: white;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.8em;
+  margin-right: 8px;
+  font-weight: bold;
+}
+
+.in-transit {
+  border-left: 4px solid #f39c12;
+  background-color: rgba(243, 156, 18, 0.1);
+}
+
+.in-transit-badge {
+  display: inline-block;
+  background-color: #f39c12;
+  color: white;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.8em;
+  margin-right: 8px;
+  font-weight: bold;
 }
 </style>

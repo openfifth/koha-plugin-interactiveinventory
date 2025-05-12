@@ -109,6 +109,16 @@
           <label for="ignore_waiting_holds">Skip items on hold awaiting pickup: </label>
           <input type="checkbox" id="ignoreWaitingHolds" v-model="ignoreWaitingHolds" />
         </li>
+        <li>
+          <label for="skipCheckedOutItems">Skip/filter checked out items: </label>
+          <input type="checkbox" id="skipCheckedOutItems" v-model="skipCheckedOutItems" />
+          <span class="help-text">(Items that are currently checked out will not appear in the inventory list)</span>
+        </li>
+        <li>
+          <label for="skipInTransitItems">Skip/filter in-transit items: </label>
+          <input type="checkbox" id="skipInTransitItems" v-model="skipInTransitItems" />
+          <span class="help-text">(Items that are currently in transit will not appear in the inventory list)</span>
+        </li>
       </ul>
       <div class="form-group">
         <label>Item Types</label>
@@ -163,6 +173,8 @@ export default {
       doNotCheckIn: false,
       checkShelvedOutOfOrder: false,
       ignoreLostStatus: false,
+      skipCheckedOutItems: true,
+      skipInTransitItems: false,
       statuses: {},
       libraries: [],
       selectedLibraryId: '',
@@ -223,6 +235,22 @@ export default {
         });
       }
 
+      // Display status for checked out items filter
+      if (this.skipCheckedOutItems) {
+        EventBus.emit('message', { 
+          type: 'status', 
+          text: 'Checked out items will be filtered out from inventory' 
+        });
+      }
+      
+      // Display status for in-transit items filter
+      if (this.skipInTransitItems) {
+        EventBus.emit('message', { 
+          type: 'status', 
+          text: 'In-transit items will be filtered out from inventory' 
+        });
+      }
+
       // Pass the values to the inventory script
       this.$emit('start-session', {
         minLocation: this.minLocation,
@@ -233,7 +261,7 @@ export default {
         ccode: this.ccode,
         classSource: this.classSource,
         selectedStatuses: this.selectedStatuses,
-        ignoreIssued: this.ignoreIssued,
+        ignoreIssued: this.skipCheckedOutItems ? true : this.ignoreIssued,
         ignoreWaitingHolds: this.ignoreWaitingHolds,
         selectedItypes: this.selectedItypes,
         selectedLibraryId: this.selectedLibraryId,
@@ -243,6 +271,8 @@ export default {
         checkShelvedOutOfOrder: this.checkShelvedOutOfOrder,
         ignoreLostStatus: this.ignoreLostStatus,
         shelvingLocation: this.shelvingLocation,
+        skipCheckedOutItems: this.skipCheckedOutItems,
+        skipInTransitItems: this.skipInTransitItems,
       });
     },
 

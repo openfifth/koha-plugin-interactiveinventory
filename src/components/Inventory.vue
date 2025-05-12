@@ -230,7 +230,22 @@ export default {
           // Add defensive check for location_data
           const locationData = this.sessionData.response_data.location_data || [];
           const scannedBarcodesSet = new Set(this.items.map(item => item.external_id));
-          const missingItems = locationData.filter(item => !scannedBarcodesSet.has(item.barcode));
+          
+          // Filter out items that are checked out if skipCheckedOutItems is enabled
+          const missingItems = locationData.filter(item => {
+            // Skip items that have already been scanned
+            if (scannedBarcodesSet.has(item.barcode)) {
+              return false;
+            }
+            
+            // Skip items that are checked out if the session is configured to do so
+            if (this.sessionData.skipCheckedOutItems && item.checked_out) {
+              console.log(`Skipping checked out item: ${item.barcode}`);
+              return false;
+            }
+            
+            return true;
+          });
 
           if (missingItems.length > 0) {
             // Show processing message
@@ -247,6 +262,35 @@ export default {
               await this.updateItemStatus(itemsToUpdate);
               // Signal completion
               EventBus.emit('message', { text: 'Items marked as missing successfully', type: 'status' });
+              
+              // Count skipped items
+              let skippedCheckedOut = 0;
+              let skippedInTransit = 0;
+              
+              locationData.forEach(item => {
+                if (!scannedBarcodesSet.has(item.barcode) && !missingItems.includes(item)) {
+                  if (this.sessionData.skipCheckedOutItems && item.checked_out) {
+                    skippedCheckedOut++;
+                  } else if (this.sessionData.skipInTransitItems && item.in_transit) {
+                    skippedInTransit++;
+                  }
+                }
+              });
+              
+              // Show summary of skipped items
+              if (skippedCheckedOut > 0) {
+                EventBus.emit('message', { 
+                  text: `${skippedCheckedOut} checked out items were skipped from being marked as missing`, 
+                  type: 'status' 
+                });
+              }
+              
+              if (skippedInTransit > 0) {
+                EventBus.emit('message', { 
+                  text: `${skippedInTransit} in-transit items were skipped from being marked as missing`, 
+                  type: 'status' 
+                });
+              }
             } catch (error) {
               EventBus.emit('message', { text: `Error marking items as missing: ${error.message}`, type: 'error' });
               throw error; // Re-throw to prevent page reload if marking items fails
@@ -374,6 +418,38 @@ export default {
 
         if (!itemData.biblio_id) {
           throw new Error('Item found but missing biblio data: ' + this.barcode);
+        }
+
+        // Check if the item is checked out and the user has chosen to skip checked out items
+        if (this.sessionData.skipCheckedOutItems && itemData.checked_out_date) {
+          EventBus.emit('message', { 
+            type: 'warning', 
+            text: `Item ${this.barcode} is currently checked out. Skipping according to settings.` 
+          });
+          
+          // Clear the barcode input and focus on it
+          this.barcode = '';
+          if (this.$refs.barcodeInput) {
+            this.$refs.barcodeInput.focus();
+          }
+          
+          return; // Skip processing this item
+        }
+        
+        // Check if the item is in transit and the user has chosen to skip in-transit items
+        if (this.sessionData.skipInTransitItems && itemData.in_transit) {
+          EventBus.emit('message', { 
+            type: 'warning', 
+            text: `Item ${this.barcode} is currently in transit. Skipping according to settings.` 
+          });
+          
+          // Clear the barcode input and focus on it
+          this.barcode = '';
+          if (this.$refs.barcodeInput) {
+            this.$refs.barcodeInput.focus();
+          }
+          
+          return; // Skip processing this item
         }
 
         EventBus.emit('message', { type: 'status', text: 'Fetching bibliographic details...' });

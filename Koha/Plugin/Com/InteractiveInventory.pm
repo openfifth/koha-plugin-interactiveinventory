@@ -144,6 +144,20 @@ sub start_session {
         my $selectedStatuses = $session_data->{'selectedStatuses'} || {};
         my $ignoreIssued = $session_data->{'ignoreIssued'} || 0;
         my $ignoreWaitingHolds = $session_data->{'ignoreWaitingHolds'} || 0;
+        my $skipCheckedOutItems = $session_data->{'skipCheckedOutItems'} || 0;
+        my $skipInTransitItems = $session_data->{'skipInTransitItems'} || 0;
+        
+        # Log if we're skipping checked out items
+        if ($skipCheckedOutItems) {
+            warn "Skipping checked out items is enabled";
+            # Make sure ignoreIssued is set correctly
+            $ignoreIssued = 1;
+        }
+        
+        # Log if we're skipping in-transit items
+        if ($skipInTransitItems) {
+            warn "Skipping in-transit items is enabled";
+        }
         
         # Ensure selectedItypes is an array
         my @selectedItypes;
@@ -201,6 +215,11 @@ sub start_session {
             ignore_waiting_holds=> $ignoreWaitingHolds,
             itemtypes           => \@selectedItypes,
         };
+        
+        # Add transit filtering if enabled
+        if ($skipInTransitItems) {
+            $location_params->{ignore_transit} = 1;
+        }
 
         # Add debug logging for location parameters
         warn "Location parameters: " . Dumper($location_params);
