@@ -61,6 +61,9 @@
             {{ description }}
           </option>
         </select>
+        <div v-if="compareBarcodes && ccode" class="help-text info-text">
+          <strong>Note:</strong> When using Collection Code with Expected Barcodes, only items with this collection code will be included in the expected list.
+        </div>
         <div v-if="collectionCodesLoading" class="loading-indicator">Loading collection codes...</div>
       </div>
       <div>
@@ -240,6 +243,15 @@ export default {
         EventBus.emit('message', { 
           type: 'status', 
           text: `Applying shelving location filter: ${this.shelvingLocations[this.shelvingLocation] || this.shelvingLocation}` 
+        });
+      }
+
+      // Validate collection code filter when used with compareBarcodes
+      if (this.compareBarcodes && this.ccode) {
+        // Display a warning about collection code limiting expected barcodes
+        EventBus.emit('message', { 
+          type: 'warning', 
+          text: `Collection Code filter will limit expected barcodes list to items with collection code: ${this.collectionCodes[this.ccode] || this.ccode}` 
         });
       }
 
@@ -599,6 +611,22 @@ fieldset {
   margin-top: 4px;
   font-style: italic;
   animation: pulse 1.5s infinite;
+}
+
+.help-text {
+  font-size: 0.8rem;
+  color: #666;
+  margin-top: 4px;
+}
+
+.info-text {
+  background-color: #e3f2fd;
+  border-left: 3px solid #2196f3;
+  padding: 8px;
+  margin-top: 10px;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  color: #0d47a1;
 }
 
 /* Adding a subtle pulsing animation for loading states */

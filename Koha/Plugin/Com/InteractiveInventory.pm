@@ -206,8 +206,23 @@ sub start_session {
         my $rightPlaceList = [];
         if ($compareBarcodes) {
             warn "Compare barcodes is enabled, generating right place list";
+            
+            # If ccode is set, log that it will limit the expected barcodes list
+            if ($ccode) {
+                warn "Collection Code filter ($ccode) will limit expected barcodes list";
+            }
+            
             ($rightPlaceList) = GetItemsForInventory($common_params);
             warn "Right place list count: " . ($rightPlaceList ? scalar(@$rightPlaceList) : 0);
+            
+            # If the list is empty and ccode is set, log a potential issue
+            if (!$rightPlaceList || scalar(@$rightPlaceList) == 0) {
+                if ($ccode) {
+                    warn "Expected barcodes list is empty, possibly due to Collection Code filter: $ccode";
+                } else {
+                    warn "Expected barcodes list is empty with no Collection Code filter";
+                }
+            }
         } else {
             warn "Compare barcodes is disabled, skipping right place list generation";
         }

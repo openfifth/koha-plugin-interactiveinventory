@@ -721,11 +721,27 @@ export default {
               text: `Using an expected barcodes list with ${rightPlaceList.length} items`, 
               type: 'status'
             });
+            
+            // Check if collection code is used and provide additional info
+            if (this.sessionData.ccode) {
+              EventBus.emit('message', {
+                text: `Expected barcodes list is filtered by collection code: ${this.sessionData.ccode}`,
+                type: 'info'
+              });
+            }
           } else {
-            EventBus.emit('message', {
-              text: 'Expected barcodes list is empty. Items will not be marked as unexpected.',
-              type: 'warning'
-            });
+            // The list might be empty because of a collection code filter
+            if (this.sessionData.ccode) {
+              EventBus.emit('message', {
+                text: `Expected barcodes list is empty, possibly because of the collection code filter (${this.sessionData.ccode}). Items won't be marked as unexpected.`,
+                type: 'warning'
+              });
+            } else {
+              EventBus.emit('message', {
+                text: 'Expected barcodes list is empty. Items will not be marked as unexpected.',
+                type: 'warning'
+              });
+            }
           }
         } else {
           EventBus.emit('message', {
