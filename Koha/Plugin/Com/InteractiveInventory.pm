@@ -128,16 +128,27 @@ sub start_session {
     warn "Shelving location filter: " . ($shelvingLocation || 'not set');
     warn "Session data: " . Dumper($session_data);
 
-    my ( $rightPlaceList ) = GetItemsForInventory(
-        {
-            minlocation  => $minLocation,
-            maxlocation  => $maxLocation,
-            location     => $locationLoop,
-            branch       => 'homebranch',
-            ccode        => $ccode,
-            shelving_location => $shelvingLocation,
-        }
-    );
+    # Build common parameters for both queries
+    my $common_params = {
+        minlocation  => $minLocation,
+        maxlocation  => $maxLocation,
+        branch       => 'homebranch',
+        ccode        => $ccode,
+    };
+
+    # If shelving location is set, use it as the location parameter
+    if ($shelvingLocation) {
+        $common_params->{location} = $shelvingLocation;
+        # Replace locationLoop with shelving location if both are set
+        warn "Applying shelving location filter: $shelvingLocation (replacing location: " . ($locationLoop || 'none') . ")";
+    } elsif ($locationLoop) {
+        $common_params->{location} = $locationLoop;
+    }
+
+    # Add debug logging for parameters
+    warn "Common parameters: " . Dumper($common_params);
+
+    my ( $rightPlaceList ) = GetItemsForInventory($common_params);
 
     # Add debug logging for right place list
     warn "Right place list count: " . ($rightPlaceList ? scalar(@$rightPlaceList) : 0);
@@ -145,28 +156,28 @@ sub start_session {
     # Ensure rightPlaceList is an array reference, even if empty
     $rightPlaceList = [] unless defined $rightPlaceList;
 
-    my ( $location_data, $iTotalRecords ) = GetItemsForInventory(
-        {
-            minlocation         => $minLocation,
-            maxlocation         => $maxLocation,
-            class_source        => $classSource,
-            location            => $locationLoop,
-            ignoreissued        => $ignoreIssued,
-            datelastseen        => $dateLastSeen,
-            branchcode          => $selectedbranchcode,
-            branch              => 'homebranch',
-            offset              => 0,
-            statushash          => $selectedStatuses,
-            ccode               => $ccode,
-            ignore_waiting_holds=> $ignoreWaitingHolds,
-            itemtypes           => \@selectedItypes,
-            shelving_location   => $shelvingLocation,
-        }
-    );
+    # Build parameters for location data query
+    my $location_params = {
+        %$common_params,  # Include common parameters
+        class_source        => $classSource,
+        ignoreissued        => $ignoreIssued,
+        datelastseen        => $dateLastSeen,
+        branchcode          => $selectedbranchcode,
+        offset              => 0,
+        statushash          => $selectedStatuses,
+        ignore_waiting_holds=> $ignoreWaitingHolds,
+        itemtypes           => \@selectedItypes,
+    };
+
+    # Add debug logging for location parameters
+    warn "Location parameters: " . Dumper($location_params);
+
+    my ( $location_data, $iTotalRecords ) = GetItemsForInventory($location_params);
 
     # Add debug logging for location data
     warn "Location data count: " . ($location_data ? scalar(@$location_data) : 0);
     warn "Total records: " . ($iTotalRecords || 0);
+    warn "Using location parameter: " . ($common_params->{location} || 'not set');
 
     # Ensure location_data is an array reference, even if empty
     $location_data = [] unless defined $location_data;
