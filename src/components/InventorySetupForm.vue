@@ -228,7 +228,44 @@ export default {
       return true;
     },
 
+    validateForm() {
+      // Verify that compareBarcodes checkbox has a valid state
+      if (this.compareBarcodes === null || this.compareBarcodes === undefined) {
+        EventBus.emit('message', { 
+          type: 'error', 
+          text: 'The "Compare expected barcodes list" checkbox has an invalid state. Please try toggling it.'
+        });
+        return false;
+      }
+
+      // If using compareBarcodes, validate any related fields
+      if (this.compareBarcodes) {
+        // If no filters are selected, warn user that all items will be in expected list
+        if (!this.branchLoop && !this.locationLoop && !this.ccode && !this.minLocation && !this.maxLocation && !this.shelvingLocation) {
+          const confirmation = confirm(
+            "You have enabled barcodes comparison without setting any filters.\n\n" +
+            "This means ALL items in your catalog will be in the expected barcodes list.\n\n" +
+            "For large catalogs this can cause performance issues.\n\n" +
+            "Do you want to continue?"
+          );
+          
+          if (!confirmation) {
+            EventBus.emit('message', { 
+              type: 'info', 
+              text: 'Session start cancelled. Please add some filters or disable barcode comparison.'
+            });
+            return false;
+          }
+        }
+      }
+
+      return this.checkForm();
+    },
+
     startInventorySession() {
+      // Validate form before submitting
+      if (!this.validateForm()) return;
+
       // Validate shelving location filter
       if (this.shelvingLocation) {
         // Check if the shelving location is valid (exists in the loaded locations)

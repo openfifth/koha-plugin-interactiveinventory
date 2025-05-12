@@ -642,6 +642,19 @@ export default {
           });
         }
         
+        // Display comparison mode
+        if (sessionData.compareBarcodes) {
+          EventBus.emit('message', { 
+            type: 'status', 
+            text: 'Expected barcodes comparison mode is ON. Generating expected barcodes list...' 
+          });
+        } else {
+          EventBus.emit('message', { 
+            type: 'status', 
+            text: 'Expected barcodes comparison mode is OFF. No expected barcodes list will be generated.' 
+          });
+        }
+        
         EventBus.emit('message', { type: 'status', text: 'Starting inventory session...' });
         
         // Make the API request with improved error handling
@@ -718,7 +731,7 @@ export default {
           const rightPlaceList = data.right_place_list || [];
           if (rightPlaceList.length > 0) {
             EventBus.emit('message', {
-              text: `Using an expected barcodes list with ${rightPlaceList.length} items`, 
+              text: `Expected barcodes list contains ${rightPlaceList.length} items. Items not on this list will be flagged.`, 
               type: 'status'
             });
             
@@ -733,19 +746,19 @@ export default {
             // The list might be empty because of a collection code filter
             if (this.sessionData.ccode) {
               EventBus.emit('message', {
-                text: `Expected barcodes list is empty, possibly because of the collection code filter (${this.sessionData.ccode}). Items won't be marked as unexpected.`,
+                text: `Expected barcodes list is empty, possibly because of the collection code filter (${this.sessionData.ccode}). No items will be marked as unexpected.`,
                 type: 'warning'
               });
             } else {
               EventBus.emit('message', {
-                text: 'Expected barcodes list is empty. Items will not be marked as unexpected.',
+                text: 'Expected barcodes list is empty. No items will be marked as unexpected.',
                 type: 'warning'
               });
             }
           }
         } else {
           EventBus.emit('message', {
-            text: 'Not comparing scanned items to an expected barcodes list',
+            text: 'Not comparing scanned items to an expected barcodes list. All scanned items will be accepted.',
             type: 'status'
           });
         }
