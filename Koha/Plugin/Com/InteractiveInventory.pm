@@ -141,6 +141,9 @@ sub start_session {
         $common_params->{location} = $shelvingLocation;
         # Replace locationLoop with shelving location if both are set
         warn "Applying shelving location filter: $shelvingLocation (replacing location: " . ($locationLoop || 'none') . ")";
+        
+        # Log that we're using the shelving location filter
+        warn "Using shelving location filter in location parameter: $shelvingLocation";
     } elsif ($locationLoop) {
         $common_params->{location} = $locationLoop;
     }
