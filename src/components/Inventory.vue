@@ -117,13 +117,11 @@
     <!-- Missing Items Modal -->
     <MissingItemsModal
       v-if="showMissingItemsModal"
-      :show="showMissingItemsModal"
       :sessionData="sessionData"
       :scannedItems="items"
-      @close="closeMissingItemsModal"
-      @item-marked-missing="handleItemMarkedMissing"
-      @items-marked-missing="handleItemsMarkedMissing"
-    />
+      @close="toggleMissingItemsModal"
+      @missing-items-updated="handleMissingItemsUpdated"
+    ></MissingItemsModal>
     
     <!-- Shelf Preview Component -->
     <ShelfPreview
@@ -146,7 +144,16 @@ import ResolutionModal from './ResolutionModal.vue'
 import MissingItemsModal from './MissingItemsModal.vue'
 import ShelfPreview from './ShelfPreview.vue'
 import { EventBus } from './eventBus'
-import { sessionStorage } from '../services/sessionStorage'
+import { 
+  saveSession, 
+  getSession, 
+  saveItems, 
+  getItems, 
+  clearSession, 
+  saveMarkedMissingItems, 
+  getMarkedMissingItems,
+  isSessionActive
+} from "../services/sessionStorage"
 import { apiService } from '../services/apiService'
 
 export default {
@@ -224,7 +231,7 @@ export default {
       currentResolutionType: '',
       currentPatronName: '',
       manualResolutionEnabled: true,
-      markedMissingItems: new Set(),
+      markedMissingItems: new Set(getMarkedMissingItems()),
       upcomingItemsCount: 0,
       authorizedValueCategories: {},
     };
@@ -246,10 +253,10 @@ export default {
   },
   methods: {
     checkForExistingSession() {
-      if (sessionStorage.isSessionActive()) {
-        const savedSessionData = sessionStorage.getSession();
-        const savedItems = sessionStorage.getItems();
-        const savedMarkedMissingItems = sessionStorage.getMarkedMissingItems();
+      if (isSessionActive()) {
+        const savedSessionData = getSession();
+        const savedItems = getItems();
+        const savedMarkedMissingItems = getMarkedMissingItems();
 
         if (savedSessionData) {
           this.sessionData = savedSessionData;
@@ -432,7 +439,7 @@ export default {
         operationsCompleted = true;
 
         // Clear session storage
-        sessionStorage.clearSession();
+        clearSession();
 
         // Close the modal
         this.showEndSessionModal = false;
@@ -788,7 +795,7 @@ export default {
         }
 
         // Save updated items to session storage
-        sessionStorage.saveItems(this.items);
+        saveItems(this.items);
 
         // Auto-open preview on first scan if enabled
         if (this.items.length === 1 && this.sessionData?.previewSettings?.autoOpenPreview && this.previewEnabled) {
@@ -1036,6 +1043,8 @@ export default {
         if (!data.location_data || !Array.isArray(data.location_data)) {
           console.warn('Invalid location_data in response:', data);
           data.location_data = [];
+        } else {
+          console.log('location_data first item structure:', data.location_data.length > 0 ? data.location_data[0] : 'No items found');
         }
         
         if (!data.right_place_list || !Array.isArray(data.right_place_list)) {
@@ -1046,11 +1055,11 @@ export default {
         this.sessionData.response_data = data;
 
         // Save session data to session storage
-        sessionStorage.saveSession(this.sessionData);
+        saveSession(this.sessionData);
 
         // Clear any existing items
         this.items = [];
-        sessionStorage.saveItems(this.items);
+        saveItems(this.items);
 
         // Provide information about expected barcodes list based on compareBarcodes setting
         if (this.sessionData.compareBarcodes) {
@@ -1331,7 +1340,13 @@ export default {
     },
 
     toggleMissingItemsModal() {
+      // Toggle the modal visibility state
       this.showMissingItemsModal = !this.showMissingItemsModal;
+      
+      if (this.showMissingItemsModal) {
+        // If opening the modal, update the marked missing items
+        this.handleMissingItemsUpdated();
+      }
     },
     
     closeMissingItemsModal() {
@@ -1374,49 +1389,72 @@ export default {
       // Add the barcode to the markedMissingItems set
       this.markedMissingItems.add(barcode);
       // Update session storage to keep track of marked items
-      sessionStorage.saveMarkedMissingItems(Array.from(this.markedMissingItems));
+      saveMarkedMissingItems(Array.from(this.markedMissingItems));
     },
     
     handleItemsMarkedMissing(barcodes) {
       // Add all barcodes to the markedMissingItems set
       barcodes.forEach(barcode => this.markedMissingItems.add(barcode));
       // Update session storage
-      sessionStorage.saveMarkedMissingItems(Array.from(this.markedMissingItems));
+      saveMarkedMissingItems(Array.from(this.markedMissingItems));
     },
     
     getMissingItemsCount() {
-      if (!this.sessionData || !this.sessionData.response_data) return 0;
+      if (!this.sessionData || !this.sessionData.response_data) {
+        return 0;
+      }
       
+      // Get the location data from session response
       const locationData = this.sessionData.response_data.location_data || [];
+      
+      // If location data is empty, try to use right_place_list as a fallback
+      let itemsToCheck = locationData;
+      if (itemsToCheck.length === 0 && this.sessionData.response_data.right_place_list) {
+        itemsToCheck = this.sessionData.response_data.right_place_list;
+      }
+      
+      if (itemsToCheck.length === 0) {
+        // No data to process
+        return 0;
+      }
+      
+      // Get a set of scanned barcodes for quick lookup
       const scannedBarcodesSet = new Set(this.items.map(item => item.external_id));
       
-      // Count items that are not scanned and not marked as missing already
-      return locationData.filter(item => {
+      // Get a set of already marked missing barcodes
+      const markedMissingSet = new Set(getMarkedMissingItems());
+      
+      // Count items that haven't been scanned, aren't marked as missing, and meet session criteria
+      const count = itemsToCheck.filter(item => {
         // Skip items that have already been scanned
         if (scannedBarcodesSet.has(item.barcode)) {
           return false;
         }
         
         // Skip items that have already been marked as missing
-        if (this.markedMissingItems.has(item.barcode)) {
+        if (markedMissingSet.has(item.barcode)) {
           return false;
         }
         
-        // Skip items based on session settings
+        // Skip items that are checked out if the session is configured to do so
         if (this.sessionData.skipCheckedOutItems && item.checked_out) {
           return false;
         }
         
+        // Skip items that are in transit if the session is configured to do so
         if (this.sessionData.skipInTransitItems && item.in_transit) {
           return false;
         }
         
+        // Skip items that have branch mismatch if the session is configured to do so
         if (this.sessionData.skipBranchMismatchItems && item.homebranch !== item.holdingbranch) {
           return false;
         }
         
         return true;
       }).length;
+      
+      return count;
     },
 
     setupStarted(data) {
@@ -1514,7 +1552,7 @@ export default {
         this.items.splice(itemIndex, 1, updatedItem);
         
         // Save updated items to session storage
-        sessionStorage.saveItems(this.items);
+        saveItems(this.items);
         
         // Emit a success message
         EventBus.emit('message', {
@@ -1522,6 +1560,14 @@ export default {
           text: `Item ${item.external_id || item.barcode} has been processed successfully`
         });
       }
+    },
+
+    handleMissingItemsUpdated() {
+      // Update the local set of marked missing items
+      this.markedMissingItems = new Set(getMarkedMissingItems());
+      
+      // Recalculate the missing items count for the badge
+      this.$forceUpdate();
     },
   }
 }
