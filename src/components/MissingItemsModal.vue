@@ -1,9 +1,9 @@
 <template>
-  <div v-if="show" class="missing-items-modal-overlay">
+  <div class="missing-items-modal-overlay">
     <div class="missing-items-modal">
       <div class="missing-items-modal-header">
-        <h2>Missing Items</h2>
-        <button class="close-button" @click="close">&times;</button>
+        <h2>Items Not Found During Inventory</h2>
+        <button class="close-button" @click="closeModal">&times;</button>
       </div>
       
       <div class="missing-items-modal-body">
@@ -16,7 +16,7 @@
           <div class="missing-items-stats">
             <div class="stat-box">
               <div class="stat-number">{{ missingItems.length }}</div>
-              <div class="stat-label">Missing Items</div>
+              <div class="stat-label">Not Found Items</div>
             </div>
             <div class="stat-box">
               <div class="stat-number">{{ totalExpectedItems }}</div>
@@ -24,7 +24,7 @@
             </div>
             <div class="stat-box">
               <div class="stat-number">{{ Math.round((missingItems.length / totalExpectedItems) * 100) || 0 }}%</div>
-              <div class="stat-label">Missing Rate</div>
+              <div class="stat-label">Not Found Rate</div>
             </div>
           </div>
           
@@ -66,14 +66,14 @@
                 @click="markSelectedAsMissing" 
                 :disabled="selectedItems.length === 0"
               >
-                Mark as Missing
+                Set Status to Missing
               </button>
             </div>
           </div>
           
           <div v-if="filteredItems.length === 0" class="no-missing-items">
-            <p v-if="searchQuery">No missing items match your search criteria.</p>
-            <p v-else>No missing items found.</p>
+            <p v-if="searchQuery">No items match your search criteria.</p>
+            <p v-else>No items were missing from inventory.</p>
           </div>
           
           <div v-else class="missing-items-list">
@@ -106,7 +106,7 @@
                   <td>{{ item.itemcallnumber || 'N/A' }}</td>
                   <td>{{ item.location || 'N/A' }}</td>
                   <td>
-                    <button class="action-button" @click="markItemAsMissing(item)">Mark Missing</button>
+                    <button class="action-button" @click="markItemAsMissing(item)">Set to Missing</button>
                     <button class="action-button" @click="viewItemDetails(item)">Details</button>
                   </td>
                 </tr>
@@ -183,7 +183,7 @@
                 </div>
               </div>
               <div class="detail-actions">
-                <button class="action-button primary" @click="markItemAsMissing(selectedItemDetail)">Mark as Missing</button>
+                <button class="action-button primary" @click="markItemAsMissing(selectedItemDetail)">Set Status to Missing</button>
                 <a :href="`/cgi-bin/koha/catalogue/detail.pl?biblionumber=${selectedItemDetail.biblionumber}`" 
                    target="_blank" class="action-button">View in Catalog</a>
               </div>
@@ -198,99 +198,80 @@
 <script>
 import { EventBus } from './eventBus';
 import { apiService } from '../services/apiService';
+import { saveMarkedMissingItems, getMarkedMissingItems } from "../services/sessionStorage";
 
 export default {
   props: {
-    show: {
-      type: Boolean,
-      default: false
-    },
     sessionData: {
       type: Object,
-      default: null
+      required: true
     },
     scannedItems: {
       type: Array,
-      default: () => []
+      required: true
     }
   },
   data() {
     return {
       loading: false,
       missingItems: [],
-      selectedItems: [],
-      selectedItemsSet: new Set(),
       searchQuery: '',
       sortBy: 'title',
-      selectAll: false,
+      selectedItems: [],
+      showDetailModal: false,
+      selectedItemDetail: null,
       currentPage: 1,
       itemsPerPage: 20,
-      showDetailModal: false,
-      selectedItemDetail: null
+      selectAll: false
     };
   },
   computed: {
     totalExpectedItems() {
-      if (!this.sessionData || !this.sessionData.response_data) return 0;
-      return this.sessionData.response_data.total_records || 0;
+      return this.sessionData?.response_data?.location_data?.length || 0;
     },
     filteredItems() {
       if (!this.missingItems.length) return [];
       
-      let filtered = [...this.missingItems];
-      
-      // Apply search filter
+      // Apply search filter if there's a query
+      let filtered = this.missingItems;
       if (this.searchQuery) {
         const query = this.searchQuery.toLowerCase();
-        filtered = filtered.filter(item => 
-          (item.title && item.title.toLowerCase().includes(query)) ||
-          (item.author && item.author.toLowerCase().includes(query)) ||
-          (item.barcode && item.barcode.toLowerCase().includes(query)) ||
-          (item.itemcallnumber && item.itemcallnumber.toLowerCase().includes(query))
-        );
+        filtered = this.missingItems.filter(item => {
+          return (
+            (item.title && item.title.toLowerCase().includes(query)) ||
+            (item.author && item.author.toLowerCase().includes(query)) ||
+            (item.barcode && item.barcode.toLowerCase().includes(query)) ||
+            (item.itemcallnumber && item.itemcallnumber.toLowerCase().includes(query))
+          );
+        });
       }
       
       // Apply sorting
       if (this.sortBy) {
         filtered.sort((a, b) => {
-          const valueA = (a[this.getSortField()] || '').toLowerCase();
-          const valueB = (b[this.getSortField()] || '').toLowerCase();
-          return valueA.localeCompare(valueB);
+          const aVal = a[this.sortBy] || '';
+          const bVal = b[this.sortBy] || '';
+          return aVal.toString().localeCompare(bVal.toString());
         });
       }
       
       // Apply pagination
-      const startIndex = (this.currentPage - 1) * this.itemsPerPage;
-      const endIndex = startIndex + this.itemsPerPage;
-      
-      return filtered.slice(startIndex, endIndex);
+      const start = (this.currentPage - 1) * this.itemsPerPage;
+      const end = start + this.itemsPerPage;
+      return filtered.slice(start, end);
     },
     totalPages() {
       if (!this.missingItems.length) return 1;
       return Math.ceil(this.missingItems.length / this.itemsPerPage);
+    },
+    selectedItemsSet() {
+      return new Set(this.selectedItems);
     }
   },
-  watch: {
-    show(newVal) {
-      if (newVal) {
-        this.initialize();
-      }
-    },
-    selectedItems: {
-      handler(newVal) {
-        // Update the Set for faster lookups
-        this.selectedItemsSet = new Set(newVal);
-      },
-      deep: true
-    }
+  created() {
+    this.calculateMissingItems();
   },
   methods: {
-    initialize() {
-      this.loading = true;
-      this.calculateMissingItems();
-      this.loading = false;
-    },
-    
     calculateMissingItems() {
       if (!this.sessionData || !this.sessionData.response_data) {
         this.missingItems = [];
@@ -300,13 +281,33 @@ export default {
       // Get the location data from session response
       const locationData = this.sessionData.response_data.location_data || [];
       
+      // If location data is empty, try to use right_place_list as a fallback
+      let itemsToCheck = locationData;
+      if (itemsToCheck.length === 0 && this.sessionData.response_data.right_place_list) {
+        itemsToCheck = this.sessionData.response_data.right_place_list;
+      }
+      
+      if (itemsToCheck.length === 0) {
+        // No data to process
+        this.missingItems = [];
+        return;
+      }
+      
       // Get a set of scanned barcodes for quick lookup
       const scannedBarcodesSet = new Set(this.scannedItems.map(item => item.external_id));
       
+      // Get a set of already marked missing barcodes
+      const markedMissingSet = new Set(getMarkedMissingItems());
+      
       // Filter out items that are checked out, in transit, etc. based on session settings
-      this.missingItems = locationData.filter(item => {
+      this.missingItems = itemsToCheck.filter(item => {
         // Skip items that have already been scanned
         if (scannedBarcodesSet.has(item.barcode)) {
+          return false;
+        }
+        
+        // Skip items that have already been marked as missing
+        if (markedMissingSet.has(item.barcode)) {
           return false;
         }
         
@@ -347,27 +348,38 @@ export default {
     applyFilters() {
       // Reset pagination when filters change
       this.currentPage = 1;
+      // Reset selection
+      this.selectedItems = [];
+      this.selectAll = false;
     },
     
-    close() {
+    closeModal() {
       this.$emit('close');
     },
     
     toggleSelectAll() {
       if (this.selectAll) {
-        this.selectedItems = this.missingItems.map(item => item.barcode);
+        this.selectedItems = this.filteredItems.map(item => item.barcode);
       } else {
         this.selectedItems = [];
       }
     },
     
     updateSelectAllState() {
-      // Update the "select all" checkbox based on current selections
-      this.selectAll = this.selectedItems.length === this.missingItems.length && this.missingItems.length > 0;
+      // If all items are selected, set selectAll to true
+      if (this.filteredItems.length > 0 && this.selectedItems.length === this.filteredItems.length) {
+        this.selectAll = true;
+      } else {
+        this.selectAll = false;
+      }
     },
     
     async markItemAsMissing(item) {
+      // Prevent executing this function if already in loading state
+      if (this.loading) return;
+      
       try {
+        // Set loading state
         this.loading = true;
         
         // Call API to mark item as missing
@@ -380,9 +392,15 @@ export default {
         );
         
         if (result && result.success) {
+          // Get current marked missing items for session storage
+          const currentMarkedMissing = getMarkedMissingItems();
+          const updatedMarkedMissing = [...new Set([...currentMarkedMissing, item.barcode])];
+          saveMarkedMissingItems(updatedMarkedMissing);
+          
+          // Show success message
           EventBus.emit('message', {
             type: 'success',
-            text: `Item "${item.title || item.barcode}" has been marked as missing.`
+            text: `Item "${item.title || item.barcode}" has been set to Missing status.`
           });
           
           // Remove item from the list if it was successfully marked
@@ -396,72 +414,22 @@ export default {
           
           // Emit event to update parent component
           this.$emit('item-marked-missing', item.barcode);
+          this.$emit('missing-items-updated');
         } else {
           throw new Error(result.error || 'Unknown error occurred');
         }
       } catch (error) {
         EventBus.emit('message', {
           type: 'error',
-          text: `Failed to mark item as missing: ${error.message}`
+          text: `Failed to set item to Missing status: ${error.message}`
         });
       } finally {
         this.loading = false;
       }
     },
     
-    async markSelectedAsMissing() {
-      if (this.selectedItems.length === 0) return;
-      
-      try {
-        this.loading = true;
-        
-        // Confirm action if many items selected
-        if (this.selectedItems.length > 10) {
-          const confirmed = confirm(`Are you sure you want to mark ${this.selectedItems.length} items as missing? This action cannot be undone.`);
-          if (!confirmed) {
-            this.loading = false;
-            return;
-          }
-        }
-        
-        // Create array of items to update
-        const itemsToUpdate = this.selectedItems.map(barcode => ({
-          barcode,
-          fields: { itemlost: 4 } // 4 is the code for "Missing"
-        }));
-        
-        // Call API to mark items as missing
-        const result = await apiService.post(
-          `/api/v1/contrib/interactiveinventory/item/fields`,
-          { items: itemsToUpdate }
-        );
-        
-        if (result && result.success) {
-          EventBus.emit('message', {
-            type: 'success',
-            text: `${this.selectedItems.length} items have been marked as missing.`
-          });
-          
-          // Remove marked items from the list
-          this.missingItems = this.missingItems.filter(item => !this.selectedItems.includes(item.barcode));
-          
-          // Reset selection
-          this.selectedItems = [];
-          this.selectAll = false;
-          
-          // Emit event to update parent component
-          this.$emit('items-marked-missing', itemsToUpdate.map(item => item.barcode));
-        } else {
-          throw new Error(result.error || 'Unknown error occurred');
-        }
-      } catch (error) {
-        EventBus.emit('message', {
-          type: 'error',
-          text: `Failed to mark items as missing: ${error.message}`
-        });
-      } finally {
-        this.loading = false;
-      }
+    markSelectedAsMissing() {
+      this.markAsMissing();
     },
     
     viewItemDetails(item) {
@@ -470,57 +438,78 @@ export default {
     },
     
     exportSelectedToCSV() {
-      if (this.selectedItems.length === 0) return;
+      if (this.selectedItems.length === 0) {
+        EventBus.emit("showSnackbar", {
+          message: "No items selected to export.",
+          type: "info",
+        });
+        return;
+      }
       
-      try {
-        // Filter items to only include selected ones
-        const itemsToExport = this.missingItems.filter(item => 
-          this.selectedItems.includes(item.barcode)
-        );
-        
-        // Define headers
-        const headers = [
-          'Barcode', 'Title', 'Author', 'Call Number', 'Location', 
-          'Home Branch', 'Holding Branch', 'Item Type', 'Last Seen'
+      // Get items that match the selected barcodes
+      const itemsToExport = this.missingItems.filter(item => 
+        this.selectedItems.includes(item.barcode)
+      );
+      
+      // Define the CSV headers
+      const headers = [
+        "Barcode",
+        "Title",
+        "Author",
+        "Call Number",
+        "Location",
+        "Home Branch",
+        "Holding Branch",
+        "Status"
+      ];
+      
+      // Create CSV content
+      let csvContent = headers.join(",") + "\n";
+      
+      itemsToExport.forEach(item => {
+        // Escape values to handle commas and quotes in the data
+        const row = [
+          item.barcode,
+          this.escapeCsvValue(item.title || ""),
+          this.escapeCsvValue(item.author || ""),
+          this.escapeCsvValue(item.itemcallnumber || ""),
+          this.escapeCsvValue(item.location || ""),
+          this.escapeCsvValue(item.homebranch || ""),
+          this.escapeCsvValue(item.holdingbranch || ""),
+          "Missing"
         ];
         
-        // Create CSV content
-        const csvContent = [
-          headers.join(','),
-          ...itemsToExport.map(item => [
-            `"${item.barcode || ''}"`,
-            `"${(item.title || '').replace(/"/g, '""')}"`,
-            `"${(item.author || '').replace(/"/g, '""')}"`,
-            `"${(item.itemcallnumber || '').replace(/"/g, '""')}"`,
-            `"${(item.location || '').replace(/"/g, '""')}"`,
-            `"${item.homebranch || ''}"`,
-            `"${item.holdingbranch || ''}"`,
-            `"${item.itype || ''}"`,
-            `"${item.datelastseen || 'Never'}"`,
-          ].join(','))
-        ].join('\n');
-        
-        // Create and download the file
-        const blob = new Blob([csvContent], { type: 'text/csv' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'missing_items.csv';
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        
-        EventBus.emit('message', {
-          type: 'success',
-          text: `CSV file with ${itemsToExport.length} missing items has been downloaded.`
-        });
-      } catch (error) {
-        EventBus.emit('message', {
-          type: 'error',
-          text: `Error exporting to CSV: ${error.message}`
-        });
+        csvContent += row.join(",") + "\n";
+      });
+      
+      // Create blob and download link
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+      
+      link.setAttribute("href", url);
+      link.setAttribute("download", `missing-items-${timestamp}.csv`);
+      link.style.visibility = "hidden";
+      
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      EventBus.emit("showSnackbar", {
+        message: `Exported ${itemsToExport.length} items to CSV.`,
+        type: "success",
+      });
+    },
+    
+    escapeCsvValue(value) {
+      // If the value contains commas or quotes, enclose it in quotes and escape any existing quotes
+      if (typeof value !== 'string') return `"${value}"`;
+      
+      if (value.includes(',') || value.includes('"')) {
+        return `"${value.replace(/"/g, '""')}"`;
       }
+      return value;
     },
     
     formatDate(dateString) {
@@ -532,6 +521,78 @@ export default {
       } catch (e) {
         return dateString;
       }
+    },
+    
+    markAsMissing() {
+      if (this.selectedItems.length === 0) {
+        EventBus.emit("showSnackbar", {
+          message: "No items selected to mark as missing.",
+          type: "info",
+        });
+        return;
+      }
+      
+      // Set loading state
+      this.loading = true;
+      
+      // Process each selected item
+      const promises = this.selectedItems.map(barcode => {
+        // Find the item object for this barcode
+        const item = this.missingItems.find(i => i.barcode === barcode);
+        if (!item) return Promise.resolve(); // Skip if item not found
+        
+        // Call API to mark item as missing in the system
+        return apiService.post(
+          `/api/v1/contrib/interactiveinventory/item/field`,
+          { 
+            barcode: barcode, 
+            fields: { itemlost: 4 } // 4 is the code for "Missing"
+          }
+        );
+      });
+      
+      // Wait for all API calls to complete
+      Promise.all(promises)
+        .then(results => {
+          // Get current marked missing items
+          const currentMarkedMissing = getMarkedMissingItems();
+          
+          // Add newly marked items to the list in session storage
+          const updatedMarkedMissing = [...new Set([...currentMarkedMissing, ...this.selectedItems])];
+          
+          // Save updated list
+          saveMarkedMissingItems(updatedMarkedMissing);
+          
+          // Update UI
+          EventBus.emit("showSnackbar", {
+            message: `${this.selectedItems.length} item(s) marked as missing.`,
+            type: "success",
+          });
+          
+          // Recalculate missing items to remove the ones we just marked
+          this.calculateMissingItems();
+          
+          // Emit event to update count in parent component
+          this.$emit("missing-items-updated");
+        })
+        .catch(error => {
+          EventBus.emit("showSnackbar", {
+            message: `Error marking items as missing: ${error.message}`,
+            type: "error",
+          });
+        })
+        .finally(() => {
+          this.loading = false;
+        });
+    },
+    
+    closeModal() {
+      this.$emit('close');
+    },
+    
+    refreshMissingItems() {
+      this.calculateMissingItems();
+      this.$emit('missing-items-updated');
     }
   }
 };
@@ -794,11 +855,17 @@ tbody td {
 }
 
 .loading-indicator {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  height: 200px;
+  background-color: rgba(255, 255, 255, 0.9);
+  z-index: 10;
 }
 
 .spinner {
