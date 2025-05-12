@@ -179,6 +179,32 @@
       </div>
       <p class="help-text">These settings control which alert types are displayed during scanning.</p>
     </div>
+    <div class="section-container">
+      <h2>Status Resolution</h2>
+      <div class="resolution-options">
+        <div class="resolution-option">
+          <label for="enableManualResolution">
+            <input type="checkbox" id="enableManualResolution" v-model="enableManualResolution" />
+            Enable manual resolution for item issues
+          </label>
+          <p class="help-text">When enabled, a resolution dialog will appear when scanning items with issues (checked out, lost, etc.).</p>
+        </div>
+        <div class="resolution-option">
+          <label for="resolveReturnClaims">
+            <input type="checkbox" id="resolveReturnClaims" v-model="resolveReturnClaims" />
+            Automatically resolve return claims when item is scanned
+          </label>
+          <p class="help-text">When an item with a return claim is scanned, the claim will be automatically resolved.</p>
+        </div>
+        <div class="resolution-option">
+          <label for="resolveInTransitItems">
+            <input type="checkbox" id="resolveInTransitItems" v-model="resolveInTransitItems" />
+            Automatically resolve in-transit status to current branch
+          </label>
+          <p class="help-text">When an item in transit is scanned, the transit will be completed to the current branch.</p>
+        </div>
+      </div>
+    </div>
     <button type="submit">Submit</button>
   </form>
 </template>
@@ -227,6 +253,8 @@ export default {
       showInTransitAlerts: true,
       showBranchMismatchAlerts: true,
       showReturnClaimAlerts: true,
+      resolveReturnClaims: false,
+      resolveInTransitItems: false,
       statuses: {},
       libraries: [],
       selectedLibraryId: '',
@@ -241,6 +269,7 @@ export default {
       itemTypesLoading: true,
       collectionCodesLoading: true,
       shelvingLocationsLoading: true,
+      enableManualResolution: true,
     };
   },
   created() {
@@ -399,6 +428,11 @@ export default {
           showInTransitAlerts: this.showInTransitAlerts,
           showBranchMismatchAlerts: this.showBranchMismatchAlerts,
           showReturnClaimAlerts: this.showReturnClaimAlerts
+        },
+        resolutionSettings: {
+          resolveReturnClaims: this.resolveReturnClaims,
+          resolveInTransitItems: this.resolveInTransitItems,
+          enableManualResolution: this.enableManualResolution
         }
       });
     },
@@ -739,6 +773,37 @@ fieldset {
 }
 
 .alert-option input[type="checkbox"] {
+  margin-right: 10px;
+}
+
+.resolution-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 15px;
+  margin-bottom: 15px;
+}
+
+.resolution-option {
+  padding: 12px;
+  border-radius: 4px;
+  background-color: #f5f5f5;
+  border-left: 3px solid #4caf50;
+  transition: background-color 0.2s;
+}
+
+.resolution-option:hover {
+  background-color: #e8f5e9;
+}
+
+.resolution-option label {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  font-weight: bold;
+  margin-bottom: 8px;
+}
+
+.resolution-option input[type="checkbox"] {
   margin-right: 10px;
 }
 

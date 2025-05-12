@@ -90,6 +90,17 @@
         <button @click="endSession" class="end-session-modal-button">End Session</button>
       </div>
     </div>
+
+    <!-- Resolution Modals -->
+    <ResolutionModal 
+      v-if="showResolutionModal" 
+      :show="showResolutionModal"
+      :item="currentResolutionItem"
+      :type="currentResolutionType"
+      :patronName="currentPatronName"
+      @close="closeResolutionModal"
+      @resolved="handleResolutionComplete"
+    />
   </div>
 </template>
 
@@ -97,6 +108,7 @@
 import InventorySetupForm from './InventorySetupForm.vue'
 import InventoryItem from './InventoryItem.vue'
 import BarcodeScanner from './BarcodeScanner.vue'
+import ResolutionModal from './ResolutionModal.vue'
 import { EventBus } from './eventBus'
 import { sessionStorage } from '../services/sessionStorage'
 import { apiService } from '../services/apiService'
@@ -105,7 +117,8 @@ export default {
   components: {
     InventorySetupForm,
     InventoryItem,
-    BarcodeScanner
+    BarcodeScanner,
+    ResolutionModal
   },
   computed: {
     uniqueBarcodesCount() {
@@ -161,7 +174,12 @@ export default {
       resolutionSettings: {
         resolveReturnClaims: false,
         resolveInTransitItems: false
-      }
+      },
+      showResolutionModal: false,
+      currentResolutionItem: null,
+      currentResolutionType: '',
+      currentPatronName: '',
+      manualResolutionEnabled: true,
     };
   },
   mounted() {
@@ -492,6 +510,7 @@ export default {
             this.$refs.barcodeInput.focus();
           }
           
+          this.loading = false;
           return; // Skip processing this item
         }
         
@@ -508,6 +527,7 @@ export default {
             this.$refs.barcodeInput.focus();
           }
           
+          this.loading = false;
           return; // Skip processing this item
         }
 
@@ -524,6 +544,7 @@ export default {
             this.$refs.barcodeInput.focus();
           }
           
+          this.loading = false;
           return; // Skip processing this item
         }
 
@@ -548,12 +569,77 @@ export default {
         // Add running 'fields to amend' variable
         var fieldsToAmend = {};
 
-        if (this.sessionData.inventoryDate > combinedData.last_seen_date)
+        if (this.sessionData.inventoryDate > combinedData.last_seen_date) {
           fieldsToAmend["datelastseen"] = this.sessionData.inventoryDate;
+        }
 
         // Check various status flags
         this.checkItemSpecialStatuses(combinedData);
+        
+        // Check for issues that might need manual resolution
+        if (this.manualResolutionEnabled) {
+          // Handle checked out items
+          if (combinedData.checked_out_date) {
+            // Get patron information if possible
+            let patronName = 'Unknown Patron';
+            if (combinedData.checkout && combinedData.checkout.patron_id) {
+              try {
+                const patronResponse = await fetch(`/api/v1/patrons/${combinedData.checkout.patron_id}`, {
+                  headers: {
+                    'Accept': 'application/json'
+                  }
+                });
+                
+                if (patronResponse.ok) {
+                  const patronData = await patronResponse.json();
+                  patronName = `${patronData.firstname} ${patronData.surname}`;
+                }
+              } catch (error) {
+                console.error('Error fetching patron details:', error);
+              }
+            }
+            
+            // Show the resolution modal for checked out items
+            this.openResolutionModal(combinedData, 'checkedout', patronName);
+            this.barcode = '';
+            this.loading = false;
+            return;
+          }
+          
+          // Handle lost items
+          if (combinedData.lost_status !== '0' && combinedData.lost_status) {
+            // Show the resolution modal for lost items
+            this.openResolutionModal(combinedData, 'lost');
+            this.barcode = '';
+            this.loading = false;
+            return;
+          }
+          
+          // Handle in-transit items
+          if (combinedData.in_transit) {
+            // Only show manual resolution if automatic resolution is not enabled
+            if (!this.resolutionSettings.resolveInTransitItems) {
+              this.openResolutionModal(combinedData, 'intransit');
+              this.barcode = '';
+              this.loading = false;
+              return;
+            }
+          }
+          
+          // Handle return claims
+          if (combinedData.return_claim) {
+            // Only show manual resolution if automatic resolution is not enabled
+            if (!this.resolutionSettings.resolveReturnClaims) {
+              this.openResolutionModal(combinedData, 'returnclaim');
+              this.barcode = '';
+              this.loading = false;
+              return;
+            }
+          }
+        }
 
+        // If we get here, proceed with automatic resolution or normal processing
+        
         // Check if item has a return claim and should be resolved
         if (combinedData.return_claim && this.resolutionSettings.resolveReturnClaims) {
           const claimResolved = await this.resolveReturnClaim(combinedData.external_id);
@@ -568,13 +654,14 @@ export default {
         
         // Check if item is in transit and should be resolved
         if (combinedData.in_transit && this.resolutionSettings.resolveInTransitItems) {
-          const targetBranch = this.sessionData.selectedLibraryId || combinedData.holdingbranch;
-          await this.resolveInTransit(combinedData.external_id, targetBranch);
-          combinedData.in_transit = false;
-          EventBus.emit('message', { 
-            type: 'success', 
-            text: `In-transit status for item ${combinedData.external_id} has been resolved to branch ${targetBranch}` 
-          });
+          const transitResolved = await this.resolveTransit(combinedData.external_id);
+          if (transitResolved) {
+            combinedData.in_transit = false;
+            EventBus.emit('message', { 
+              type: 'success', 
+              text: `In-transit status resolved for ${combinedData.external_id}` 
+            });
+          }
         }
 
         // Only check scanned barcodes against expected list if compareBarcodes is enabled
@@ -601,7 +688,7 @@ export default {
         }
 
         // Check if the item is marked as lost and update its status
-        if (combinedData.lost_status != "0") {
+        if (combinedData.lost_status !== "0" && combinedData.lost_status) {
           combinedData.wasLost = true; // Flag the item as previously lost
           //add the key-value pair to the fields to amend object
           if (!this.sessionData.ignoreLostStatus) {
@@ -610,7 +697,7 @@ export default {
         }
 
         if (this.sessionData.checkShelvedOutOfOrder && combinedData.call_number_sort < this.highestCallNumberSort) {
-          combinedData.outOfOrder = 1;
+          combinedData.outOfOrder = true;
         } else {
           this.highestCallNumberSort = combinedData.call_number_sort;
           this.itemWithHighestCallNumber = combinedData.external_id;
@@ -760,21 +847,21 @@ export default {
         });
     },
 
-    async resolveInTransit(barcode, branchCode) {
+    async resolveTransit(barcode) {
       try {
         EventBus.emit('message', { 
           type: 'status', 
-          text: `Resolving in-transit status for item ${barcode} to branch ${branchCode}...` 
+          text: `Resolving in-transit status for item ${barcode}...` 
         });
         
         const data = await apiService.post(
           `/api/v1/contrib/interactiveinventory/item/resolve_transit`,
-          { barcode, branchCode }
+          { barcode, branchCode: this.sessionData.selectedLibraryId || barcode.holdingbranch }
         );
         
         EventBus.emit('message', { 
           type: 'success', 
-          text: `Successfully resolved in-transit status for item ${barcode} to branch ${branchCode}` 
+          text: `Successfully resolved in-transit status for item ${barcode}` 
         });
         return data;
       } catch (error) {
@@ -790,6 +877,11 @@ export default {
     async initiateInventorySession(sessionData) {
       this.sessionData = sessionData;
       this.sessionStarted = true;
+      
+      // Set the manual resolution setting from sessionData
+      this.manualResolutionEnabled = sessionData.resolutionSettings?.enableManualResolution !== undefined ? 
+        sessionData.resolutionSettings.enableManualResolution : true;
+      
       try {
         // Display filter information to the user
         if (sessionData.shelvingLocation) {
@@ -1166,60 +1258,77 @@ export default {
       this.getItems();
     },
 
-    resolveTransit(barcode) {
-      console.log('Resolving transit for barcode:', barcode);
-      this.loading = true;
+    openResolutionModal(item, type, patronName = '') {
+      this.currentResolutionItem = item;
+      this.currentResolutionType = type;
+      this.currentPatronName = patronName;
+      this.showResolutionModal = true;
+    },
+    
+    closeResolutionModal() {
+      this.showResolutionModal = false;
+      this.currentResolutionItem = null;
+      this.currentResolutionType = '';
+      this.currentPatronName = '';
+    },
+    
+    handleResolutionComplete(result) {
+      console.log('Resolution complete:', result);
+      const item = result.item;
+      const action = result.action;
+      const type = result.type;
       
-      EventBus.emit('message', { 
-        type: 'status', 
-        text: `Resolving in-transit status for item ${barcode}...` 
-      });
+      // Update the item in our items array
+      const itemIndex = this.items.findIndex(i => 
+        (i.external_id && i.external_id === item.external_id) || 
+        (i.barcode && i.barcode === item.barcode)
+      );
       
-      // Get current session info to determine branch
-      return this.$kohaAPI.get('/auth/session')
-        .then(sessionResponse => {
-          const branchcode = sessionResponse.data.branch;
-          
-          // Call our plugin API endpoint to resolve the transit
-          return fetch(this.pluginUrl + '/api/v1/item/resolve_transit', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-              barcode: barcode,
-              branchCode: branchcode
-            })
-          });
-        })
-        .then(response => {
-          if (!response.ok) {
-            throw new Error(`HTTP error ${response.status}`);
-          }
-          return response.json();
-        })
-        .then(data => {
-          if (data && data.status === 'success') {
-            EventBus.emit('message', { 
-              type: 'success', 
-              text: `In-transit status resolved for ${barcode}` 
-            });
-            this.loading = false;
-            return true;
-          } else {
-            throw new Error(data?.error || 'Unknown error');
-          }
-        })
-        .catch(error => {
-          console.error('Error resolving transit:', error);
-          EventBus.emit('message', { 
-            type: 'error', 
-            text: `Failed to resolve transit: ${error.response?.data?.error || error.message}` 
-          });
-          this.loading = false;
-          return false;
+      if (itemIndex >= 0) {
+        const updatedItem = { ...this.items[itemIndex] };
+        
+        // Update item status based on resolution type and action
+        switch(type) {
+          case 'checkedout':
+            if (action === 'checkin') {
+              updatedItem.checked_out_date = null;
+              updatedItem.due_date = null;
+            }
+            break;
+            
+          case 'lost':
+            if (action === 'found') {
+              updatedItem.lost_status = '0';
+              updatedItem.wasLost = true; // Keep track that it was lost
+            }
+            break;
+            
+          case 'intransit':
+            if (action === 'resolve') {
+              updatedItem.in_transit = false;
+            }
+            break;
+            
+          case 'returnclaim':
+            if (action === 'resolve') {
+              updatedItem.return_claim = false;
+            }
+            break;
+        }
+        
+        // Update the item in the array
+        this.items.splice(itemIndex, 1, updatedItem);
+        
+        // Save updated items to session storage
+        sessionStorage.saveItems(this.items);
+        
+        // Emit a success message
+        EventBus.emit('message', {
+          type: 'success',
+          text: `Item ${item.external_id || item.barcode} has been processed successfully`
         });
-    }
+      }
+    },
   }
 }
 </script>
