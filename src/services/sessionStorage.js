@@ -4,75 +4,82 @@ const SESSION_EXPIRY_KEY = 'koha_inventory_expiry';
 const MISSING_ITEMS_KEY = 'koha_inventory_marked_missing';
 const SESSION_DURATION = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
 
-export const sessionStorage = {
-    saveSession(sessionData) {
-        localStorage.setItem(SESSION_KEY, JSON.stringify(sessionData));
-        localStorage.setItem(SESSION_EXPIRY_KEY, Date.now() + SESSION_DURATION);
-    },
+const saveSession = (sessionData) => {
+    localStorage.setItem(SESSION_KEY, JSON.stringify(sessionData));
+    localStorage.setItem(SESSION_EXPIRY_KEY, Date.now() + SESSION_DURATION);
+};
 
-    getSession() {
-        const expiryTime = parseInt(localStorage.getItem(SESSION_EXPIRY_KEY));
-        if (!expiryTime || Date.now() > expiryTime) {
-            this.clearSession();
-            return null;
-        }
+const getSession = () => {
+    const expiryTime = parseInt(localStorage.getItem(SESSION_EXPIRY_KEY));
+    if (!expiryTime || Date.now() > expiryTime) {
+        clearSession();
+        return null;
+    }
 
-        const sessionData = localStorage.getItem(SESSION_KEY);
-        return sessionData ? JSON.parse(sessionData) : null;
-    },
+    const sessionData = localStorage.getItem(SESSION_KEY);
+    return sessionData ? JSON.parse(sessionData) : null;
+};
 
-    saveItems(items) {
-        localStorage.setItem(ITEMS_KEY, JSON.stringify(items));
-    },
+const saveItems = (items) => {
+    localStorage.setItem(ITEMS_KEY, JSON.stringify(items));
+};
 
-    getItems() {
-        const expiryTime = parseInt(localStorage.getItem(SESSION_EXPIRY_KEY));
-        if (!expiryTime || Date.now() > expiryTime) {
-            this.clearSession();
-            return null;
-        }
+const getItems = () => {
+    const expiryTime = parseInt(localStorage.getItem(SESSION_EXPIRY_KEY));
+    if (!expiryTime || Date.now() > expiryTime) {
+        clearSession();
+        return null;
+    }
 
-        const items = localStorage.getItem(ITEMS_KEY);
-        return items ? JSON.parse(items) : null;
-    },
+    const items = localStorage.getItem(ITEMS_KEY);
+    return items ? JSON.parse(items) : null;
+};
 
-    saveMarkedMissingItems(barcodes) {
-        localStorage.setItem(MISSING_ITEMS_KEY, JSON.stringify(barcodes));
-    },
+const saveMarkedMissingItems = (barcodes) => {
+    if (!Array.isArray(barcodes)) {
+        console.error('Invalid barcodes array provided to saveMarkedMissingItems');
+        return;
+    }
+    localStorage.setItem(MISSING_ITEMS_KEY, JSON.stringify(barcodes));
+};
 
-    getMarkedMissingItems() {
-        const expiryTime = parseInt(localStorage.getItem(SESSION_EXPIRY_KEY));
-        if (!expiryTime || Date.now() > expiryTime) {
-            this.clearSession();
-            return null;
-        }
-
-        const barcodes = localStorage.getItem(MISSING_ITEMS_KEY);
-        return barcodes ? JSON.parse(barcodes) : [];
-    },
-
-    clearSession() {
-        localStorage.removeItem(SESSION_KEY);
-        localStorage.removeItem(ITEMS_KEY);
-        localStorage.removeItem(SESSION_EXPIRY_KEY);
-        localStorage.removeItem(MISSING_ITEMS_KEY);
-    },
-
-    isSessionActive() {
-        const expiryTime = parseInt(localStorage.getItem(SESSION_EXPIRY_KEY));
-        return expiryTime && Date.now() < expiryTime && localStorage.getItem(SESSION_KEY);
-    },
-
-    // Add these new methods to match the expected interface
-    getItem(key) {
-        return localStorage.getItem(key);
-    },
-
-    setItem(key, value) {
-        localStorage.setItem(key, value);
-    },
-
-    removeItem(key) {
-        localStorage.removeItem(key);
+const getMarkedMissingItems = () => {
+    try {
+        const markedMissing = localStorage.getItem(MISSING_ITEMS_KEY);
+        return markedMissing ? JSON.parse(markedMissing) : [];
+    } catch (e) {
+        console.error('Error retrieving marked missing items:', e);
+        return [];
     }
 };
+
+const clearSession = () => {
+    localStorage.removeItem(SESSION_KEY);
+    localStorage.removeItem(ITEMS_KEY);
+    localStorage.removeItem(SESSION_EXPIRY_KEY);
+    localStorage.removeItem(MISSING_ITEMS_KEY);
+};
+
+const isSessionActive = () => {
+    const expiryTime = parseInt(localStorage.getItem(SESSION_EXPIRY_KEY));
+    return expiryTime && Date.now() < expiryTime && localStorage.getItem(SESSION_KEY);
+};
+
+// Add these new methods to match the expected interface
+const getItem = (key) => {
+    return localStorage.getItem(key);
+};
+
+const setItem = (key, value) => {
+    localStorage.setItem(key, value);
+};
+
+const removeItem = (key) => {
+    localStorage.removeItem(key);
+};
+
+export {
+    clearSession, getItem, getItems, getMarkedMissingItems, getSession, isSessionActive, ITEMS_KEY,
+    MISSING_ITEMS_KEY, removeItem, saveItems, saveMarkedMissingItems, saveSession, SESSION_KEY, setItem
+};
+
