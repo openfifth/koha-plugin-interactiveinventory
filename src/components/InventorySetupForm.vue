@@ -206,6 +206,14 @@ export default {
     },
 
     startInventorySession() {
+      // Validate shelving location filter
+      if (this.shelvingLocation) {
+        EventBus.emit('message', { 
+          type: 'status', 
+          text: `Applying shelving location filter: ${this.shelvingLocations[this.shelvingLocation] || this.shelvingLocation}` 
+        });
+      }
+
       // Pass the values to the inventory script
       this.$emit('start-session', {
         minLocation: this.minLocation,

@@ -122,6 +122,11 @@ sub start_session {
     my $ignoreWaitingHolds = $session_data->{'ignoreWaitingHolds'};
     my @selectedItypes = map { "'$_'" } @{ $session_data->{'selectedItypes'} };
     my $selectedbranchcode = $session_data->{'selectedLibraryId'};
+    my $shelvingLocation = $session_data->{'shelvingLocation'};
+
+    # Add debug logging
+    warn "Shelving location filter: " . ($shelvingLocation || 'not set');
+    warn "Session data: " . Dumper($session_data);
 
     my ( $rightPlaceList ) = GetItemsForInventory(
         {
@@ -130,8 +135,12 @@ sub start_session {
             location     => $locationLoop,
             branch       => 'homebranch',
             ccode        => $ccode,
+            shelving_location => $shelvingLocation,
         }
     );
+
+    # Add debug logging for right place list
+    warn "Right place list count: " . ($rightPlaceList ? scalar(@$rightPlaceList) : 0);
 
     # Ensure rightPlaceList is an array reference, even if empty
     $rightPlaceList = [] unless defined $rightPlaceList;
@@ -151,8 +160,13 @@ sub start_session {
             ccode               => $ccode,
             ignore_waiting_holds=> $ignoreWaitingHolds,
             itemtypes           => \@selectedItypes,
+            shelving_location   => $shelvingLocation,
         }
     );
+
+    # Add debug logging for location data
+    warn "Location data count: " . ($location_data ? scalar(@$location_data) : 0);
+    warn "Total records: " . ($iTotalRecords || 0);
 
     # Ensure location_data is an array reference, even if empty
     $location_data = [] unless defined $location_data;
