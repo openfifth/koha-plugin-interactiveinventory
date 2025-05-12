@@ -6,7 +6,7 @@
 <script>
 import Inventory from './Inventory.vue'
 import { EventBus } from './eventBus'
-import { sessionStorage } from '../services/sessionStorage'
+import { getSession, saveSession, isSessionActive } from '../services/sessionStorage'
 
 export default {
   name: 'Main',
@@ -22,11 +22,11 @@ export default {
     EventBus.on('message', this.displayMessage);
 
     // Extend session expiry if the app is being used
-    if (sessionStorage.isSessionActive()) {
+    if (isSessionActive()) {
       // If session exists, extend its expiry time
-      const currentSession = sessionStorage.getSession();
+      const currentSession = getSession();
       if (currentSession) {
-        sessionStorage.saveSession(currentSession);
+        saveSession(currentSession);
       }
     }
   },

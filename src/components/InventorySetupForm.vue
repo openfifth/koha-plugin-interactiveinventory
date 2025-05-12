@@ -240,7 +240,14 @@
 <script>
 import { EventBus } from './eventBus';
 import { apiService } from '../services/apiService';
-import { sessionStorage } from '../services/sessionStorage';
+import {
+  getSession,
+  saveSession,
+  saveItems,
+  getItems,
+  clearSession,
+  isSessionActive
+} from '../services/sessionStorage';
 
 export default {
   props: {
