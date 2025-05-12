@@ -1,5 +1,5 @@
 <template>
-  <div class="shelf-preview-container" v-if="show">
+  <div class="shelf-preview-container" v-if="show" :key="renderKey">
     <div class="shelf-preview-header">
       <h3>Upcoming Items Preview</h3>
       <button class="close-button" @click="$emit('close')">&times;</button>
@@ -11,19 +11,20 @@
     </div>
     
     <div v-else-if="upcomingItems.length === 0" class="empty-state">
-      <p>No upcoming items found based on current location.</p>
-      <p v-if="!lastScannedItem">Scan an item to see upcoming items on the shelf.</p>
+      <p v-if="lastScannedItem">No items found on the same shelf as the current item.</p>
+      <p v-else>Scan an item to see upcoming items on the shelf.</p>
+      <p v-if="fetchError" class="error-message">{{ fetchError }}</p>
     </div>
     
     <div v-else class="shelf-content">
       <div class="current-location-info">
         <div class="info-box">
           <div class="info-label">Current Call Number</div>
-          <div class="info-value">{{ lastScannedItem ? lastScannedItem.itemcallnumber || 'N/A' : 'N/A' }}</div>
+          <div class="info-value">{{ getCurrentCallNumber() }}</div>
         </div>
         <div class="info-box">
           <div class="info-label">Shelving Location</div>
-          <div class="info-value">{{ lastScannedItem ? getAuthorizedValueDesc(lastScannedItem.location) : 'N/A' }}</div>
+          <div class="info-value">{{ getCurrentLocation() }}</div>
         </div>
       </div>
       
@@ -105,7 +106,10 @@ export default {
       upcomingItems: [],
       currentPage: 1,
       itemsPerPage: 6,
-      fetchError: null
+      fetchError: null,
+      renderKey: 0,
+      currentItem: null,
+      allItems: []
     };
   },
   computed: {
@@ -120,80 +124,120 @@ export default {
   },
   watch: {
     show(newVal) {
-      if (newVal && this.lastScannedItem) {
-        this.fetchUpcomingItems();
+      if (newVal) {
+        console.log("ShelfPreview - show changed to true, initializing data");
+        this.initializeData();
       }
     },
-    lastScannedItem(newVal) {
-      if (newVal && this.show) {
-        this.fetchUpcomingItems();
-      }
+    lastScannedItem: {
+      handler(newVal) {
+        if (newVal && this.show) {
+          console.log('ShelfPreview - lastScannedItem changed, initializing data with new item');
+          // Force clear the current items before fetching new ones
+          this.upcomingItems = [];
+          this.initializeData();
+        }
+      },
+      deep: true
     }
   },
   methods: {
+    getCurrentCallNumber() {
+      if (!this.lastScannedItem) return 'N/A';
+      
+      // Use callnumber directly, which matches the sample item structure
+      const callNumber = this.lastScannedItem.callnumber || '';
+                     
+      console.log('Current call number extracted:', callNumber);
+      
+      // Also check for call_number_sort which is in the sample data
+      const cnSort = this.lastScannedItem.call_number_sort || '';
+      
+      console.log('Current cn_sort extracted:', cnSort);
+      
+      return callNumber || cnSort || 'N/A';
+    },
+    
+    getCurrentLocation() {
+      if (!this.lastScannedItem) return 'N/A';
+      
+      const location = this.lastScannedItem.location || '';
+      return this.getAuthorizedValueDesc(location);
+    },
+    
     async fetchUpcomingItems() {
-      if (!this.lastScannedItem || !this.lastScannedItem.itemcallnumber) {
+      // If we don't have a current item, show empty state
+      if (!this.currentItem) {
+        console.log("No current item found, showing empty state");
+        this.upcomingItems = [];
+        return;
+      }
+
+      console.log(`Finding nearby items for: ${this.currentItem.barcode}`);
+      console.log(`Library: "${this.currentItem.library}", Location: "${this.currentItem.location}"`);
+      console.log(`Call number: "${this.currentItem.call_number}", Call number sort: "${this.currentItem.cn_sort}"`);
+      
+      // 1. First filter: Only include items with the same location and library
+      const sameLocationAndLibrary = this.allItems.filter(item => 
+        item.location === this.currentItem.location && 
+        item.library === this.currentItem.library && 
+        item.barcode !== this.currentItem.barcode
+      );
+      
+      console.log(`Found ${sameLocationAndLibrary.length} items with matching location and library (excluding current item)`);
+      
+      // 2. Compare call numbers to find items that should be on the same shelf
+      const normalizedCurrentCnSort = this.stripCnSort(this.currentItem.cn_sort || '');
+      
+      // Find items with matching call number class
+      const sameShelfItems = sameLocationAndLibrary.filter(item => {
+        // Skip items without call numbers
+        if (!item.cn_sort) return false;
+        
+        // Check if this item matches the current item's call number classification
+        return this.compareCallNumbers(this.currentItem.cn_sort, item.cn_sort);
+      });
+      
+      console.log(`Found ${sameShelfItems.length} items with matching call number classification`);
+      
+      // If no matching items on the same shelf, show empty state
+      if (sameShelfItems.length === 0) {
+        console.log("No matching items found on the same shelf. Showing empty state.");
         this.upcomingItems = [];
         return;
       }
       
-      this.loading = true;
-      this.fetchError = null;
-      
-      try {
-        // Get parameters for the API call
-        const callNumber = this.lastScannedItem.itemcallnumber;
-        const location = this.lastScannedItem.location || '';
-        const library = this.sessionData?.selectedLibraryId || this.lastScannedItem.homebranch || '';
-        
-        // Fetch next items in the call number sequence for this location and library
-        const response = await apiService.get(
-          `/api/v1/contrib/interactiveinventory/items/next-in-sequence`,
-          {
-            call_number: callNumber,
-            location: location,
-            library: library,
-            limit: 30,
-            include_issues: true
-          }
-        );
-        
-        if (response && response.items) {
-          // Process items - mark those with issues
-          this.upcomingItems = response.items.map(item => {
-            // Add a flag to indicate if the item has any issues
-            const hasIssues = 
-              item.checked_out || 
-              item.missing || 
-              item.in_transit || 
-              item.on_hold;
-              
-            return {
-              ...item,
-              issues: hasIssues
-            };
-          });
-          
-          // Reset to first page when getting new items
-          this.currentPage = 1;
-          
-          // Emit event with the count of upcoming items
-          this.$emit('items-loaded', this.upcomingItems.length);
-        } else {
-          this.upcomingItems = [];
-          throw new Error('Invalid response format');
+      // 3. Add the current item temporarily to sort everything together
+      const allShelfItems = [
+        ...sameShelfItems,
+        {
+          ...this.currentItem,
+          isCurrentItem: true // Mark as current item
         }
-      } catch (error) {
-        console.error('Error fetching upcoming items:', error);
-        this.fetchError = error.message || 'Failed to fetch upcoming items';
-        EventBus.emit('message', {
-          type: 'error',
-          text: `Error loading upcoming items: ${this.fetchError}`
-        });
-        this.upcomingItems = [];
-      } finally {
-        this.loading = false;
-      }
+      ];
+      
+      // 4. Sort all items by call number
+      allShelfItems.sort((a, b) => (a.cn_sort || '').localeCompare(b.cn_sort || ''));
+      
+      // 5. Find the index of the current item after sorting
+      const currentItemIndex = allShelfItems.findIndex(item => item.isCurrentItem);
+      console.log(`Current item is at position ${currentItemIndex} after sorting`);
+      
+      // 6. Extract items before and after the current item
+      const itemsAfter = currentItemIndex < allShelfItems.length - 1 
+        ? allShelfItems.slice(currentItemIndex + 1).slice(0, 15) 
+        : [];
+        
+      const itemsBefore = currentItemIndex > 0 
+        ? allShelfItems.slice(Math.max(0, currentItemIndex - 5), currentItemIndex)
+        : [];
+      
+      console.log(`Found ${itemsAfter.length} items after and ${itemsBefore.length} items before the current item`);
+      
+      // 7. Combine the lists with after items first (they're what the user will see next)
+      this.upcomingItems = [...itemsAfter, ...itemsBefore];
+      
+      console.log(`Showing ${this.upcomingItems.length} items on the shelf`);
     },
     
     nextPage() {
@@ -219,6 +263,199 @@ export default {
       }
       
       return code;
+    },
+    
+    // Simplify the stripCnSort method to only handle Dewey and LoC formats
+    stripCnSort(cnSort) {
+      // Convert to lowercase for case-insensitive comparison
+      if (!cnSort || cnSort.trim() === '') return '';
+      
+      const lowerCnSort = cnSort.toLowerCase().trim();
+      
+      // Case 1: Dewey decimal format (like "641.5" or "641.59" or "641")
+      // Extract the main class (first 3 digits before any decimal)
+      const deweyMatch = lowerCnSort.match(/^(\d{1,3})(?:\.\d+)?/);
+      if (deweyMatch) {
+        return deweyMatch[1]; // Just the main class numbers
+      }
+      
+      // Case 2: Library of Congress format (like "QA76.73.J38" or "PR6058.A69 B4")
+      // Extract the main class and number part (e.g., "QA76")
+      const locMatch = lowerCnSort.match(/^([a-z]+)(\d+)/);
+      if (locMatch) {
+        return locMatch[1] + locMatch[2]; // e.g., "qa76"
+      }
+      
+      // For everything else, return as is
+      return lowerCnSort;
+    },
+    
+    // Simplify the compareCallNumbers method
+    compareCallNumbers(cn1, cn2) {
+      // Handle edge cases - if either call number is empty
+      if (!cn1 || !cn2) {
+        return false;
+      }
+      
+      // Get normalized versions
+      const normalized1 = this.stripCnSort(cn1);
+      const normalized2 = this.stripCnSort(cn2);
+      
+      // Compare normalized versions
+      const match = normalized1 === normalized2;
+      
+      // Log the comparison for debugging
+      console.log(`Comparing: "${cn1}" → "${normalized1}" vs "${cn2}" → "${normalized2}": ${match ? 'MATCH' : 'NO MATCH'}`);
+      
+      return match;
+    },
+    
+    // Update verification checks to focus on basic Dewey and LoC formats
+    verifyMatchLogic() {
+      console.log("Verifying call number matching for library formats:");
+      
+      // Dewey Decimal format checks
+      console.log('=== DEWEY DECIMAL CHECKS ===');
+      console.log("641.5 vs 641.59: " + this.compareCallNumbers("641.5", "641.59")); // Should match (same main class)
+      console.log("641.5 vs 642: " + this.compareCallNumbers("641.5", "642")); // Should NOT match (different class)
+      console.log("641 vs 641.5: " + this.compareCallNumbers("641", "641.5")); // Should match (same main class)
+      
+      // Library of Congress format checks
+      console.log('=== LIBRARY OF CONGRESS CHECKS ===');
+      console.log("QA76.73.J38 vs QA76.76.C65: " + this.compareCallNumbers("QA76.73.J38", "QA76.76.C65")); // Should match (same class+number)
+      console.log("PS3566.L27 vs PS3566.L275: " + this.compareCallNumbers("PS3566.L27", "PS3566.L275")); // Should match (same class+number)
+      console.log("QA76.73 vs QB76.73: " + this.compareCallNumbers("QA76.73", "QB76.73")); // Should NOT match (different class)
+      
+      // Cross-format comparison
+      console.log('=== CROSS-FORMAT CHECKS ===');
+      console.log("641.5 vs QA76.73: " + this.compareCallNumbers("641.5", "QA76.73")); // Should NOT match (different formats)
+    },
+    
+    // Helper methods to consistently extract biblio data
+    getBiblioTitle(item) {
+      if (!item.biblio) return 'Unknown Title';
+      
+      if (item.biblio._custom && item.biblio._custom.value) {
+        return item.biblio._custom.value.title || 'Unknown Title';
+      }
+      
+      return item.biblio.title || 'Unknown Title';
+    },
+    
+    getBiblioAuthor(item) {
+      if (!item.biblio) return 'Unknown Author';
+      
+      if (item.biblio._custom && item.biblio._custom.value) {
+        return item.biblio._custom.value.author || 'Unknown Author';
+      }
+      
+      return item.biblio.author || 'Unknown Author';
+    },
+    
+    // Update the location code mapping function to use localStorage
+    mapLocationCodeToName(locationCode) {
+      if (!locationCode) return '';
+      
+      try {
+        // Get authorized values map from localStorage
+        const authorizedValuesLOC = JSON.parse(localStorage.getItem('authorizedValues_LOC') || '{}');
+        
+        // If we have a mapping for this code, use it
+        if (authorizedValuesLOC[locationCode]) {
+          console.log(`Found location mapping for "${locationCode}": "${authorizedValuesLOC[locationCode]}"`);
+          return authorizedValuesLOC[locationCode];
+        }
+        
+        // No mapping found, return the original code
+        console.log(`No location mapping found for "${locationCode}", using code as is`);
+        return locationCode;
+      } catch (error) {
+        console.error('Error accessing location mappings:', error);
+        return locationCode;
+      }
+    },
+    
+    // Update initializeData to use the mapping from localStorage
+    initializeData() {
+      if (!this.lastScannedItem) {
+        console.log("No lastScannedItem available, cannot initialize data");
+        this.currentItem = null;
+        this.allItems = [];
+        return;
+      }
+
+      console.log("Initializing with lastScannedItem:", this.lastScannedItem.external_id);
+      
+      // Map location code to full name using authorized values
+      const locationCode = this.lastScannedItem.location || '';
+      const locationName = this.mapLocationCodeToName(locationCode);
+      
+      console.log(`Using location "${locationName}" for current item`);
+      
+      // Initialize current item with location name instead of code
+      this.currentItem = {
+        barcode: this.lastScannedItem.external_id || '',
+        call_number: this.lastScannedItem.callnumber || '',
+        cn_sort: this.lastScannedItem.call_number_sort || '',
+        location: locationName, // Use location name from mapping
+        library: this.lastScannedItem.holding_library_id || '',
+        title: this.getBiblioTitle(this.lastScannedItem),
+        author: this.getBiblioAuthor(this.lastScannedItem)
+      };
+      
+      console.log("Current item initialized:", this.currentItem);
+      
+      // Process location_data
+      if (this.sessionData?.response_data?.location_data && 
+          Array.isArray(this.sessionData.response_data.location_data)) {
+        
+        this.allItems = this.sessionData.response_data.location_data.map(item => ({
+          barcode: item.barcode || item.external_id || '',
+          call_number: item.itemcallnumber || item.callnumber || '',
+          cn_sort: item.cn_sort || item.call_number_sort || '',
+          location: item.location || '', // This is already the location name
+          library: item.homebranch || item.holding_library_id || '',
+          title: item.title || 'Unknown Title',
+          author: item.author || 'Unknown Author',
+          checked_out: item.onloan || false,
+          missing: item.itemlost === 'Missing' || item.itemlost === '1' || false,
+          in_transit: false,
+          on_hold: false
+        }));
+        
+        console.log(`Initialized ${this.allItems.length} items from location_data`);
+        
+        // Log sample items to verify
+        if (this.allItems.length > 0) {
+          console.log("Sample processed items:");
+          for (let i = 0; i < Math.min(3, this.allItems.length); i++) {
+            console.log(`Item ${i}:`, this.allItems[i]);
+          }
+        }
+        
+        // Now fetch upcoming items
+        this.fetchUpcomingItems();
+      } else {
+        console.log("No location_data available in sessionData");
+        this.allItems = [];
+      }
+    }
+  },
+  
+  created() {
+    // Log what's available at creation time
+    console.log("ShelfPreview - created with:", {
+      show: this.show,
+      hasLastScannedItem: !!this.lastScannedItem,
+      hasSessionData: !!this.sessionData
+    });
+  },
+  
+  mounted() {
+    // Initialize on mount if the component is shown and we have a lastScannedItem
+    if (this.show && this.lastScannedItem) {
+      console.log("ShelfPreview - mounted with show=true and lastScannedItem available");
+      this.initializeData();
     }
   }
 };
@@ -235,11 +472,12 @@ export default {
   background: white;
   border-radius: 8px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
-  z-index: 900;
+  z-index: 1000;
   display: flex;
   flex-direction: column;
   max-height: 60vh;
   overflow: hidden;
+  margin-bottom: 60px;
 }
 
 .shelf-preview-header {
