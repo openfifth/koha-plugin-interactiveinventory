@@ -514,12 +514,23 @@ export default {
         if (this.sessionData.inventoryDate > combinedData.last_seen_date)
           fieldsToAmend["datelastseen"] = this.sessionData.inventoryDate;
 
-        // If set to compare barcodes, check if the scanned barcode is in the expected list.
-        // Add defensive check before accessing right_place_list
-        const rightPlaceList = this.sessionData.response_data.right_place_list || [];
-        const isInRightPlaceList = rightPlaceList.some(item => item.barcode === combinedData.external_id);
-        if (this.sessionData.compareBarcodes && !isInRightPlaceList) {
-          combinedData.wrongPlace = true; // Flag the item as in the wrong place
+        // Only check scanned barcodes against expected list if compareBarcodes is enabled
+        if (this.sessionData.compareBarcodes) {
+          // Add defensive check before accessing right_place_list
+          const rightPlaceList = this.sessionData.response_data.right_place_list || [];
+          const isInRightPlaceList = rightPlaceList.some(item => item.barcode === combinedData.external_id);
+          if (!isInRightPlaceList) {
+            combinedData.wrongPlace = true; // Flag the item as in the wrong place
+            EventBus.emit('message', { 
+              type: 'warning', 
+              text: `Item ${combinedData.external_id} is not in the expected barcodes list` 
+            });
+          } else {
+            EventBus.emit('message', { 
+              type: 'status', 
+              text: `Item ${combinedData.external_id} found in expected barcodes list` 
+            });
+          }
         }
 
         if (combinedData.checked_out_date && !this.sessionData.doNotCheckIn) {
@@ -701,6 +712,27 @@ export default {
         // Clear any existing items
         this.items = [];
         sessionStorage.saveItems(this.items);
+
+        // Provide information about expected barcodes list based on compareBarcodes setting
+        if (this.sessionData.compareBarcodes) {
+          const rightPlaceList = data.right_place_list || [];
+          if (rightPlaceList.length > 0) {
+            EventBus.emit('message', {
+              text: `Using an expected barcodes list with ${rightPlaceList.length} items`, 
+              type: 'status'
+            });
+          } else {
+            EventBus.emit('message', {
+              text: 'Expected barcodes list is empty. Items will not be marked as unexpected.',
+              type: 'warning'
+            });
+          }
+        } else {
+          EventBus.emit('message', {
+            text: 'Not comparing scanned items to an expected barcodes list',
+            type: 'status'
+          });
+        }
 
         EventBus.emit('message', { 
           text: `Inventory session started with ${data.total_records || 0} items`, 

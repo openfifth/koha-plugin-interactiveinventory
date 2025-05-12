@@ -10,6 +10,8 @@
       <div>
         <label for="compareBarcodes">Compare expected barcodes list to scanned barcodes:</label>
         <input type="checkbox" id="compareBarcodes" v-model="compareBarcodes" />
+        <span class="help-text" v-if="compareBarcodes">(Scanned barcodes will be checked against the expected items list)</span>
+        <span class="help-text" v-else>(All scanned barcodes will be accepted without comparison)</span>
       </div>
       <div>
         <label for="doNotCheckIn">Do not check in items scanned during inventory:</label>
@@ -262,6 +264,19 @@ export default {
         EventBus.emit('message', { 
           type: 'status', 
           text: 'Items with holdingbranch different from homebranch will be filtered out from inventory' 
+        });
+      }
+
+      // Display status for comparing expected barcodes
+      if (this.compareBarcodes) {
+        EventBus.emit('message', { 
+          type: 'status', 
+          text: 'Items will be checked against expected barcodes list' 
+        });
+      } else {
+        EventBus.emit('message', { 
+          type: 'status', 
+          text: 'All scanned barcodes will be accepted without checking against expected list' 
         });
       }
 

@@ -147,6 +147,7 @@ sub start_session {
         my $skipCheckedOutItems = $session_data->{'skipCheckedOutItems'} || 0;
         my $skipInTransitItems = $session_data->{'skipInTransitItems'} || 0;
         my $skipBranchMismatchItems = $session_data->{'skipBranchMismatchItems'} || 0;
+        my $compareBarcodes = $session_data->{'compareBarcodes'} || 0;
         
         # Log if we're skipping checked out items
         if ($skipCheckedOutItems) {
@@ -201,10 +202,15 @@ sub start_session {
         # Add debug logging for parameters
         warn "Common parameters: " . Dumper($common_params);
 
-        my ($rightPlaceList) = GetItemsForInventory($common_params);
-
-        # Add debug logging for right place list
-        warn "Right place list count: " . ($rightPlaceList ? scalar(@$rightPlaceList) : 0);
+        # Only generate right_place_list if compareBarcodes is enabled
+        my $rightPlaceList = [];
+        if ($compareBarcodes) {
+            warn "Compare barcodes is enabled, generating right place list";
+            ($rightPlaceList) = GetItemsForInventory($common_params);
+            warn "Right place list count: " . ($rightPlaceList ? scalar(@$rightPlaceList) : 0);
+        } else {
+            warn "Compare barcodes is disabled, skipping right place list generation";
+        }
 
         # Ensure rightPlaceList is an array reference, even if empty
         $rightPlaceList = [] unless defined $rightPlaceList;
