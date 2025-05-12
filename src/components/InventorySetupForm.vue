@@ -269,7 +269,7 @@ export default {
       dateLastSeen: '',
       ignoreIssued: false,
       ignoreWaitingHolds: false,
-      compareBarcodes: null,
+      compareBarcodes: false,
       doNotCheckIn: false,
       checkShelvedOutOfOrder: false,
       ignoreLostStatus: false,
@@ -330,15 +330,9 @@ export default {
     },
 
     validateForm() {
-      // Verify that compareBarcodes checkbox has a valid state
-      if (this.compareBarcodes === null || this.compareBarcodes === undefined) {
-        EventBus.emit('message', { 
-          type: 'error', 
-          text: 'The "Compare expected barcodes list" checkbox has an invalid state. Please try toggling it.'
-        });
-        return false;
-      }
-
+      // The compareBarcodes checkbox now has a default value of false,
+      // so we no longer need to check for null or undefined values.
+      
       // If using compareBarcodes, validate any related fields
       if (this.compareBarcodes) {
         // If no filters are selected, warn user that all items will be in expected list
