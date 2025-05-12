@@ -208,6 +208,15 @@ export default {
     startInventorySession() {
       // Validate shelving location filter
       if (this.shelvingLocation) {
+        // Check if the shelving location is valid (exists in the loaded locations)
+        if (!this.shelvingLocations[this.shelvingLocation]) {
+          EventBus.emit('message', { 
+            type: 'error', 
+            text: `Invalid shelving location: ${this.shelvingLocation}. Please select a valid shelving location.` 
+          });
+          return; // Prevent session from starting
+        }
+
         EventBus.emit('message', { 
           type: 'status', 
           text: `Applying shelving location filter: ${this.shelvingLocations[this.shelvingLocation] || this.shelvingLocation}` 
