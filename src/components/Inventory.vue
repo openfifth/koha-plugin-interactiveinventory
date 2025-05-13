@@ -222,7 +222,8 @@ export default {
       locations: {},
       resolutionSettings: {
         resolveReturnClaims: false,
-        resolveInTransitItems: false
+        resolveInTransitItems: false,
+        resolveWithdrawnItems: false
       },
       showResolutionModal: false,
       showMissingItemsModal: false,
@@ -547,6 +548,9 @@ export default {
 
       try {
         EventBus.emit('message', { type: 'status', text: 'Searching for item...' });
+        
+        // Debug: log alert settings to confirm they're correctly set
+        console.log("Alert settings when scanning:", this.alertSettings);
 
         // First get all items with this barcode (usually just one)
         let response = await fetch(`/api/v1/items?external_id=${encodeURIComponent(this.barcode)}`);
@@ -636,6 +640,14 @@ export default {
         // Combine item data and biblio data
         const combinedData = { ...itemData, biblio: biblioData };
 
+        // Debug: log the combined data to check if withdrawn field is present and its value
+        console.log("Combined item data:", {
+          barcode: combinedData.external_id,
+          title: combinedData.biblio.title,
+          withdrawn: combinedData.withdrawn,
+          withdrawnType: typeof combinedData.withdrawn
+        });
+
         // Add running 'fields to amend' variable
         var fieldsToAmend = {};
 
@@ -683,6 +695,29 @@ export default {
             this.barcode = '';
             this.loading = false;
             return;
+          }
+          
+          // Handle withdrawn items
+          if ((combinedData.withdrawn === '1' || combinedData.withdrawn === 1) && this.alertSettings.showWithdrawnAlerts) {
+            console.log("Withdrawn item detected:", {
+              barcode: combinedData.external_id,
+              withdrawn: combinedData.withdrawn,
+              withdrawnType: typeof combinedData.withdrawn,
+              resolveWithdrawnItems: this.resolutionSettings.resolveWithdrawnItems,
+              fullResolutionSettings: this.resolutionSettings
+            });
+            
+            // Only show manual resolution if automatic resolution is not enabled
+            if (!this.resolutionSettings.resolveWithdrawnItems) {
+              console.log("Opening resolution modal for withdrawn item");
+              // Show the resolution modal for withdrawn items
+              this.openResolutionModal(combinedData, 'withdrawn');
+              this.barcode = '';
+              this.loading = false;
+              return;
+            } else {
+              console.log("Auto-resolution for withdrawn item should be triggered");
+            }
           }
           
           // Handle in-transit items
@@ -741,6 +776,36 @@ export default {
               type: 'success', 
               text: `In-transit status resolved for ${combinedData.external_id}` 
             });
+          }
+        }
+
+        // Check if item is withdrawn and should be automatically restored
+        if ((combinedData.withdrawn === '1' || combinedData.withdrawn === 1) && this.resolutionSettings.resolveWithdrawnItems) {
+          console.log("Executing automatic withdrawn item resolution:", {
+            barcode: combinedData.external_id,
+            withdrawn: combinedData.withdrawn,
+            resolveWithdrawnItems: this.resolutionSettings.resolveWithdrawnItems
+          });
+          
+          // Update the withdrawn status
+          const fieldsToUpdate = { withdrawn: '0' };
+          const withdrawnResolved = await this.updateSingleItemStatus(combinedData.external_id, fieldsToUpdate);
+          
+          if (withdrawnResolved) {
+            console.log("Withdrawn status successfully removed");
+            combinedData.withdrawn = '0';
+            combinedData.wasWithdrawn = true;
+            // Add resolution flags for display
+            combinedData.resolutionType = 'withdrawn';
+            combinedData.resolutionAction = 'automatically restored';
+            combinedData.pendingResolution = false;
+            
+            EventBus.emit('message', { 
+              type: 'success', 
+              text: `Withdrawn status removed for ${combinedData.external_id}` 
+            });
+          } else {
+            console.log("Failed to remove withdrawn status");
           }
         }
 
@@ -975,6 +1040,17 @@ export default {
       // Set the manual resolution setting from sessionData
       this.manualResolutionEnabled = sessionData.resolutionSettings?.enableManualResolution !== undefined ? 
         sessionData.resolutionSettings.enableManualResolution : true;
+      
+      // Initialize all resolution settings with defaults if not present
+      this.resolutionSettings = {
+        resolveReturnClaims: sessionData.resolutionSettings?.resolveReturnClaims || false,
+        resolveInTransitItems: sessionData.resolutionSettings?.resolveInTransitItems || false,
+        resolveWithdrawnItems: sessionData.resolutionSettings?.resolveWithdrawnItems || false,
+        enableManualResolution: this.manualResolutionEnabled
+      };
+      
+      // Log resolution settings for debugging
+      console.log('Explicitly initialized resolution settings:', this.resolutionSettings);
       
       // Log preview settings if present
       if (sessionData.previewSettings) {
@@ -1269,11 +1345,12 @@ export default {
     },
 
     checkItemSpecialStatuses(item) {
-      // Check for withdrawn items
-      if (item.withdrawn === '1' && this.alertSettings.showWithdrawnAlerts) {
+      // Check for withdrawn items - handle both string and numeric values
+      if ((item.withdrawn === '1' || item.withdrawn === 1) && this.alertSettings.showWithdrawnAlerts) {
+        console.log("Withdrawn item detected:", item.external_id, "withdrawn value:", item.withdrawn);
         EventBus.emit('message', {
           type: 'warning',
-          text: `${item.title} (${item.barcode}) has been withdrawn from circulation`
+          text: `${item.title} (${item.barcode || item.external_id}) has been withdrawn from circulation`
         });
       }
 
@@ -1496,14 +1573,18 @@ export default {
         this.alertSettings = data.alertSettings;
       }
       
-      // Handle resolution settings
+      // Handle resolution settings - merge with existing settings instead of overwriting
       if (data.resolutionSettings) {
-        this.resolutionSettings = data.resolutionSettings;
+        // Keep our explicit initialization but update with any provided values
+        this.resolutionSettings = {
+          ...this.resolutionSettings, // Keep existing settings
+          ...data.resolutionSettings  // Override with any new settings from data
+        };
       }
       
       // Log the status of alerts and resolutions for debugging
       console.log('Alert settings:', this.alertSettings);
-      console.log('Resolution settings:', this.resolutionSettings);
+      console.log('Resolution settings after merge:', this.resolutionSettings);
       
       this.getItems();
     },
@@ -1542,6 +1623,12 @@ export default {
           // The InventoryItem component already checks for return_claim
           newItem.pendingResolution = true;
           newItem.resolutionType = 'returnclaim';
+          break;
+          
+        case 'withdrawn':
+          // Set properties for withdrawn items
+          newItem.pendingResolution = true;
+          newItem.resolutionType = 'withdrawn';
           break;
       }
       
@@ -1623,6 +1710,24 @@ export default {
             }
             break;
             
+          case 'withdrawn':
+            if (action === 'restore') {
+              updatedItem.withdrawn = '0'; // Update withdrawn status to not withdrawn
+              updatedItem.wasWithdrawn = true; // Keep track that it was withdrawn
+              
+              // Update resolution information
+              updatedItem.pendingResolution = false;
+              updatedItem.resolutionAction = 'restored to circulation';
+              
+              // Update item status in Koha
+              this.updateSingleItemStatus(updatedItem.external_id, { withdrawn: '0' });
+            } else if (action === 'skip') {
+              // Update resolution information
+              updatedItem.pendingResolution = true;
+              updatedItem.resolutionAction = 'skipped';
+            }
+            break;
+            
           case 'intransit':
             if (action === 'resolve') {
               updatedItem.in_transit = false;
@@ -1660,6 +1765,8 @@ export default {
           } else if (type === 'lost') {
             // Keep wasLost true for history but clear active flags
             updatedItem.lost_status = '0';
+          } else if (type === 'withdrawn') {
+            updatedItem.withdrawn = '0';
           } else if (type === 'intransit') {
             updatedItem.in_transit = false;
           } else if (type === 'returnclaim') {

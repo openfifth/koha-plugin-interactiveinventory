@@ -203,6 +203,13 @@
           </label>
           <p class="help-text">When an item in transit is scanned, the transit will be completed to the current branch.</p>
         </div>
+        <div class="resolution-option">
+          <label for="resolveWithdrawnItems">
+            <input type="checkbox" id="resolveWithdrawnItems" v-model="resolveWithdrawnItems" />
+            Automatically restore withdrawn items to circulation
+          </label>
+          <p class="help-text">When a withdrawn item is scanned, it will be automatically restored to circulation.</p>
+        </div>
       </div>
     </div>
     
@@ -290,6 +297,7 @@ export default {
       showReturnClaimAlerts: true,
       resolveReturnClaims: false,
       resolveInTransitItems: false,
+      resolveWithdrawnItems: false,
       statuses: {},
       libraries: [],
       selectedLibraryId: '',
@@ -464,6 +472,7 @@ export default {
         resolutionSettings: {
           resolveReturnClaims: this.resolveReturnClaims,
           resolveInTransitItems: this.resolveInTransitItems,
+          resolveWithdrawnItems: this.resolveWithdrawnItems,
           enableManualResolution: this.enableManualResolution
         },
         previewSettings: {

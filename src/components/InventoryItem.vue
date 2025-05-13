@@ -4,7 +4,7 @@
        'checked-out': item.checked_out_date,
        'in-transit': item.in_transit && alertSettings.showInTransitAlerts,
        'branch-mismatch': item.homebranch !== item.holdingbranch && alertSettings.showBranchMismatchAlerts,
-       'withdrawn': item.withdrawn === '1' && alertSettings.showWithdrawnAlerts,
+       'withdrawn': (item.withdrawn === '1' || item.withdrawn === 1) && alertSettings.showWithdrawnAlerts,
        'on-hold': item.on_hold && alertSettings.showOnHoldAlerts,
        'return-claim': item.return_claim && alertSettings.showReturnClaimAlerts
      }]" @click="toggleExpand">
@@ -15,7 +15,7 @@
       <span v-if="item.checked_out_date" class="checked-out-badge">CHECKED OUT</span>
       <span v-if="item.in_transit && alertSettings.showInTransitAlerts" class="in-transit-badge">IN TRANSIT</span>
       <span v-if="item.homebranch !== item.holdingbranch && alertSettings.showBranchMismatchAlerts" class="branch-mismatch-badge">BRANCH MISMATCH</span>
-      <span v-if="item.withdrawn === '1' && alertSettings.showWithdrawnAlerts" class="withdrawn-badge">WITHDRAWN</span>
+      <span v-if="(item.withdrawn === '1' || item.withdrawn === 1) && alertSettings.showWithdrawnAlerts" class="withdrawn-badge">WITHDRAWN</span>
       <span v-if="item.on_hold && alertSettings.showOnHoldAlerts" class="on-hold-badge">ON HOLD</span>
       <span v-if="item.return_claim && alertSettings.showReturnClaimAlerts" class="return-claim-badge">RETURN CLAIM</span>
       <span v-if="item.pendingResolution" class="resolution-badge">PENDING RESOLUTION</span>
@@ -82,8 +82,8 @@
         <p v-if="item.homebranch !== item.holdingbranch && alertSettings.showBranchMismatchAlerts" class="item-warning">
           This item belongs to branch {{ item.homebranch }} but is currently held at branch {{ item.holdingbranch }}.
         </p>
-        <p v-if="item.withdrawn === '1' && alertSettings.showWithdrawnAlerts" class="item-warning"><strong>Warning:</strong></p>
-        <p v-if="item.withdrawn === '1' && alertSettings.showWithdrawnAlerts" class="item-warning">
+        <p v-if="(item.withdrawn === '1' || item.withdrawn === 1) && alertSettings.showWithdrawnAlerts" class="item-warning"><strong>Warning:</strong></p>
+        <p v-if="(item.withdrawn === '1' || item.withdrawn === 1) && alertSettings.showWithdrawnAlerts" class="item-warning">
           This item has been withdrawn from circulation.
         </p>
         <p v-if="item.on_hold && alertSettings.showOnHoldAlerts" class="item-warning"><strong>Warning:</strong></p>
@@ -162,7 +162,7 @@ export default {
              this.item.outOfOrder || this.item.invalidStatus || 
              (this.item.in_transit && this.alertSettings.showInTransitAlerts) || 
              (this.item.homebranch !== this.item.holdingbranch && this.alertSettings.showBranchMismatchAlerts) ||
-             (this.item.withdrawn === '1' && this.alertSettings.showWithdrawnAlerts) || 
+             ((this.item.withdrawn === '1' || this.item.withdrawn === 1) && this.alertSettings.showWithdrawnAlerts) || 
              (this.item.on_hold && this.alertSettings.showOnHoldAlerts) ||
              (this.item.return_claim && this.alertSettings.showReturnClaimAlerts) ||
              this.item.pendingResolution;

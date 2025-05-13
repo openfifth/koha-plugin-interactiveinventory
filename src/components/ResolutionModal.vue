@@ -105,6 +105,20 @@
                 <p class="description">Don't resolve the claim but record the item in inventory.</p>
               </div>
             </div>
+            
+            <div v-if="type === 'withdrawn'">
+              <div class="option">
+                <input type="radio" id="option-restore" v-model="selectedAction" value="restore">
+                <label for="option-restore">Restore to circulation</label>
+                <p class="description">Remove the withdrawn status and return the item to circulation.</p>
+              </div>
+              
+              <div class="option">
+                <input type="radio" id="option-skip-withdrawn" v-model="selectedAction" value="skip">
+                <label for="option-skip-withdrawn">Skip (leave as is)</label>
+                <p class="description">Keep the withdrawn status and record the item in inventory.</p>
+              </div>
+            </div>
           </div>
           
           <div class="resolution-actions">
@@ -134,7 +148,7 @@ export default {
     },
     type: {
       type: String,
-      validator: value => ['checkedout', 'lost', 'intransit', 'returnclaim'].includes(value),
+      validator: value => ['checkedout', 'lost', 'intransit', 'returnclaim', 'withdrawn'].includes(value),
       required: true
     },
     patronName: {
@@ -156,7 +170,8 @@ export default {
         checkedout: 'Checked Out Item',
         lost: 'Lost Item',
         intransit: 'In-Transit Item',
-        returnclaim: 'Return Claim'
+        returnclaim: 'Return Claim',
+        withdrawn: 'Withdrawn Item'
       };
       return titles[this.type] || 'Item Issue';
     },
@@ -166,6 +181,7 @@ export default {
         renew: 'Renew',
         found: 'Mark Found',
         resolve: 'Resolve',
+        restore: 'Restore',
         skip: 'Skip'
       };
       return texts[this.selectedAction] || 'Proceed';
@@ -194,7 +210,8 @@ export default {
         checkedout: 'checkin',
         lost: 'found',
         intransit: 'resolve',
-        returnclaim: 'resolve'
+        returnclaim: 'resolve',
+        withdrawn: 'restore'
       };
       return defaults[this.type] || '';
     },
@@ -245,6 +262,15 @@ export default {
           case 'returnclaim':
             if (this.selectedAction === 'resolve') {
               result = await this.resolveReturnClaim(barcode);
+            } else if (this.selectedAction === 'skip') {
+              // No action needed for skip
+              result = true;
+            }
+            break;
+            
+          case 'withdrawn':
+            if (this.selectedAction === 'restore') {
+              result = await this.removeWithdrawnStatus(barcode);
             } else if (this.selectedAction === 'skip') {
               // No action needed for skip
               result = true;
@@ -570,6 +596,46 @@ export default {
         EventBus.emit('message', {
           type: 'error',
           text: `Error resolving return claim: ${error.message}`
+        });
+        throw error;
+      }
+    },
+    
+    async removeWithdrawnStatus(barcode) {
+      try {
+        // API call to update the withdrawn status using the existing endpoint
+        const response = await fetch('/api/v1/contrib/interactiveinventory/item/field', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            barcode: barcode,
+            fields: {
+              withdrawn: '0'
+            }
+          })
+        });
+        
+        if (!response.ok) {
+          throw new Error(`HTTP error ${response.status}`);
+        }
+        
+        const data = await response.json();
+        
+        if (data.success) {
+          EventBus.emit('message', {
+            type: 'success',
+            text: `Withdrawn status removed from item ${barcode}`
+          });
+          return true;
+        } else {
+          throw new Error(data.error || 'Unknown error removing withdrawn status');
+        }
+      } catch (error) {
+        EventBus.emit('message', {
+          type: 'error',
+          text: `Failed to remove withdrawn status: ${error.message}`
         });
         throw error;
       }
