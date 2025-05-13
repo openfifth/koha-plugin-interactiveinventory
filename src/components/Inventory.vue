@@ -543,6 +543,14 @@ export default {
         return;
       }
 
+      // Trim whitespace from barcode
+      this.barcode = this.barcode.trim();
+      
+      // Exit early if barcode is empty after trimming
+      if (!this.barcode) {
+        return;
+      }
+
       this.loading = true;
       this.lastScannedBarcode = this.barcode;
 
@@ -1468,14 +1476,20 @@ export default {
     },
 
     onBarcodeDetected(code) {
-      this.barcode = code;
-      this.submitBarcode();
+      // Trim whitespace from detected code
+      const trimmedCode = code.trim();
+      
+      // Only process if code is not empty after trimming
+      if (trimmedCode) {
+        this.barcode = trimmedCode;
+        this.submitBarcode();
 
-      // Show confirmation to the user
-      EventBus.emit('message', {
-        type: 'status',
-        text: `Barcode detected: ${code}`
-      });
+        // Show confirmation to the user
+        EventBus.emit('message', {
+          type: 'status',
+          text: `Barcode detected: ${trimmedCode}`
+        });
+      }
     },
 
     checkDeviceType() {
