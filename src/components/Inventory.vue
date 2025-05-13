@@ -1579,6 +1579,10 @@ export default {
   margin: 0 auto;
   padding: 20px;
   font-family: Arial, sans-serif;
+  padding-bottom: 55px; /* Reduced from 80px to ~2/3 of original value */
+  height: auto;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch; /* Smooth scrolling for iOS */
 }
 
 .barcode-input-container {
@@ -1768,6 +1772,11 @@ h3 {
   font-size: 16px;
   z-index: 1000;
   /* Ensure it stays above other content */
+  width: 150px; /* Fixed width for all buttons */
+  height: 45px; /* Fixed height for all buttons */
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .end-session-button:hover {
@@ -1789,6 +1798,9 @@ h3 {
   display: flex;
   align-items: center;
   justify-content: center;
+  width: 150px; /* Fixed width for all buttons */
+  height: 45px; /* Fixed height for all buttons */
+  box-sizing: border-box; /* Ensure padding doesn't affect height */
 }
 
 .missing-items-button:hover {
@@ -1804,6 +1816,8 @@ h3 {
   border-radius: 50%;
   width: 24px;
   height: 24px;
+  min-width: 24px; /* Prevent badge from changing button width */
+  min-height: 24px; /* Prevent badge from changing button height */
   font-size: 14px;
   margin-left: 8px;
 }
@@ -1855,7 +1869,7 @@ h3 {
 .shelf-preview-button {
   position: fixed;
   bottom: 20px;
-  right: 160px; /* Position to the left of the missing-items-button */
+  right: 190px; /* Position to the left of the missing-items-button with spacing */
   padding: 10px 20px;
   background-color: #2196F3; /* Blue color to differentiate */
   color: white;
@@ -1867,6 +1881,9 @@ h3 {
   display: flex;
   align-items: center;
   justify-content: center;
+  width: 150px; /* Fixed width for all buttons */
+  height: 45px; /* Fixed height for all buttons */
+  box-sizing: border-box; /* Ensure padding doesn't affect height */
 }
 
 .shelf-preview-button:hover {
@@ -1882,7 +1899,75 @@ h3 {
   border-radius: 50%;
   width: 24px;
   height: 24px;
+  min-width: 24px; /* Prevent badge from changing button width */
+  min-height: 24px; /* Prevent badge from changing button height */
   font-size: 14px;
   margin-left: 8px;
+}
+
+/* Responsive button styling for mobile */
+@media (max-width: 767px) {
+  /* Create a button container for mobile */
+  .end-session-button,
+  .missing-items-button,
+  .shelf-preview-button {
+    position: fixed;
+    padding: 8px 5px;
+    font-size: 14px;
+    bottom: 10px;
+    width: 32%; /* More evenly distribute space */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    min-width: 0; /* Override previous min-width */
+  }
+  
+  /* Position buttons using percentages of screen width */
+  .end-session-button {
+    left: 1%;
+  }
+  
+  .shelf-preview-button {
+    left: 34%; /* Center button */
+    right: auto;
+    transform: none;
+  }
+  
+  .missing-items-button {
+    right: 1%;
+  }
+  
+  /* Make sure count badges still fit properly */
+  .missing-count,
+  .upcoming-count {
+    width: 18px;
+    height: 18px;
+    font-size: 11px;
+    margin-left: 4px; /* Smaller margin on mobile */
+  }
+  
+  /* Increase bottom padding on mobile to ensure content isn't obscured */
+  .container {
+    padding-bottom: 65px; /* Reduced from 100px to ~2/3 of original value */
+  }
+}
+
+/* Additional adjustments for very small screens */
+@media (max-width: 480px) {
+  .end-session-button,
+  .missing-items-button,
+  .shelf-preview-button {
+    font-size: 12px;
+    padding: 8px 2px;
+  }
+  
+  .missing-count,
+  .upcoming-count {
+    width: 16px;
+    height: 16px;
+    font-size: 10px;
+    margin-left: 2px;
+  }
 }
 </style>

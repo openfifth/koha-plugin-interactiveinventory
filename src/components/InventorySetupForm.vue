@@ -687,6 +687,30 @@ button {
   /* Ensure labels are not bold */
 }
 
+/* Add media query for mobile responsiveness */
+@media (max-width: 767px) {
+  .statuses-grid {
+    grid-template-columns: repeat(2, 1fr); /* Change to 2 columns on medium screens */
+    gap: 10px;
+  }
+}
+
+@media (max-width: 480px) {
+  .statuses-grid {
+    grid-template-columns: 1fr; /* Stack vertically on very small screens */
+  }
+  
+  .status-column {
+    margin-bottom: 16px;
+  }
+  
+  .status-column label {
+    font-weight: bold; /* Make column headers more visible */
+    margin-bottom: 8px;
+    display: block;
+  }
+}
+
 .form-group {
   margin-bottom: 1rem;
 }
