@@ -11,12 +11,16 @@
     <p class="item-title">
       <span :class="issueIconClass" aria-hidden="true">{{ issueIcon }}</span>
       <span class="sr-only">{{ issueIconText }}</span>
+      <span class="badge-spacer"></span>
       <span v-if="item.checked_out_date" class="checked-out-badge">CHECKED OUT</span>
       <span v-if="item.in_transit && alertSettings.showInTransitAlerts" class="in-transit-badge">IN TRANSIT</span>
       <span v-if="item.homebranch !== item.holdingbranch && alertSettings.showBranchMismatchAlerts" class="branch-mismatch-badge">BRANCH MISMATCH</span>
       <span v-if="item.withdrawn === '1' && alertSettings.showWithdrawnAlerts" class="withdrawn-badge">WITHDRAWN</span>
       <span v-if="item.on_hold && alertSettings.showOnHoldAlerts" class="on-hold-badge">ON HOLD</span>
       <span v-if="item.return_claim && alertSettings.showReturnClaimAlerts" class="return-claim-badge">RETURN CLAIM</span>
+      <span v-if="item.pendingResolution" class="resolution-badge">PENDING RESOLUTION</span>
+      <span v-if="item.resolutionAction && !item.pendingResolution" class="resolution-badge-resolved">✓ RESOLVED</span>
+      <span v-if="item.resolutionAction && item.pendingResolution" class="resolution-badge-skipped">SKIPPED</span>
       {{ item.biblio.title }} - {{ item.external_id }}
     </p>
     <div v-if="isExpanded" class="item-details">
@@ -41,6 +45,19 @@
         <p>{{ item.last_seen_date }}</p>
         <p><strong>URL:</strong></p>
         <p><a :href="constructedUrl" target="_blank" @click.stop>{{ constructedUrl }}</a></p>
+        
+        <!-- Resolution information -->
+        <p v-if="item.pendingResolution || item.resolutionAction" class="item-warning"><strong>Resolution Status:</strong></p>
+        <p v-if="item.pendingResolution || item.resolutionAction" class="item-warning">
+          <span v-if="item.pendingResolution">
+            This item has a pending {{ item.resolutionType }} issue that needs to be resolved.
+            <span v-if="item.resolutionAction === 'skipped'"> (Skipped during resolution)</span>
+          </span>
+          <span v-else-if="item.resolutionAction">
+            This item had a {{ item.resolutionType }} issue that was resolved - action taken: {{ item.resolutionAction }}.
+          </span>
+        </p>
+        
         <p v-if="item.wasLost" class="item-warning"><strong>Warning:</strong></p>
         <p v-if="item.wasLost" class="item-warning">This item was previously marked as lost. Reason: {{ lostReason }}
         </p>
@@ -137,13 +154,18 @@ export default {
       return `/cgi-bin/koha/catalogue/detail.pl?biblionumber=${this.currentBiblioWithHighestCallNumber}`;
     },
     hasIssue() {
+      if (this.item.resolutionAction && !this.item.pendingResolution) {
+        return false;
+      }
+      
       return this.item.wasLost || this.item.wrongPlace || this.item.checked_out_date || 
              this.item.outOfOrder || this.item.invalidStatus || 
              (this.item.in_transit && this.alertSettings.showInTransitAlerts) || 
              (this.item.homebranch !== this.item.holdingbranch && this.alertSettings.showBranchMismatchAlerts) ||
              (this.item.withdrawn === '1' && this.alertSettings.showWithdrawnAlerts) || 
              (this.item.on_hold && this.alertSettings.showOnHoldAlerts) ||
-             (this.item.return_claim && this.alertSettings.showReturnClaimAlerts);
+             (this.item.return_claim && this.alertSettings.showReturnClaimAlerts) ||
+             this.item.pendingResolution;
     },
     issueIcon() {
       return this.hasIssue ? '✖' : '✔';
@@ -153,6 +175,13 @@ export default {
     },
     issueIconText() {
       return this.hasIssue ? 'Item has issues' : 'Item has no issues';
+    },
+    resolutionBadgeText() {
+      return this.item.resolutionAction ? 
+        (this.item.pendingResolution ? 'SKIPPED' : 'RESOLVED') : '';
+    },
+    resolutionBadgeClass() {
+      return this.item.pendingResolution ? 'resolution-badge-skipped' : 'resolution-badge-resolved';
     },
     constructedUrl() {
       const biblionumber = this.item.biblio_id;
@@ -170,17 +199,13 @@ export default {
     },
     async fetchAndSetAuthorizedValues(field) {
       try {
-        // Pass a flag to indicate this is for the item component, not the form
         const values = await this.fetchAuthorizedValues(field, {
           onValuesUpdate: (updatedValues) => {
             this.authorizedValues = { ...updatedValues };
           },
-          // This indicates we don't need to force a fetch in inventory mode
           forceLoad: false
         });
 
-        // This will only be reached after all values are fetched
-        // but we've already updated incrementally via the callback
         this.authorizedValues = values;
       } catch (error) {
         EventBus.emit('message', { type: 'error', text: 'Error setting authorized values' });
@@ -250,9 +275,7 @@ export default {
   grid-template-columns: auto 1fr;
   gap: 3px;
   word-wrap: break-word;
-  /* Ensure long text wraps within the column */
   overflow-wrap: break-word;
-  /* Alternative property for word wrapping */
 }
 
 .checked-out {
@@ -349,5 +372,43 @@ export default {
   font-size: 0.8em;
   margin-right: 8px;
   font-weight: bold;
+}
+
+.resolution-badge {
+  display: inline-block;
+  background-color: #8e44ad;
+  color: white;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.8em;
+  margin-right: 8px;
+  font-weight: bold;
+}
+
+.resolution-badge-resolved {
+  display: inline-block;
+  background-color: #2ecc71;
+  color: white;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.8em;
+  margin-right: 8px;
+  font-weight: bold;
+}
+
+.resolution-badge-skipped {
+  display: inline-block;
+  background-color: #7f8c8d;
+  color: white;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.8em;
+  margin-right: 8px;
+  font-weight: bold;
+}
+
+.badge-spacer {
+  display: inline-block;
+  width: 8px;
 }
 </style>

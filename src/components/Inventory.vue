@@ -715,6 +715,11 @@ export default {
           const claimResolved = await this.resolveReturnClaim(combinedData.external_id);
           if (claimResolved) {
             combinedData.return_claim = false;
+            // Add resolution flags for display
+            combinedData.resolutionType = 'returnclaim';
+            combinedData.resolutionAction = 'claim resolved';
+            combinedData.pendingResolution = false;
+            
             EventBus.emit('message', { 
               type: 'success', 
               text: `Return claim resolved for ${combinedData.external_id}` 
@@ -727,6 +732,11 @@ export default {
           const transitResolved = await this.resolveTransit(combinedData.external_id);
           if (transitResolved) {
             combinedData.in_transit = false;
+            // Add resolution flags for display
+            combinedData.resolutionType = 'intransit';
+            combinedData.resolutionAction = 'transit resolved';
+            combinedData.pendingResolution = false;
+            
             EventBus.emit('message', { 
               type: 'success', 
               text: `In-transit status resolved for ${combinedData.external_id}` 
@@ -755,6 +765,10 @@ export default {
 
         if (combinedData.checked_out_date && !this.sessionData.doNotCheckIn) {
           await this.checkInItem(combinedData.external_id);
+          // Add resolution flags for display since item was automatically checked in
+          combinedData.resolutionType = 'checkedout';
+          combinedData.resolutionAction = 'checked in';
+          combinedData.pendingResolution = false;
         }
 
         // Check if the item is marked as lost and update its status
@@ -763,6 +777,10 @@ export default {
           //add the key-value pair to the fields to amend object
           if (!this.sessionData.ignoreLostStatus) {
             fieldsToAmend["itemlost"] = '0';
+            // Add resolution flags for display since lost status is automatically cleared
+            combinedData.resolutionType = 'lost';
+            combinedData.resolutionAction = 'marked found';
+            combinedData.pendingResolution = false;
           }
         }
 
@@ -1491,7 +1509,56 @@ export default {
     },
 
     openResolutionModal(item, type, patronName = '') {
-      this.currentResolutionItem = item;
+      // Mark item as scanned
+      item.wasScanned = true;
+      
+      // Create a new instance to avoid modifying the original object
+      const newItem = { ...item };
+      
+      // Add issue information to the item based on type
+      switch(type) {
+        case 'checkedout':
+          // The InventoryItem component already checks for checked_out_date
+          // This will be detected automatically
+          newItem.pendingResolution = true;
+          newItem.resolutionType = 'checkedout';
+          break;
+          
+        case 'lost':
+          // Set wasLost flag which is already recognized by InventoryItem
+          newItem.wasLost = true;
+          newItem.pendingResolution = true;
+          newItem.resolutionType = 'lost';
+          newItem.originalLostStatus = newItem.lost_status;
+          break;
+          
+        case 'intransit':
+          // The InventoryItem component already checks for in_transit
+          newItem.pendingResolution = true;
+          newItem.resolutionType = 'intransit';
+          break;
+          
+        case 'returnclaim':
+          // The InventoryItem component already checks for return_claim
+          newItem.pendingResolution = true;
+          newItem.resolutionType = 'returnclaim';
+          break;
+      }
+      
+      // Always add to the top of the list as the latest scan, without removing previous entries
+      this.items.unshift(newItem);
+      
+      // Set all items to be collapsed except the first one
+      this.items = this.items.map((itm, index) => ({
+        ...itm,
+        isExpanded: index === 0 // Only expand the first item
+      }));
+      
+      // Save updated items to session storage
+      saveItems(this.items);
+      
+      // Now set up and show the resolution modal
+      this.currentResolutionItem = newItem;
       this.currentResolutionType = type;
       this.currentPatronName = patronName;
       this.showResolutionModal = true;
@@ -1510,13 +1577,14 @@ export default {
       const action = result.action;
       const type = result.type;
       
-      // Update the item in our items array
+      // Find the item in our items array (should be the first item)
       const itemIndex = this.items.findIndex(i => 
         (i.external_id && i.external_id === item.external_id) || 
         (i.barcode && i.barcode === item.barcode)
       );
       
       if (itemIndex >= 0) {
+        // Create the updated item with resolved status
         const updatedItem = { ...this.items[itemIndex] };
         
         // Update item status based on resolution type and action
@@ -1525,6 +1593,18 @@ export default {
             if (action === 'checkin') {
               updatedItem.checked_out_date = null;
               updatedItem.due_date = null;
+              
+              // Update resolution information
+              updatedItem.pendingResolution = false;
+              updatedItem.resolutionAction = 'checked in';
+            } else if (action === 'renew') {
+              // Update resolution information
+              updatedItem.pendingResolution = false;
+              updatedItem.resolutionAction = 'renewed';
+            } else if (action === 'skip') {
+              // Update resolution information
+              updatedItem.pendingResolution = true;
+              updatedItem.resolutionAction = 'skipped';
             }
             break;
             
@@ -1532,24 +1612,63 @@ export default {
             if (action === 'found') {
               updatedItem.lost_status = '0';
               updatedItem.wasLost = true; // Keep track that it was lost
+              
+              // Update resolution information
+              updatedItem.pendingResolution = false;
+              updatedItem.resolutionAction = 'marked found';
+            } else if (action === 'skip') {
+              // Update resolution information
+              updatedItem.pendingResolution = true;
+              updatedItem.resolutionAction = 'skipped';
             }
             break;
             
           case 'intransit':
             if (action === 'resolve') {
               updatedItem.in_transit = false;
+              
+              // Update resolution information
+              updatedItem.pendingResolution = false;
+              updatedItem.resolutionAction = 'transit resolved';
+            } else if (action === 'skip') {
+              // Update resolution information
+              updatedItem.pendingResolution = true;
+              updatedItem.resolutionAction = 'skipped';
             }
             break;
             
           case 'returnclaim':
             if (action === 'resolve') {
               updatedItem.return_claim = false;
+              
+              // Update resolution information
+              updatedItem.pendingResolution = false;
+              updatedItem.resolutionAction = 'claim resolved';
+            } else if (action === 'skip') {
+              // Update resolution information
+              updatedItem.pendingResolution = true;
+              updatedItem.resolutionAction = 'skipped';
             }
             break;
         }
         
-        // Update the item in the array
-        this.items.splice(itemIndex, 1, updatedItem);
+        // For resolved items, make sure it shows as a success
+        if (!updatedItem.pendingResolution) {
+          // Clear any status flags that would make it appear as having an issue
+          if (type === 'checkedout') {
+            updatedItem.checked_out_date = null;
+          } else if (type === 'lost') {
+            // Keep wasLost true for history but clear active flags
+            updatedItem.lost_status = '0';
+          } else if (type === 'intransit') {
+            updatedItem.in_transit = false;
+          } else if (type === 'returnclaim') {
+            updatedItem.return_claim = false;
+          }
+        }
+        
+        // Update the item in place (it should already be at the top)
+        this.items[itemIndex] = updatedItem;
         
         // Save updated items to session storage
         saveItems(this.items);
