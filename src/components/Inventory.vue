@@ -1497,10 +1497,19 @@ export default {
 
     toggleEndSessionModal() {
       console.log('Toggle modal', this.showEndSessionModal);
+      // Close the Shelf Preview modal if it's open
+      if (this.showShelfPreview) {
+        this.showShelfPreview = false;
+      }
       this.showEndSessionModal = !this.showEndSessionModal;
     },
 
     toggleMissingItemsModal() {
+      // Close the Shelf Preview modal if it's open
+      if (this.showShelfPreview) {
+        this.showShelfPreview = false;
+      }
+      
       // Toggle the modal visibility state
       this.showMissingItemsModal = !this.showMissingItemsModal;
       
