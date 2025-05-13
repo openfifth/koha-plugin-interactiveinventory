@@ -107,11 +107,7 @@
           (Skip records marked as seen on or after this date.)
         </li>
         <li>
-          <label for="ignoreLostStatus">Skip automatically fixing scanned lost items </label>
-          <input type="checkbox" id="ignoreLostStatus" v-model="ignoreLostStatus" />
-        </li>
-        <li>
-          <label for="ignore_waiting_holds">Skip items on hold awaiting pickup: </label>
+          <label for="ignoreWaitingHolds">Skip items on hold awaiting pickup: </label>
           <input type="checkbox" id="ignoreWaitingHolds" v-model="ignoreWaitingHolds" />
         </li>
         <li>
@@ -189,6 +185,15 @@
           </label>
           <p class="help-text">When enabled, a resolution dialog will appear when scanning items with issues (checked out, lost, etc.).</p>
         </div>
+        
+        <div class="resolution-option">
+          <label for="resolveLostItems">
+            <input type="checkbox" id="resolveLostItems" v-model="resolveLostItems" />
+            Automatically mark lost items as found
+          </label>
+          <p class="help-text">When a lost item is scanned, it will be automatically marked as found. If disabled, a resolution dialog will appear.</p>
+        </div>
+        
         <div class="resolution-option">
           <label for="resolveReturnClaims">
             <input type="checkbox" id="resolveReturnClaims" v-model="resolveReturnClaims" />
@@ -196,6 +201,7 @@
           </label>
           <p class="help-text">When an item with a return claim is scanned, the claim will be automatically resolved.</p>
         </div>
+        
         <div class="resolution-option">
           <label for="resolveInTransitItems">
             <input type="checkbox" id="resolveInTransitItems" v-model="resolveInTransitItems" />
@@ -203,6 +209,7 @@
           </label>
           <p class="help-text">When an item in transit is scanned, the transit will be completed to the current branch.</p>
         </div>
+        
         <div class="resolution-option">
           <label for="resolveWithdrawnItems">
             <input type="checkbox" id="resolveWithdrawnItems" v-model="resolveWithdrawnItems" />
@@ -286,7 +293,6 @@ export default {
       compareBarcodes: false,
       doNotCheckIn: false,
       checkShelvedOutOfOrder: false,
-      ignoreLostStatus: false,
       skipCheckedOutItems: true,
       skipInTransitItems: false,
       skipBranchMismatchItems: false,
@@ -298,6 +304,7 @@ export default {
       resolveReturnClaims: false,
       resolveInTransitItems: false,
       resolveWithdrawnItems: false,
+      resolveLostItems: false,
       statuses: {},
       libraries: [],
       selectedLibraryId: '',
@@ -457,11 +464,10 @@ export default {
         compareBarcodes: this.compareBarcodes,
         doNotCheckIn: this.doNotCheckIn,
         checkShelvedOutOfOrder: this.checkShelvedOutOfOrder,
-        ignoreLostStatus: this.ignoreLostStatus,
-        shelvingLocation: this.shelvingLocation,
         skipCheckedOutItems: this.skipCheckedOutItems,
         skipInTransitItems: this.skipInTransitItems,
         skipBranchMismatchItems: this.skipBranchMismatchItems,
+        shelvingLocation: this.shelvingLocation,
         alertSettings: {
           showWithdrawnAlerts: this.showWithdrawnAlerts,
           showOnHoldAlerts: this.showOnHoldAlerts,
@@ -473,6 +479,7 @@ export default {
           resolveReturnClaims: this.resolveReturnClaims,
           resolveInTransitItems: this.resolveInTransitItems,
           resolveWithdrawnItems: this.resolveWithdrawnItems,
+          resolveLostItems: this.resolveLostItems,
           enableManualResolution: this.enableManualResolution
         },
         previewSettings: {

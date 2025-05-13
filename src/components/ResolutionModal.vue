@@ -27,6 +27,12 @@
               <div v-if="type === 'lost'" class="issue-details">
                 <p><strong>Lost status:</strong> {{ getLostStatusLabel(item.lost_status) }}</p>
                 <p v-if="item.lost_on"><strong>Lost on:</strong> {{ formatDate(item.lost_on) }}</p>
+                <div class="lost-status-badge">
+                  {{ getLostStatusLabel(item.lost_status) }}
+                </div>
+                <p v-if="item.itemlost_on" class="additional-info">
+                  <strong>Status changed on:</strong> {{ formatDate(item.itemlost_on) }}
+                </p>
               </div>
               
               <div v-if="type === 'intransit'" class="issue-details">
@@ -401,9 +407,18 @@ export default {
     
     async markItemFound(barcode) {
       try {
+        // Log the current lost status for debugging
+        const lostStatus = this.item.lost_status;
+        const lostStatusLabel = this.getLostStatusLabel(lostStatus);
+        
+        console.log(`Marking item ${barcode} as found. Current lost status:`, {
+          status: lostStatus,
+          description: lostStatusLabel
+        });
+        
         EventBus.emit('message', {
           type: 'status',
-          text: `Marking item ${barcode} as found...`
+          text: `Marking item ${barcode} as found (was: ${lostStatusLabel})...`
         });
         
         const response = await fetch('/api/v1/contrib/interactiveinventory/item/field', {
@@ -429,7 +444,7 @@ export default {
         if (data.success) {
           EventBus.emit('message', {
             type: 'success',
-            text: `Item ${barcode} has been marked as found`
+            text: `Item ${barcode} has been marked as found (was: ${lostStatusLabel})`
           });
           return true;
         } else {
@@ -668,6 +683,23 @@ export default {
     
     async loadLostStatuses() {
       try {
+        // First try to get lost statuses from localStorage
+        const cachedLostStatuses = localStorage.getItem('authorizedValues_LOST');
+        
+        if (cachedLostStatuses) {
+          console.log('Using cached LOST statuses from localStorage');
+          try {
+            const parsedStatuses = JSON.parse(cachedLostStatuses);
+            this.lostStatuses = parsedStatuses;
+            return;
+          } catch (parseError) {
+            console.error('Error parsing cached LOST statuses:', parseError);
+            // Continue to API call on parse error
+          }
+        }
+        
+        // Fall back to API call if no cache or parse error
+        console.log('Fetching LOST statuses from API');
         const response = await fetch('/api/v1/authorised_value_types/LOST/authorised_values', {
           headers: {
             'Accept': 'application/json'
@@ -688,6 +720,14 @@ export default {
         }
       } catch (error) {
         console.error('Error loading lost statuses:', error);
+        // Use a basic fallback for lost statuses if everything fails
+        this.lostStatuses = {
+          '1': 'Lost',
+          '2': 'Long Overdue',
+          '3': 'Lost and Paid For',
+          '4': 'Missing',
+          '5': 'Missing in Inventory'
+        };
       }
     },
     
@@ -696,7 +736,28 @@ export default {
     },
     
     getLostStatusLabel(status) {
-      return this.lostStatuses[status] || `Lost (${status})`;
+      // Check if we have a description for this status
+      if (this.lostStatuses[status]) {
+        return this.lostStatuses[status];
+      } 
+      
+      // Try to check if we can get from localStorage as a backup
+      try {
+        const cachedStatuses = localStorage.getItem('authorizedValues_LOST');
+        if (cachedStatuses) {
+          const parsedStatuses = JSON.parse(cachedStatuses);
+          if (parsedStatuses[status]) {
+            // Save for future use
+            this.lostStatuses = { ...this.lostStatuses, ...parsedStatuses };
+            return parsedStatuses[status];
+          }
+        }
+      } catch (e) {
+        console.error('Error retrieving lost status from cache:', e);
+      }
+      
+      // If no description is found, return a formatted fallback
+      return `Lost Status: ${status}`;
     },
     
     formatDate(dateString) {
@@ -789,6 +850,24 @@ export default {
   padding: 10px;
   background-color: #f5f5f5;
   border-radius: 4px;
+}
+
+.lost-status-badge {
+  display: inline-block;
+  margin-top: 10px;
+  padding: 5px 10px;
+  background-color: #ff5252;
+  color: white;
+  border-radius: 4px;
+  font-weight: bold;
+  font-size: 0.9rem;
+}
+
+.additional-info {
+  margin-top: 10px;
+  font-size: 0.9rem;
+  color: #666;
+  font-style: italic;
 }
 
 .resolution-options {

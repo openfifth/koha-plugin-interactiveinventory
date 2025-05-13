@@ -217,13 +217,13 @@ export default {
       shelvingLocation: '',
       doNotCheckIn: false,
       checkShelvedOutOfOrder: false,
-      ignoreLostStatus: false,
       statuses: {},
       locations: {},
       resolutionSettings: {
         resolveReturnClaims: false,
         resolveInTransitItems: false,
-        resolveWithdrawnItems: false
+        resolveWithdrawnItems: false,
+        resolveLostItems: false
       },
       showResolutionModal: false,
       showMissingItemsModal: false,
@@ -690,11 +690,23 @@ export default {
           
           // Handle lost items
           if (combinedData.lost_status !== '0' && combinedData.lost_status) {
-            // Show the resolution modal for lost items
-            this.openResolutionModal(combinedData, 'lost');
-            this.barcode = '';
-            this.loading = false;
-            return;
+            console.log("Lost item detected:", {
+              barcode: combinedData.external_id,
+              lost_status: combinedData.lost_status,
+              resolveLostItems: this.resolutionSettings.resolveLostItems
+            });
+            
+            // Only show manual resolution if automatic resolution is not enabled
+            if (!this.resolutionSettings.resolveLostItems) {
+              console.log("Opening resolution modal for lost item");
+              // Show the resolution modal for lost items
+              this.openResolutionModal(combinedData, 'lost');
+              this.barcode = '';
+              this.loading = false;
+              return;
+            } else {
+              console.log("Auto-resolution for lost item should be triggered");
+            }
           }
           
           // Handle withdrawn items
@@ -787,14 +799,19 @@ export default {
             resolveWithdrawnItems: this.resolutionSettings.resolveWithdrawnItems
           });
           
-          // Update the withdrawn status
+          // Store the original withdrawn status for reference and display
+          combinedData.originalWithdrawnStatus = combinedData.withdrawn;
+          
+          // Update the withdrawn status in the system
           const fieldsToUpdate = { withdrawn: '0' };
           const withdrawnResolved = await this.updateSingleItemStatus(combinedData.external_id, fieldsToUpdate);
           
           if (withdrawnResolved) {
-            console.log("Withdrawn status successfully removed");
-            combinedData.withdrawn = '0';
-            combinedData.wasWithdrawn = true;
+            console.log("Withdrawn status successfully removed from system");
+            // Don't clear withdrawn status in the UI data to preserve it for display
+            // combinedData.withdrawn = '0';
+            combinedData.wasWithdrawn = true; // Keep track that it was withdrawn
+            
             // Add resolution flags for display
             combinedData.resolutionType = 'withdrawn';
             combinedData.resolutionAction = 'automatically restored';
@@ -806,6 +823,41 @@ export default {
             });
           } else {
             console.log("Failed to remove withdrawn status");
+          }
+        }
+
+        // Check if item is lost and should be automatically marked as found
+        if (combinedData.lost_status !== '0' && combinedData.lost_status && this.resolutionSettings.resolveLostItems) {
+          console.log("Executing automatic lost item resolution:", {
+            barcode: combinedData.external_id,
+            lost_status: combinedData.lost_status
+          });
+          
+          // Store the original lost status for reference and display
+          combinedData.originalLostStatus = combinedData.lost_status;
+          
+          // Update the lost status in the system
+          // Update the lost status
+          const fieldsToUpdate = { itemlost: '0' };
+          const lostResolved = await this.updateSingleItemStatus(combinedData.external_id, fieldsToUpdate);
+          
+          if (lostResolved) {
+            console.log("Lost status successfully removed from system");
+            // We don't clear lost_status in the UI data to preserve the reason for display
+            // combinedData.lost_status = '0';
+            combinedData.wasLost = true; // Keep track that it was lost
+            
+            // Add resolution flags for display
+            combinedData.resolutionType = 'lost';
+            combinedData.resolutionAction = 'automatically found';
+            combinedData.pendingResolution = false;
+            
+            EventBus.emit('message', { 
+              type: 'success', 
+              text: `Item ${combinedData.external_id} marked as found (was lost)` 
+            });
+          } else {
+            console.log("Failed to update lost status");
           }
         }
 
@@ -837,16 +889,16 @@ export default {
         }
 
         // Check if the item is marked as lost and update its status
-        if (combinedData.lost_status !== "0" && combinedData.lost_status) {
+        // This legacy code path should only run if we aren't using the new resolution process
+        if (combinedData.lost_status !== "0" && combinedData.lost_status &&
+            !this.resolutionSettings.resolveLostItems && !this.manualResolutionEnabled) {
           combinedData.wasLost = true; // Flag the item as previously lost
-          //add the key-value pair to the fields to amend object
-          if (!this.sessionData.ignoreLostStatus) {
-            fieldsToAmend["itemlost"] = '0';
-            // Add resolution flags for display since lost status is automatically cleared
-            combinedData.resolutionType = 'lost';
-            combinedData.resolutionAction = 'marked found';
-            combinedData.pendingResolution = false;
-          }
+          // Add the key-value pair to the fields to amend object
+          fieldsToAmend["itemlost"] = '0';
+          // Add resolution flags for display since lost status is automatically cleared
+          combinedData.resolutionType = 'lost';
+          combinedData.resolutionAction = 'marked found';
+          combinedData.pendingResolution = false;
         }
 
         if (this.sessionData.checkShelvedOutOfOrder && combinedData.call_number_sort < this.highestCallNumberSort) {
@@ -1046,7 +1098,8 @@ export default {
         resolveReturnClaims: sessionData.resolutionSettings?.resolveReturnClaims || false,
         resolveInTransitItems: sessionData.resolutionSettings?.resolveInTransitItems || false,
         resolveWithdrawnItems: sessionData.resolutionSettings?.resolveWithdrawnItems || false,
-        enableManualResolution: this.manualResolutionEnabled
+        enableManualResolution: this.manualResolutionEnabled,
+        resolveLostItems: sessionData.resolutionSettings?.resolveLostItems || false
       };
       
       // Log resolution settings for debugging
@@ -1562,7 +1615,6 @@ export default {
       this.skipBranchMismatchItems = data.skipBranchMismatchItems;
       this.doNotCheckIn = data.doNotCheckIn;
       this.checkShelvedOutOfOrder = data.checkShelvedOutOfOrder;
-      this.ignoreLostStatus = data.ignoreLostStatus;
       this.statuses = data.statuses;
       this.locations = data.locations;
       this.compareBarcodes = data.compareBarcodes;
@@ -1697,12 +1749,18 @@ export default {
             
           case 'lost':
             if (action === 'found') {
-              updatedItem.lost_status = '0';
+              // Store the original lost status for reference and display
+              updatedItem.originalLostStatus = updatedItem.lost_status;
               updatedItem.wasLost = true; // Keep track that it was lost
+              
+              // Don't clear the lost_status in the UI data
+              // This preserves the reason while still showing it as resolved
               
               // Update resolution information
               updatedItem.pendingResolution = false;
               updatedItem.resolutionAction = 'marked found';
+              
+              // Update item status in Koha - but don't update our local display data
             } else if (action === 'skip') {
               // Update resolution information
               updatedItem.pendingResolution = true;
@@ -1712,8 +1770,12 @@ export default {
             
           case 'withdrawn':
             if (action === 'restore') {
-              updatedItem.withdrawn = '0'; // Update withdrawn status to not withdrawn
+              // Store the original withdrawn status for reference and display
+              updatedItem.originalWithdrawnStatus = updatedItem.withdrawn;
               updatedItem.wasWithdrawn = true; // Keep track that it was withdrawn
+              
+              // Don't clear the withdrawn status in the UI data
+              // This preserves the status for display while still showing it as resolved
               
               // Update resolution information
               updatedItem.pendingResolution = false;
@@ -1763,10 +1825,13 @@ export default {
           if (type === 'checkedout') {
             updatedItem.checked_out_date = null;
           } else if (type === 'lost') {
-            // Keep wasLost true for history but clear active flags
-            updatedItem.lost_status = '0';
+            // Keep wasLost true for history but clear active flags for display
+            // Don't clear lost_status - we want to preserve the reason for display
+            // updatedItem.lost_status = '0';
           } else if (type === 'withdrawn') {
-            updatedItem.withdrawn = '0';
+            // Keep wasWithdrawn true for history but clear active flags for display
+            // Don't clear withdrawn status - we want to preserve it for display
+            // updatedItem.withdrawn = '0';
           } else if (type === 'intransit') {
             updatedItem.in_transit = false;
           } else if (type === 'returnclaim') {

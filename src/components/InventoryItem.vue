@@ -61,6 +61,9 @@
         <p v-if="item.wasLost" class="item-warning"><strong>Warning:</strong></p>
         <p v-if="item.wasLost" class="item-warning">This item was previously marked as lost. Reason: {{ lostReason }}
         </p>
+        <p v-if="item.wasWithdrawn" class="item-warning"><strong>Warning:</strong></p>
+        <p v-if="item.wasWithdrawn" class="item-warning">This item was previously withdrawn from circulation.
+        </p>
         <p v-if="item.wrongPlace" class="item-warning"><strong>Warning:</strong></p>
         <p v-if="item.wrongPlace" class="item-warning">This item may be in the wrong place. It is not in the list of
           expected items to be scanned.</p>
@@ -158,7 +161,7 @@ export default {
         return false;
       }
       
-      return this.item.wasLost || this.item.wrongPlace || this.item.checked_out_date || 
+      return this.item.wasLost || this.item.wasWithdrawn || this.item.wrongPlace || this.item.checked_out_date || 
              this.item.outOfOrder || this.item.invalidStatus || 
              (this.item.in_transit && this.alertSettings.showInTransitAlerts) || 
              (this.item.homebranch !== this.item.holdingbranch && this.alertSettings.showBranchMismatchAlerts) ||
