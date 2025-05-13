@@ -71,7 +71,7 @@
     </div>
     <button v-if="sessionStarted" @click="toggleEndSessionModal" class="end-session-button">End Session</button>
     <button v-if="sessionStarted" @click="toggleMissingItemsModal" class="missing-items-button">
-      Missing Items
+      Dashboard
       <span v-if="getMissingItemsCount() > 0" class="missing-count">{{ getMissingItemsCount() }}</span>
     </button>
     <button v-if="sessionStarted && previewEnabled" @click="toggleShelfPreview" class="shelf-preview-button">
