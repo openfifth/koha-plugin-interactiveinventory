@@ -525,7 +525,7 @@ export default {
         }
         
         // Skip items that are checked out if the session is configured to do so
-        if (this.sessionData.skipCheckedOutItems && item.checked_out) {
+        if (this.sessionData.skipCheckedOutItems && (item.checked_out || item.checked_out_date)) {
           return false;
         }
         
@@ -693,6 +693,15 @@ export default {
     async markItemAsMissing(item) {
       // Prevent executing this function if already in loading state
       if (this.loading) return;
+      
+      // Don't mark checked out items as missing
+      if (item.checked_out || item.checked_out_date) {
+        EventBus.emit('message', {
+          type: 'warning',
+          text: `Item "${item.title || item.barcode}" is checked out and cannot be marked as missing.`
+        });
+        return;
+      }
       
       try {
         // Set loading state
@@ -867,8 +876,35 @@ export default {
       // Set loading state
       this.loading = true;
       
+      // Filter out items that shouldn't be processed (checked out items)
+      const itemsToProcess = this.selectedItems.filter(barcode => {
+        const item = this.missingItems.find(i => i.barcode === barcode);
+        if (!item) return false;
+        
+        // Don't mark checked out items as missing
+        if (item.checked_out || item.checked_out_date) {
+          console.log(`Skipping checked out item: ${item.barcode}`);
+          EventBus.emit("showSnackbar", {
+            message: `Item ${item.barcode} is checked out and won't be marked as missing.`,
+            type: "warning",
+          });
+          return false;
+        }
+        
+        return true;
+      });
+      
+      if (itemsToProcess.length === 0) {
+        this.loading = false;
+        EventBus.emit("showSnackbar", {
+          message: "No items to process after filtering out checked out items.",
+          type: "info",
+        });
+        return;
+      }
+      
       // Process each selected item
-      const promises = this.selectedItems.map(barcode => {
+      const promises = itemsToProcess.map(barcode => {
         // Find the item object for this barcode
         const item = this.missingItems.find(i => i.barcode === barcode);
         if (!item) return Promise.resolve(); // Skip if item not found
@@ -1043,6 +1079,15 @@ export default {
       // Don't process if already marked as missing
       if (item.status === 'missing') return;
       
+      // Don't mark checked out items as missing
+      if (item.checked_out || item.checked_out_date) {
+        EventBus.emit('message', {
+          type: 'warning',
+          text: `Item "${item.title || item.barcode}" is checked out and cannot be marked as missing.`
+        });
+        return;
+      }
+      
       try {
         this.loading = true;
         
@@ -1162,7 +1207,15 @@ export default {
           promises.push(this.markProcessedItemAsFound(item));
         } else {
           // If currently found/scanned, mark as missing
-          promises.push(this.markProcessedItemAsMissing(item));
+          // Skip checked out items
+          if (item.checked_out || item.checked_out_date) {
+            EventBus.emit('message', {
+              type: 'warning',
+              text: `Item "${item.title || item.barcode}" is checked out and cannot be marked as missing.`
+            });
+          } else {
+            promises.push(this.markProcessedItemAsMissing(item));
+          }
         }
       });
       

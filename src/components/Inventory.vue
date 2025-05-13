@@ -348,8 +348,7 @@ export default {
               return false;
             }
             
-            // Skip items that are checked out if the session is configured to do so
-            if (this.sessionData.skipCheckedOutItems && item.checked_out) {
+            if ( item.checked_out_date ) {
               console.log(`Skipping checked out item: ${item.barcode}`);
               return false;
             }
@@ -807,7 +806,7 @@ export default {
             resolveWithdrawnItems: this.resolutionSettings.resolveWithdrawnItems
           });
           
-          // Store the original withdrawn status for reference and display
+          // Store the original withdrawn status for reference
           combinedData.originalWithdrawnStatus = combinedData.withdrawn;
           
           // Update the withdrawn status in the system
@@ -816,8 +815,8 @@ export default {
           
           if (withdrawnResolved) {
             console.log("Withdrawn status successfully removed from system");
-            // Don't clear withdrawn status in the UI data to preserve it for display
-            // combinedData.withdrawn = '0';
+            // Clear withdrawn status in the UI data
+            combinedData.withdrawn = '0';
             combinedData.wasWithdrawn = true; // Keep track that it was withdrawn
             
             // Add resolution flags for display
@@ -1599,7 +1598,7 @@ export default {
         }
         
         // Skip items that are checked out if the session is configured to do so
-        if (this.sessionData.skipCheckedOutItems && item.checked_out) {
+        if (this.sessionData.skipCheckedOutItems && (item.checked_out || item.checked_out_date)) {
           return false;
         }
         
@@ -1784,12 +1783,12 @@ export default {
             
           case 'withdrawn':
             if (action === 'restore') {
-              // Store the original withdrawn status for reference and display
+              // Store the original withdrawn status for reference
               updatedItem.originalWithdrawnStatus = updatedItem.withdrawn;
               updatedItem.wasWithdrawn = true; // Keep track that it was withdrawn
               
-              // Don't clear the withdrawn status in the UI data
-              // This preserves the status for display while still showing it as resolved
+              // Clear the withdrawn status in the UI data 
+              updatedItem.withdrawn = '0'; // Clear withdrawn status for display
               
               // Update resolution information
               updatedItem.pendingResolution = false;
@@ -1843,9 +1842,8 @@ export default {
             // Don't clear lost_status - we want to preserve the reason for display
             // updatedItem.lost_status = '0';
           } else if (type === 'withdrawn') {
-            // Keep wasWithdrawn true for history but clear active flags for display
-            // Don't clear withdrawn status - we want to preserve it for display
-            // updatedItem.withdrawn = '0';
+            // Keep wasWithdrawn true for history but explicitly clear withdrawn status for display
+            updatedItem.withdrawn = '0';
           } else if (type === 'intransit') {
             updatedItem.in_transit = false;
           } else if (type === 'returnclaim') {
