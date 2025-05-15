@@ -3,78 +3,87 @@
     <InventorySetupForm ref="setupForm" @start-session="initiateInventorySession"
       :fetchAuthorizedValues="fetchAuthorizedValues" v-if="!sessionStarted" />
     <div v-else>
-      <div class="barcode-input-container">
-        <form @submit.prevent="submitBarcode" class="barcode-form">
-          <div class="input-group">
-            <input type="text" v-model="barcode" id="barcode_input" ref="barcodeInput" autocomplete="off"
-              placeholder="Enter or scan a barcode..." :disabled="scannerMode" />
-            <button type="button" @click="toggleScannerMode" class="camera-button" :class="{ active: scannerMode }">
-              <span v-if="scannerMode">❌</span>
-              <span v-else>📷</span>
-            </button>
-            <button type="submit" :disabled="scannerMode">Submit</button>
+      <!-- Loading indicator while session is initializing -->
+      <div v-if="sessionInitializing" class="session-initializing">
+        <div class="spinner"></div>
+        <p>Please wait while the inventory session initializes...</p>
+        <p class="loading-detail">Loading expected barcodes and location data</p>
+      </div>
+      
+      <div v-else>
+        <div class="barcode-input-container">
+          <form @submit.prevent="submitBarcode" class="barcode-form">
+            <div class="input-group">
+              <input type="text" v-model="barcode" id="barcode_input" ref="barcodeInput" autocomplete="off"
+                placeholder="Enter or scan a barcode..." :disabled="scannerMode" />
+              <button type="button" @click="toggleScannerMode" class="camera-button" :class="{ active: scannerMode }">
+                <span v-if="scannerMode">❌</span>
+                <span v-else>📷</span>
+              </button>
+              <button type="submit" :disabled="scannerMode">Submit</button>
+            </div>
+          </form>
+        </div>
+
+        <!-- Scanner and latest scan in a flex container for desktop -->
+        <div v-if="scannerMode" class="scanner-with-results">
+          <div class="scanner-panel">
+            <BarcodeScanner @barcode-detected="onBarcodeDetected" />
+            <div class="scanner-help-text">
+              <p>Point your camera at a barcode to scan it automatically.</p>
+            </div>
           </div>
-        </form>
-      </div>
 
-      <!-- Scanner and latest scan in a flex container for desktop -->
-      <div v-if="scannerMode" class="scanner-with-results">
-        <div class="scanner-panel">
-          <BarcodeScanner @barcode-detected="onBarcodeDetected" />
-          <div class="scanner-help-text">
-            <p>Point your camera at a barcode to scan it automatically.</p>
+          <div v-if="latestItem" class="latest-scan-panel">
+            <h3>Latest Scan</h3>
+            <InventoryItem :item="latestItem" :index="0" :isExpanded="true" @toggleExpand="() => { }"
+              :fetchAuthorizedValues="fetchAuthorizedValues" :sessionData="sessionData"
+              :currentItemWithHighestCallNumber="itemWithHighestCallNumber"
+              :currentBiblioWithHighestCallNumber="biblioWithHighestCallNumber" :alert-settings="alertSettings" />
           </div>
         </div>
 
-        <div v-if="latestItem" class="latest-scan-panel">
-          <h3>Latest Scan</h3>
-          <InventoryItem :item="latestItem" :index="0" :isExpanded="true" @toggleExpand="() => { }"
-            :fetchAuthorizedValues="fetchAuthorizedValues" :sessionData="sessionData"
-            :currentItemWithHighestCallNumber="itemWithHighestCallNumber"
-            :currentBiblioWithHighestCallNumber="biblioWithHighestCallNumber" :alert-settings="alertSettings" />
-        </div>
-      </div>
+        <!-- Manual mode - full width layout -->
+        <div v-if="!scannerMode" class="manual-mode-results">
+          <div v-if="latestItem" class="latest-scan-panel">
+            <h3>Latest Scan</h3>
+            <InventoryItem :item="latestItem" :index="0" :isExpanded="true" @toggleExpand="() => { }"
+              :fetchAuthorizedValues="fetchAuthorizedValues" :sessionData="sessionData"
+              :currentItemWithHighestCallNumber="itemWithHighestCallNumber"
+              :currentBiblioWithHighestCallNumber="biblioWithHighestCallNumber" :alert-settings="alertSettings" />
+          </div>
 
-      <!-- Manual mode - full width layout -->
-      <div v-if="!scannerMode" class="manual-mode-results">
-        <div v-if="latestItem" class="latest-scan-panel">
-          <h3>Latest Scan</h3>
-          <InventoryItem :item="latestItem" :index="0" :isExpanded="true" @toggleExpand="() => { }"
-            :fetchAuthorizedValues="fetchAuthorizedValues" :sessionData="sessionData"
-            :currentItemWithHighestCallNumber="itemWithHighestCallNumber"
-            :currentBiblioWithHighestCallNumber="biblioWithHighestCallNumber" :alert-settings="alertSettings" />
+          <div id="inventory_results" class="items-list">
+            <h3>Previous Scans</h3>
+            <p v-if="previousItems.length === 0" class="no-items-message">No previous scans yet.</p>
+            <InventoryItem v-for="(item, index) in previousItems" :key="`${index}-${item.id}`" :item="item"
+              :index="index + 1" :isExpanded="item.isExpanded" @toggleExpand="handleToggleExpand"
+              :fetchAuthorizedValues="fetchAuthorizedValues" :sessionData="sessionData"
+              :currentItemWithHighestCallNumber="itemWithHighestCallNumber"
+              :currentBiblioWithHighestCallNumber="biblioWithHighestCallNumber" :alert-settings="alertSettings" />
+          </div>
         </div>
 
-        <div id="inventory_results" class="items-list">
-          <h3>Previous Scans</h3>
-          <p v-if="previousItems.length === 0" class="no-items-message">No previous scans yet.</p>
-          <InventoryItem v-for="(item, index) in previousItems" :key="`${index}-${item.id}`" :item="item"
-            :index="index + 1" :isExpanded="item.isExpanded" @toggleExpand="handleToggleExpand"
-            :fetchAuthorizedValues="fetchAuthorizedValues" :sessionData="sessionData"
-            :currentItemWithHighestCallNumber="itemWithHighestCallNumber"
-            :currentBiblioWithHighestCallNumber="biblioWithHighestCallNumber" :alert-settings="alertSettings" />
-        </div>
-      </div>
-
-      <!-- Only show this in scanner mode -->
-      <div v-if="scannerMode" class="result-panel">
-        <div id="inventory_results" class="items-list">
-          <h3>Previous Scans</h3>
-          <p v-if="previousItems.length === 0" class="no-items-message">No previous scans yet.</p>
-          <InventoryItem v-for="(item, index) in previousItems" :key="`${index}-${item.id}`" :item="item"
-            :index="index + 1" :isExpanded="item.isExpanded" @toggleExpand="handleToggleExpand"
-            :fetchAuthorizedValues="fetchAuthorizedValues" :sessionData="sessionData"
-            :currentItemWithHighestCallNumber="itemWithHighestCallNumber"
-            :currentBiblioWithHighestCallNumber="biblioWithHighestCallNumber" :alert-settings="alertSettings" />
+        <!-- Only show this in scanner mode -->
+        <div v-if="scannerMode" class="result-panel">
+          <div id="inventory_results" class="items-list">
+            <h3>Previous Scans</h3>
+            <p v-if="previousItems.length === 0" class="no-items-message">No previous scans yet.</p>
+            <InventoryItem v-for="(item, index) in previousItems" :key="`${index}-${item.id}`" :item="item"
+              :index="index + 1" :isExpanded="item.isExpanded" @toggleExpand="handleToggleExpand"
+              :fetchAuthorizedValues="fetchAuthorizedValues" :sessionData="sessionData"
+              :currentItemWithHighestCallNumber="itemWithHighestCallNumber"
+              :currentBiblioWithHighestCallNumber="biblioWithHighestCallNumber" :alert-settings="alertSettings" />
+          </div>
         </div>
       </div>
     </div>
-    <button v-if="sessionStarted" @click="toggleEndSessionModal" class="end-session-button">End Session</button>
-    <button v-if="sessionStarted" @click="toggleMissingItemsModal" class="missing-items-button">
+    <button v-if="sessionStarted && !sessionInitializing" @click="toggleEndSessionModal" class="end-session-button">End Session</button>
+    <button v-if="sessionStarted && !sessionInitializing" @click="toggleMissingItemsModal" class="missing-items-button">
       Dashboard
       <span v-if="getMissingItemsCount() > 0" class="missing-count">{{ getMissingItemsCount() }}</span>
     </button>
-    <button v-if="sessionStarted && previewEnabled" @click="toggleShelfPreview" class="shelf-preview-button">
+    <button v-if="sessionStarted && !sessionInitializing && previewEnabled" @click="toggleShelfPreview" class="shelf-preview-button">
       Shelf Preview
       <span v-if="upcomingItemsCount > 0" class="upcoming-count">{{ upcomingItemsCount }}</span>
     </button>
@@ -190,6 +199,7 @@ export default {
       items: [],
       sessionData: null,
       sessionStarted: false,
+      sessionInitializing: false,
       highestCallNumberSort: '',
       itemWithHighestCallNumber: '',
       biblioWithHighestCallNumber: '',
@@ -255,12 +265,15 @@ export default {
   methods: {
     checkForExistingSession() {
       if (isSessionActive()) {
+        // Show initializing state
+        this.sessionInitializing = true;
+        this.sessionStarted = true;
+        
         // Chain promises instead of using async/await
         getSession()
           .then(savedSessionData => {
             if (savedSessionData) {
               this.sessionData = savedSessionData;
-              this.sessionStarted = true;
               
               // Get saved items
               return getItems().then(savedItems => {
@@ -269,7 +282,14 @@ export default {
                   // Restore the highest call number tracking
                   this.updateHighestCallNumber();
                 }
-                return getMarkedMissingItems();
+                
+                // Safely get marked missing items
+                try {
+                  return getMarkedMissingItems();
+                } catch (error) {
+                  console.error('Error getting marked missing items:', error);
+                  return [];
+                }
               });
             }
             return Promise.reject('No saved session data found');
@@ -278,6 +298,9 @@ export default {
             // Restore marked missing items if available
             if (savedMarkedMissingItems && Array.isArray(savedMarkedMissingItems)) {
               this.markedMissingItems = new Set(savedMarkedMissingItems);
+            } else {
+              // Initialize with empty set if no saved data
+              this.markedMissingItems = new Set();
             }
             
             EventBus.emit('message', { text: 'Session restored successfully', type: 'status' });
@@ -287,6 +310,10 @@ export default {
               if (this.$refs.barcodeInput) {
                 this.$refs.barcodeInput.focus();
               }
+              // Hide initializing state after a slight delay
+              setTimeout(() => {
+                this.sessionInitializing = false;
+              }, 500);
             });
           })
           .catch(error => {
@@ -294,6 +321,7 @@ export default {
               console.error('Error restoring session:', error);
               EventBus.emit('message', { text: 'Error restoring session: ' + (error.message || error), type: 'error' });
             }
+            this.sessionInitializing = false;
           });
       }
     },
@@ -1099,6 +1127,7 @@ export default {
     async initiateInventorySession(sessionData) {
       this.sessionData = sessionData;
       this.sessionStarted = true;
+      this.sessionInitializing = true; // Enable the loading indicator
       
       // Set the manual resolution setting from sessionData
       this.manualResolutionEnabled = sessionData.resolutionSettings?.enableManualResolution !== undefined ? 
@@ -1263,11 +1292,24 @@ export default {
           text: `Inventory session started with ${this.sessionData.response_data.total_records || 0} items`, 
           type: 'status' 
         });
+        
+        // Give a short delay before disabling the loading state to ensure everything is rendered
+        setTimeout(() => {
+          this.sessionInitializing = false;
+          
+          // Focus on barcode input after initialization completes
+          this.$nextTick(() => {
+            if (this.$refs.barcodeInput) {
+              this.$refs.barcodeInput.focus();
+            }
+          });
+        }, 1000);
       })
       .catch(error => {
         console.error('Inventory session error:', error);
         this.sessionStarted = false;
         this.sessionData = null;
+        this.sessionInitializing = false;
         
         EventBus.emit('message', { 
           text: `Error starting inventory session: ${error.message}`, 
@@ -1599,8 +1641,8 @@ export default {
       // Get a set of scanned barcodes for quick lookup
       const scannedBarcodesSet = new Set(this.items.map(item => item.external_id));
       
-      // Get a set of already marked missing barcodes
-      const markedMissingSet = new Set(getMarkedMissingItems());
+      // Use our already initialized markedMissingItems set
+      const markedMissingSet = this.markedMissingItems;
       
       // Count items that haven't been scanned, aren't marked as missing, and meet session criteria
       const count = itemsToCheck.filter(item => {
@@ -2026,8 +2068,14 @@ export default {
     },
 
     handleMissingItemsUpdated() {
-      // Update the local set of marked missing items
-      this.markedMissingItems = new Set(getMarkedMissingItems());
+      // Update the local set of marked missing items with defensive handling
+      try {
+        const markedItems = getMarkedMissingItems();
+        this.markedMissingItems = new Set(Array.isArray(markedItems) ? markedItems : []);
+      } catch (error) {
+        console.error('Error updating marked missing items:', error);
+        this.markedMissingItems = new Set();
+      }
       
       // Recalculate the missing items count for the badge
       this.$forceUpdate();
@@ -2432,5 +2480,36 @@ h3 {
     font-size: 10px;
     margin-left: 2px;
   }
+}
+
+/* Loading indicator styles */
+.session-initializing {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  text-align: center;
+}
+
+.spinner {
+  border: 4px solid rgba(0, 0, 0, 0.1);
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border-top: 4px solid #007bff;
+  animation: spin 1s linear infinite;
+  margin-bottom: 20px;
+}
+
+.loading-detail {
+  color: #666;
+  font-size: 0.9rem;
+  margin-top: 5px;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
 }
 </style>
