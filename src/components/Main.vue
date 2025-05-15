@@ -22,13 +22,7 @@ export default {
     EventBus.on('message', this.displayMessage);
 
     // Extend session expiry if the app is being used
-    if (isSessionActive()) {
-      // If session exists, extend its expiry time
-      const currentSession = getSession();
-      if (currentSession) {
-        saveSession(currentSession);
-      }
-    }
+    this.extendSessionIfActive();
   },
   methods: {
     displayMessage(message) {
@@ -36,6 +30,20 @@ export default {
       setTimeout(() => {
         this.message = null;
       }, 3000); // Hide after 3 seconds
+    },
+    
+    async extendSessionIfActive() {
+      if (isSessionActive()) {
+        try {
+          // If session exists, extend its expiry time
+          const currentSession = await getSession();
+          if (currentSession) {
+            await saveSession(currentSession);
+          }
+        } catch (error) {
+          console.error('Error extending session:', error);
+        }
+      }
     }
   },
   beforeDestroy() {

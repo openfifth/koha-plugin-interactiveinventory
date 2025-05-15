@@ -232,7 +232,7 @@ export default {
       currentResolutionType: '',
       currentPatronName: '',
       manualResolutionEnabled: true,
-      markedMissingItems: new Set(getMarkedMissingItems()),
+      markedMissingItems: new Set(),
       upcomingItemsCount: 0,
       authorizedValueCategories: {},
     };
@@ -255,42 +255,46 @@ export default {
   methods: {
     checkForExistingSession() {
       if (isSessionActive()) {
-        const savedSessionData = getSession();
-        const savedItems = getItems();
-        const savedMarkedMissingItems = getMarkedMissingItems();
-
-        if (savedSessionData) {
-          this.sessionData = savedSessionData;
-          this.sessionStarted = true;
-
-          if (savedItems) {
-            this.items = savedItems;
-
-            // Restore the highest call number tracking
-            this.updateHighestCallNumber();
-          }
-          
-          // Restore marked missing items if available
-          if (savedMarkedMissingItems && Array.isArray(savedMarkedMissingItems)) {
-            this.markedMissingItems = new Set(savedMarkedMissingItems);
-          }
-
-          EventBus.emit('message', { text: 'Session restored successfully', type: 'status' });
-
-          // Focus on barcode input after a short delay to ensure the DOM is ready
-          this.$nextTick(() => {
-            if (this.$refs.barcodeInput) {
-              this.$refs.barcodeInput.focus();
+        // Chain promises instead of using async/await
+        getSession()
+          .then(savedSessionData => {
+            if (savedSessionData) {
+              this.sessionData = savedSessionData;
+              this.sessionStarted = true;
+              
+              // Get saved items
+              return getItems().then(savedItems => {
+                if (savedItems) {
+                  this.items = savedItems;
+                  // Restore the highest call number tracking
+                  this.updateHighestCallNumber();
+                }
+                return getMarkedMissingItems();
+              });
+            }
+            return Promise.reject('No saved session data found');
+          })
+          .then(savedMarkedMissingItems => {
+            // Restore marked missing items if available
+            if (savedMarkedMissingItems && Array.isArray(savedMarkedMissingItems)) {
+              this.markedMissingItems = new Set(savedMarkedMissingItems);
+            }
+            
+            EventBus.emit('message', { text: 'Session restored successfully', type: 'status' });
+            
+            // Focus on barcode input after a short delay to ensure the DOM is ready
+            this.$nextTick(() => {
+              if (this.$refs.barcodeInput) {
+                this.$refs.barcodeInput.focus();
+              }
+            });
+          })
+          .catch(error => {
+            if (error !== 'No saved session data found') {
+              console.error('Error restoring session:', error);
+              EventBus.emit('message', { text: 'Error restoring session: ' + (error.message || error), type: 'error' });
             }
           });
-        }
-      } else {
-        // Only load form data if we're showing the form (no active session)
-        this.$nextTick(() => {
-          if (this.$refs.setupForm) {
-            this.$refs.setupForm.loadFormData();
-          }
-        });
       }
     },
 
@@ -1117,72 +1121,65 @@ export default {
         console.log('Preview settings:', sessionData.previewSettings);
       }
       
-      try {
-        // Display filter information to the user
-        if (sessionData.shelvingLocation) {
-          const locationName = sessionData.shelvingLocations && sessionData.shelvingLocations[sessionData.shelvingLocation]
-            ? sessionData.shelvingLocations[sessionData.shelvingLocation]
-            : sessionData.shelvingLocation;
-          EventBus.emit('message', { 
-            type: 'status', 
-            text: `Applying shelving location filter: ${locationName}` 
-          });
-        }
-        
-        // Display comparison mode
-        if (sessionData.compareBarcodes) {
-          EventBus.emit('message', { 
-            type: 'status', 
-            text: 'Expected barcodes comparison mode is ON. Generating expected barcodes list...' 
-          });
-        } else {
-          EventBus.emit('message', { 
-            type: 'status', 
-            text: 'Expected barcodes comparison mode is OFF. No expected barcodes list will be generated.' 
-          });
-        }
-        
-        EventBus.emit('message', { type: 'status', text: 'Starting inventory session...' });
-        
-        // Make the API request with improved error handling
-        const response = await fetch(
-          `/cgi-bin/koha/plugins/run.pl?class=Koha::Plugin::Com::InteractiveInventory&method=start_session&session_data=${encodeURIComponent(JSON.stringify(sessionData))}`,
-          {
-            method: 'GET',
-            headers: {
-              'Content-Type': 'application/json',
-              'Accept': 'application/json'
-            }
+      // Display filter information to the user
+      if (sessionData.shelvingLocation) {
+        const locationName = sessionData.shelvingLocations && sessionData.shelvingLocations[sessionData.shelvingLocation]
+          ? sessionData.shelvingLocations[sessionData.shelvingLocation]
+          : sessionData.shelvingLocation;
+        EventBus.emit('message', { 
+          type: 'status', 
+          text: `Applying shelving location filter: ${locationName}` 
+        });
+      }
+      
+      // Display comparison mode
+      if (sessionData.compareBarcodes) {
+        EventBus.emit('message', { 
+          type: 'status', 
+          text: 'Expected barcodes comparison mode is ON. Generating expected barcodes list...' 
+        });
+      } else {
+        EventBus.emit('message', { 
+          type: 'status', 
+          text: 'Expected barcodes comparison mode is OFF. No expected barcodes list will be generated.' 
+        });
+      }
+      
+      EventBus.emit('message', { type: 'status', text: 'Starting inventory session...' });
+      
+      // Make the API request with improved error handling
+      fetch(
+        `/cgi-bin/koha/plugins/run.pl?class=Koha::Plugin::Com::InteractiveInventory&method=start_session&session_data=${encodeURIComponent(JSON.stringify(sessionData))}`,
+        {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
           }
-        );
-
+        }
+      ).then(response => {
         // Check for HTTP errors
         if (!response.ok) {
-          const contentType = response.headers.get('content-type');
-          if (contentType && contentType.includes('application/json')) {
-            const errorData = await response.json();
-            throw new Error(errorData.error || `Server error: ${response.status} ${response.statusText}`);
-          } else {
-            const errorText = await response.text();
-            throw new Error(`Non-JSON error response: ${errorText || response.statusText}`);
-          }
+          return response.headers.get('content-type').includes('application/json') 
+            ? response.json().then(errorData => {
+                throw new Error(errorData.error || `Server error: ${response.status} ${response.statusText}`);
+              })
+            : response.text().then(errorText => {
+                throw new Error(`Non-JSON error response: ${errorText || response.statusText}`);
+              });
         }
-
+        
         // Parse the JSON response with error handling
-        let data;
-        try {
-          const responseText = await response.text();
+        return response.text().then(responseText => {
           try {
-            data = JSON.parse(responseText);
+            return JSON.parse(responseText);
           } catch (jsonError) {
             console.error('JSON Parse Error:', jsonError, 'Response text:', responseText);
             throw new Error(`Invalid JSON response: ${jsonError.message}`);
           }
-        } catch (textError) {
-          console.error('Error reading response text:', textError);
-          throw new Error('Unable to read response data');
-        }
-
+        });
+      })
+      .then(data => {
         // Validate response data
         if (!data) {
           throw new Error('Empty response received');
@@ -1209,15 +1206,25 @@ export default {
         this.sessionData.response_data = data;
 
         // Save session data to session storage
-        saveSession(this.sessionData);
-
+        return saveSession(this.sessionData).catch(error => {
+          console.error('Inventory session error when saving session:', error);
+          EventBus.emit('message', { 
+            text: `Error saving session data: ${error.message}. Try using fewer filters or a smaller item set.`, 
+            type: 'error' 
+          });
+        });
+      })
+      .then(() => {
         // Clear any existing items
         this.items = [];
-        saveItems(this.items);
-
+        return saveItems(this.items).catch(error => {
+          console.error('Error saving empty items list:', error);
+        });
+      })
+      .then(() => {
         // Provide information about expected barcodes list based on compareBarcodes setting
         if (this.sessionData.compareBarcodes) {
-          const rightPlaceList = data.right_place_list || [];
+          const rightPlaceList = this.sessionData.response_data.right_place_list || [];
           if (rightPlaceList.length > 0) {
             EventBus.emit('message', {
               text: `Expected barcodes list contains ${rightPlaceList.length} items. Items not on this list will be flagged.`, 
@@ -1253,10 +1260,11 @@ export default {
         }
 
         EventBus.emit('message', { 
-          text: `Inventory session started with ${data.total_records || 0} items`, 
+          text: `Inventory session started with ${this.sessionData.response_data.total_records || 0} items`, 
           type: 'status' 
         });
-      } catch (error) {
+      })
+      .catch(error => {
         console.error('Inventory session error:', error);
         this.sessionStarted = false;
         this.sessionData = null;
@@ -1273,7 +1281,7 @@ export default {
             type: 'error' 
           });
         }
-      }
+      });
     },
 
     handleToggleExpand(itemId) {
@@ -1663,6 +1671,147 @@ export default {
       this.getItems();
     },
 
+    markItemMissing(barcode) {
+      // Update the Set with the barcode
+      this.markedMissingItems.add(barcode);
+      
+      // Convert the Set to an array for storage
+      const barcodesArray = Array.from(this.markedMissingItems);
+      
+      // Save to storage
+      saveMarkedMissingItems(barcodesArray)
+        .then(() => {
+          EventBus.emit('message', { text: `Item ${barcode} marked as missing`, type: 'status' });
+        })
+        .catch(error => {
+          console.error('Error marking item as missing:', error);
+          EventBus.emit('message', { text: 'Error marking item as missing: ' + error.message, type: 'error' });
+        });
+    },
+
+    processItem(item) {
+      // Add more fields from the inventory response if available
+      if (this.sessionData && this.sessionData.response_data) {
+        // If we are comparing against expected barcodes
+        if (this.sessionData.compareBarcodes && this.sessionData.response_data.right_place_list) {
+          const rightPlaceList = this.sessionData.response_data.right_place_list;
+          
+          // Check if the scanned item is in the "right place" list
+          const expectedItem = rightPlaceList.find(listItem => 
+            listItem.barcode === item.external_id
+          );
+          
+          // Set a flag to indicate if this item is on the expected list
+          item.isOnExpectedList = !!expectedItem;
+        }
+      }
+      
+      // Add the processed item to the top of the list
+      this.items.unshift(item);
+      
+      // Set all items to be collapsed except the first one
+      this.items = this.items.map((item, index) => ({
+        ...item,
+        isExpanded: index === 0 // Only expand the first item
+      }));
+      
+      // Save the updated items list to storage
+      return saveItems(this.items)
+        .then(() => {
+          // Update highest call number if needed
+          this.updateHighestCallNumber();
+          
+          // Clear the barcode input field
+          this.barcode = '';
+        })
+        .catch(error => {
+          console.error('Error processing item:', error);
+          EventBus.emit('message', { text: 'Error processing item: ' + error.message, type: 'error' });
+        });
+    },
+
+    saveResolutionAction(resolution) {
+      // Close the modal
+      this.showResolutionModal = false;
+      
+      // Create a new array from the current items
+      const updatedItems = [...this.items];
+      
+      // Find the index of the item to update
+      const itemIndex = updatedItems.findIndex(item => 
+        item.external_id === this.currentResolutionItem.external_id && 
+        item.pendingResolution && 
+        item.resolutionType === this.currentResolutionType
+      );
+      
+      if (itemIndex >= 0) {
+        // Update the item at the found index
+        updatedItems[itemIndex] = {
+          ...updatedItems[itemIndex],
+          pendingResolution: false,
+          resolutionStatus: 'resolved',
+          resolutionInfo: resolution
+        };
+        
+        // Update the items list
+        this.items = updatedItems;
+        
+        // Save the updated items to storage
+        saveItems(this.items)
+          .then(() => {
+            // Show a success message
+            EventBus.emit('message', { 
+              text: `Resolution for ${this.currentResolutionItem.external_id} saved`, 
+              type: 'status' 
+            });
+          })
+          .catch(error => {
+            console.error('Error saving resolution action:', error);
+            EventBus.emit('message', { text: 'Error saving resolution: ' + error.message, type: 'error' });
+          });
+      }
+      
+      // Reset the current resolution item
+      this.currentResolutionItem = null;
+      this.currentResolutionType = '';
+    },
+
+    completeSession() {
+      // Save final session data
+      saveSession(this.sessionData)
+        .then(() => {
+          // Save final items list
+          return saveItems(this.items);
+        })
+        .then(() => {
+          // Save final marked missing items if needed
+          if (this.markedMissingItems.size > 0) {
+            return saveMarkedMissingItems(Array.from(this.markedMissingItems));
+          }
+          return Promise.resolve();
+        })
+        .then(() => {
+          // Clear session data and reset UI
+          this.sessionData = null;
+          this.sessionStarted = false;
+          this.items = [];
+          this.markedMissingItems = new Set();
+          this.highestCallNumberSort = '';
+          this.showEndSessionModal = false;
+          
+          // Clear session storage
+          return clearSession();
+        })
+        .then(() => {
+          // Show success message
+          EventBus.emit('message', { text: 'Inventory session ended', type: 'status' });
+        })
+        .catch(error => {
+          console.error('Error completing session:', error);
+          EventBus.emit('message', { text: 'Error ending session: ' + error.message, type: 'error' });
+        });
+    },
+
     openResolutionModal(item, type, patronName = '') {
       // Mark item as scanned
       item.wasScanned = true;
@@ -1716,7 +1865,9 @@ export default {
       }));
       
       // Save updated items to session storage
-      saveItems(this.items);
+      saveItems(this.items).catch(error => {
+        console.error('Error saving items after resolution modal:', error);
+      });
       
       // Now set up and show the resolution modal
       this.currentResolutionItem = newItem;
