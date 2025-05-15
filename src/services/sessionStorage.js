@@ -8,6 +8,49 @@ const DB_VERSION = 1;
 const STORE_NAME = 'inventory_data';
 const CHUNK_SIZE = 1000; // Number of items per chunk
 
+// Helper function to sanitize data for storage to make it cloneable
+const sanitizeForStorage = (data) => {
+    if (data === null || data === undefined) {
+        return data;
+    }
+
+    // Handle primitive values
+    if (typeof data !== 'object') {
+        return data;
+    }
+
+    // Handle Date objects
+    if (data instanceof Date) {
+        return data;
+    }
+
+    // Handle arrays
+    if (Array.isArray(data)) {
+        return data.map(item => sanitizeForStorage(item));
+    }
+
+    // Handle objects - convert to a simple object without prototype chain
+    const sanitizedObj = {};
+    for (const key in data) {
+        if (Object.prototype.hasOwnProperty.call(data, key)) {
+            try {
+                const value = data[key];
+                // Skip functions, DOM nodes, and other non-serializable types
+                if (typeof value === 'function' ||
+                    (typeof value === 'object' && value !== null && value.nodeType)) {
+                    continue;
+                }
+
+                sanitizedObj[key] = sanitizeForStorage(value);
+            } catch (e) {
+                console.warn(`Could not sanitize property ${key}:`, e);
+                // Skip this property if it causes errors
+            }
+        }
+    }
+    return sanitizedObj;
+};
+
 // Helper function to open a connection to IndexedDB
 const openDB = () => {
     return new Promise((resolve, reject) => {
@@ -45,20 +88,23 @@ const storeData = async (key, data) => {
     try {
         const db = await openDB();
 
+        // Sanitize data to make it cloneable
+        const sanitizedData = sanitizeForStorage(data);
+
         // If data is a large array, split it into chunks
-        if (Array.isArray(data) && data.length > CHUNK_SIZE) {
-            console.log(`Chunking large array of ${data.length} items for key ${key}`);
+        if (Array.isArray(sanitizedData) && sanitizedData.length > CHUNK_SIZE) {
+            console.log(`Chunking large array of ${sanitizedData.length} items for key ${key}`);
 
             // Clear any existing chunks for this key
             await clearChunks(db, key);
 
             // Split the array into chunks
-            const chunks = chunkArray(data, CHUNK_SIZE);
+            const chunks = chunkArray(sanitizedData, CHUNK_SIZE);
 
             // Store chunk metadata
             await storeInDB(db, `${key}_meta`, {
                 totalChunks: chunks.length,
-                totalItems: data.length,
+                totalItems: sanitizedData.length,
                 timestamp: Date.now()
             });
 
@@ -73,13 +119,15 @@ const storeData = async (key, data) => {
             return true;
         } else {
             // For smaller data or non-array data, store directly
-            return await storeInDB(db, key, data);
+            return await storeInDB(db, key, sanitizedData);
         }
     } catch (error) {
         console.error(`Failed to store data for key ${key}:`, error);
         // Fallback to localStorage for small data or non-critical data
         try {
-            localStorage.setItem(key, JSON.stringify(data));
+            // Try to use localStorage as a fallback
+            const sanitizedData = sanitizeForStorage(data);
+            localStorage.setItem(key, JSON.stringify(sanitizedData));
         } catch (e) {
             console.error(`Fallback to localStorage failed for key ${key}:`, e);
         }
@@ -126,23 +174,27 @@ const clearChunks = async (db, key) => {
 // Helper function for actual database storage operation
 const storeInDB = (db, key, value) => {
     return new Promise((resolve, reject) => {
-        const transaction = db.transaction([STORE_NAME], 'readwrite');
-        const store = transaction.objectStore(STORE_NAME);
+        try {
+            const transaction = db.transaction([STORE_NAME], 'readwrite');
+            const store = transaction.objectStore(STORE_NAME);
 
-        const request = store.put({ key, value });
+            const request = store.put({ key, value });
 
-        request.onerror = (event) => {
-            console.error(`Error storing data for key ${key}:`, event.target.error);
-            reject(event.target.error);
-        };
+            request.onerror = (event) => {
+                console.error(`Error storing data for key ${key}:`, event.target.error);
+                reject(event.target.error);
+            };
 
-        request.onsuccess = (event) => {
-            resolve(event.target.result);
-        };
+            request.onsuccess = (event) => {
+                resolve(event.target.result);
+            };
 
-        transaction.oncomplete = () => {
-            db.close();
-        };
+            transaction.oncomplete = () => {
+                db.close();
+            };
+        } catch (error) {
+            reject(error);
+        }
     });
 };
 
@@ -194,23 +246,27 @@ const getData = async (key) => {
 // Helper function for actual database retrieval operation
 const getFromDB = (db, key) => {
     return new Promise((resolve, reject) => {
-        const transaction = db.transaction([STORE_NAME], 'readonly');
-        const store = transaction.objectStore(STORE_NAME);
+        try {
+            const transaction = db.transaction([STORE_NAME], 'readonly');
+            const store = transaction.objectStore(STORE_NAME);
 
-        const request = store.get(key);
+            const request = store.get(key);
 
-        request.onerror = (event) => {
-            console.error(`Error retrieving data for key ${key}:`, event.target.error);
-            reject(event.target.error);
-        };
+            request.onerror = (event) => {
+                console.error(`Error retrieving data for key ${key}:`, event.target.error);
+                reject(event.target.error);
+            };
 
-        request.onsuccess = (event) => {
-            resolve(event.target.result ? event.target.result.value : null);
-        };
+            request.onsuccess = (event) => {
+                resolve(event.target.result ? event.target.result.value : null);
+            };
 
-        transaction.oncomplete = () => {
-            db.close();
-        };
+            transaction.oncomplete = () => {
+                db.close();
+            };
+        } catch (error) {
+            reject(error);
+        }
     });
 };
 
@@ -275,7 +331,7 @@ const saveSession = async (sessionData) => {
         }
 
         // Store core session data in localStorage
-        localStorage.setItem(SESSION_KEY, JSON.stringify(coreSessionData));
+        localStorage.setItem(SESSION_KEY, JSON.stringify(sanitizeForStorage(coreSessionData)));
         localStorage.setItem(SESSION_EXPIRY_KEY, Date.now() + SESSION_DURATION);
 
         // Store large datasets in IndexedDB
