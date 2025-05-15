@@ -433,9 +433,23 @@ const getMarkedMissingItems = async () => {
 
 const clearSession = async () => {
     try {
-        // Remove data from localStorage
+        // Remove data from localStorage, preserving authorized values
         localStorage.removeItem(SESSION_KEY);
         localStorage.removeItem(SESSION_EXPIRY_KEY);
+        localStorage.removeItem(ITEMS_KEY);
+        localStorage.removeItem(MISSING_ITEMS_KEY);
+
+        // Get all keys in localStorage
+        const keysToPreserve = [];
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            // Keep any authorizedValues keys
+            if (key.startsWith('authorizedValues_')) {
+                keysToPreserve.push(key);
+            }
+        }
+
+        console.log('Preserved authorized value keys:', keysToPreserve);
 
         // Remove data from IndexedDB
         await removeData(SESSION_KEY);

@@ -265,15 +265,12 @@ export default {
   methods: {
     checkForExistingSession() {
       if (isSessionActive()) {
-        // Show initializing state
-        this.sessionInitializing = true;
-        this.sessionStarted = true;
-        
         // Chain promises instead of using async/await
         getSession()
           .then(savedSessionData => {
             if (savedSessionData) {
               this.sessionData = savedSessionData;
+              this.sessionStarted = true;
               
               // Get saved items
               return getItems().then(savedItems => {
@@ -282,14 +279,7 @@ export default {
                   // Restore the highest call number tracking
                   this.updateHighestCallNumber();
                 }
-                
-                // Safely get marked missing items
-                try {
-                  return getMarkedMissingItems();
-                } catch (error) {
-                  console.error('Error getting marked missing items:', error);
-                  return [];
-                }
+                return getMarkedMissingItems();
               });
             }
             return Promise.reject('No saved session data found');
@@ -298,9 +288,6 @@ export default {
             // Restore marked missing items if available
             if (savedMarkedMissingItems && Array.isArray(savedMarkedMissingItems)) {
               this.markedMissingItems = new Set(savedMarkedMissingItems);
-            } else {
-              // Initialize with empty set if no saved data
-              this.markedMissingItems = new Set();
             }
             
             EventBus.emit('message', { text: 'Session restored successfully', type: 'status' });
@@ -310,10 +297,6 @@ export default {
               if (this.$refs.barcodeInput) {
                 this.$refs.barcodeInput.focus();
               }
-              // Hide initializing state after a slight delay
-              setTimeout(() => {
-                this.sessionInitializing = false;
-              }, 500);
             });
           })
           .catch(error => {
@@ -321,8 +304,14 @@ export default {
               console.error('Error restoring session:', error);
               EventBus.emit('message', { text: 'Error restoring session: ' + (error.message || error), type: 'error' });
             }
-            this.sessionInitializing = false;
           });
+      } else {
+        // Only load form data if we're showing the form (no active session)
+        this.$nextTick(() => {
+          if (this.$refs.setupForm) {
+            this.$refs.setupForm.loadFormData();
+          }
+        });
       }
     },
 
@@ -557,6 +546,23 @@ export default {
             }
           }
         };
+
+        // First check if we have cached values
+        const cacheKey = `authorizedValues_${category}`;
+        const cachedValues = localStorage.getItem(cacheKey);
+        
+        if (cachedValues && !options.bypassCache) {
+          try {
+            const parsedValues = JSON.parse(cachedValues);
+            if (options.onValuesUpdate) {
+              options.onValuesUpdate(parsedValues);
+            }
+            return parsedValues;
+          } catch (e) {
+            console.error(`Error parsing cached authorized values for ${category}:`, e);
+            // Continue with API call if parsing fails
+          }
+        }
 
         return await apiService.fetchAuthorizedValues(category, combinedOptions);
       } catch (error) {
