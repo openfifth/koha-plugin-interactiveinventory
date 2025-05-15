@@ -509,46 +509,86 @@ export default {
       // Get a set of scanned barcodes for quick lookup
       const scannedBarcodesSet = new Set(this.scannedItems.map(item => item.external_id));
       
-      // Get a set of already marked missing barcodes
-      const markedMissingSet = new Set(getMarkedMissingItems());
-      
-      // Filter out items that are checked out, in transit, etc. based on session settings
-      this.missingItems = itemsToCheck.filter(item => {
-        // Skip items that have already been scanned
-        if (scannedBarcodesSet.has(item.barcode)) {
-          return false;
-        }
-        
-        // Skip items that have already been marked as missing
-        if (markedMissingSet.has(item.barcode)) {
-          return false;
-        }
-        
-        // Skip items that are checked out if the session is configured to do so
-        if (this.sessionData.skipCheckedOutItems && (item.checked_out || item.checked_out_date)) {
-          return false;
-        }
-        
-        // Skip items that are in transit if the session is configured to do so
-        if (this.sessionData.skipInTransitItems && item.in_transit) {
-          return false;
-        }
-        
-        // Skip items that have branch mismatch if the session is configured to do so
-        if (this.sessionData.skipBranchMismatchItems && item.homebranch !== item.holdingbranch) {
-          return false;
-        }
-        
-        return true;
-      });
-      
-      // Reset pagination when loading new data
-      this.currentPage = 1;
-      this.selectedItems = [];
-      this.selectAll = false;
+      // Get marked missing items asynchronously
+      this.loading = true;
+      getMarkedMissingItems()
+        .then(markedMissingItems => {
+          const markedMissingSet = new Set(markedMissingItems || []);
+          
+          // Filter out items that are checked out, in transit, etc. based on session settings
+          this.missingItems = itemsToCheck.filter(item => {
+            // Skip items that have already been scanned
+            if (scannedBarcodesSet.has(item.barcode)) {
+              return false;
+            }
+            
+            // Skip items that have already been marked as missing
+            if (markedMissingSet.has(item.barcode)) {
+              return false;
+            }
+            
+            // Skip items that are checked out if the session is configured to do so
+            if (this.sessionData.skipCheckedOutItems && (item.checked_out || item.checked_out_date)) {
+              return false;
+            }
+            
+            // Skip items that are in transit if the session is configured to do so
+            if (this.sessionData.skipInTransitItems && item.in_transit) {
+              return false;
+            }
+            
+            // Skip items that have branch mismatch if the session is configured to do so
+            if (this.sessionData.skipBranchMismatchItems && item.homebranch !== item.holdingbranch) {
+              return false;
+            }
+            
+            return true;
+          });
+          
+          // Reset pagination when loading new data
+          this.currentPage = 1;
+          this.selectedItems = [];
+          this.selectAll = false;
+          this.loading = false;
+        })
+        .catch(error => {
+          console.error('Error getting marked missing items:', error);
+          // Continue with empty markedMissingSet
+          this.missingItems = itemsToCheck.filter(item => {
+            // Skip items that have already been scanned
+            if (scannedBarcodesSet.has(item.barcode)) {
+              return false;
+            }
+            
+            // Skip items that are checked out if the session is configured to do so
+            if (this.sessionData.skipCheckedOutItems && (item.checked_out || item.checked_out_date)) {
+              return false;
+            }
+            
+            // Skip items that are in transit if the session is configured to do so
+            if (this.sessionData.skipInTransitItems && item.in_transit) {
+              return false;
+            }
+            
+            // Skip items that have branch mismatch if the session is configured to do so
+            if (this.sessionData.skipBranchMismatchItems && item.homebranch !== item.holdingbranch) {
+              return false;
+            }
+            
+            return true;
+          });
+          
+          // Reset pagination when loading new data
+          this.currentPage = 1;
+          this.selectedItems = [];
+          this.selectAll = false;
+          this.loading = false;
+        });
     },
     
     loadProcessedItems() {
+      this.loading = true;
+      
       // Initialize array to hold all processed items
       this.processedItems = [];
       
@@ -619,36 +659,47 @@ export default {
         this.processedItems = [...this.processedItems, ...scannedProcessed];
       }
       
-      // Get marked missing items from session storage
-      const markedMissingBarcodes = getMarkedMissingItems();
-      this.markedMissingItems = markedMissingBarcodes;
-      
-      if (markedMissingBarcodes.length > 0) {
-        if (lookupData.length > 0) {
-          // Find the items that have been marked as missing using the lookup data
-          const missingProcessed = markedMissingBarcodes
-            .map(barcode => {
-              // Look up the item in our location data map
-              const item = locationDataMap.get(barcode);
-              if (item) {
-                return {
-                  ...item,
-                  status: 'missing'
-                };
-              }
-              return null;
-            })
-            .filter(item => item !== null);
+      // Get marked missing items from session storage asynchronously
+      getMarkedMissingItems()
+        .then(markedMissingBarcodes => {
+          this.markedMissingItems = markedMissingBarcodes || [];
           
-          // Add to processed items list
-          this.processedItems = [...this.processedItems, ...missingProcessed];
-        }
-      }
-      
-      // Reset pagination and selection for processed items
-      this.processedCurrentPage = 1;
-      this.selectedProcessedItems = [];
-      this.selectAllProcessed = false;
+          if (this.markedMissingItems.length > 0) {
+            if (lookupData.length > 0) {
+              // Find the items that have been marked as missing using the lookup data
+              const missingProcessed = this.markedMissingItems
+                .map(barcode => {
+                  // Look up the item in our location data map
+                  const item = locationDataMap.get(barcode);
+                  if (item) {
+                    return {
+                      ...item,
+                      status: 'missing'
+                    };
+                  }
+                  return null;
+                })
+                .filter(item => item !== null);
+              
+              // Add to processed items list
+              this.processedItems = [...this.processedItems, ...missingProcessed];
+            }
+          }
+          
+          // Reset pagination and selection for processed items
+          this.processedCurrentPage = 1;
+          this.selectedProcessedItems = [];
+          this.selectAllProcessed = false;
+          this.loading = false;
+        })
+        .catch(error => {
+          console.error('Error loading marked missing items:', error);
+          // Reset pagination and selection for processed items
+          this.processedCurrentPage = 1;
+          this.selectedProcessedItems = [];
+          this.selectAllProcessed = false;
+          this.loading = false;
+        });
     },
     
     getSortField() {
@@ -718,9 +769,9 @@ export default {
         
         if (result && result.success) {
           // Get current marked missing items for session storage
-          const currentMarkedMissing = getMarkedMissingItems();
+          const currentMarkedMissing = await getMarkedMissingItems();
           const updatedMarkedMissing = [...new Set([...currentMarkedMissing, item.barcode])];
-          saveMarkedMissingItems(updatedMarkedMissing);
+          await saveMarkedMissingItems(updatedMarkedMissing);
           
           // Use the same item data but set status to missing
           const itemWithStatus = {
@@ -748,21 +799,20 @@ export default {
           this.missingItems = this.missingItems.filter(i => i.barcode !== item.barcode);
           this.selectedItems = this.selectedItems.filter(barcode => barcode !== item.barcode);
           
-          // Close detail modal if open
-          if (this.showDetailModal && this.selectedItemDetail && this.selectedItemDetail.barcode === item.barcode) {
-            this.showDetailModal = false;
-          }
-          
-          // Emit event to update parent component
-          this.$emit('item-marked-missing', item.barcode);
+          // Notify the parent component
           this.$emit('missing-items-updated');
         } else {
-          throw new Error(result.error || 'Unknown error occurred');
+          // Show error message
+          EventBus.emit('message', {
+            type: 'error',
+            text: `Failed to mark item "${item.title || item.barcode}" as missing. Please try again.`
+          });
         }
       } catch (error) {
+        console.error('Error marking item as missing:', error);
         EventBus.emit('message', {
           type: 'error',
-          text: `Failed to set item to Missing status: ${error.message}`
+          text: `Error marking item as missing: ${error.message || 'Unknown error'}`
         });
       } finally {
         this.loading = false;
@@ -864,10 +914,10 @@ export default {
       }
     },
     
-    markAsMissing() {
+    async markAsMissing() {
       if (this.selectedItems.length === 0) {
-        EventBus.emit("showSnackbar", {
-          message: "No items selected to mark as missing.",
+        EventBus.emit("message", {
+          text: "No items selected to mark as missing.",
           type: "info",
         });
         return;
@@ -884,8 +934,8 @@ export default {
         // Don't mark checked out items as missing
         if (item.checked_out || item.checked_out_date) {
           console.log(`Skipping checked out item: ${item.barcode}`);
-          EventBus.emit("showSnackbar", {
-            message: `Item ${item.barcode} is checked out and won't be marked as missing.`,
+          EventBus.emit("message", {
+            text: `Item ${item.barcode} is checked out and won't be marked as missing.`,
             type: "warning",
           });
           return false;
@@ -896,8 +946,8 @@ export default {
       
       if (itemsToProcess.length === 0) {
         this.loading = false;
-        EventBus.emit("showSnackbar", {
-          message: "No items to process after filtering out checked out items.",
+        EventBus.emit("message", {
+          text: "No items to process after filtering out checked out items.",
           type: "info",
         });
         return;
@@ -920,60 +970,54 @@ export default {
       });
       
       // Wait for all API calls to complete
-      Promise.all(promises)
-        .then(results => {
-          // Get current marked missing items
-          const currentMarkedMissing = getMarkedMissingItems();
+      try {
+        await Promise.all(promises);
+        
+        // Get current marked missing items for session storage
+        const currentMarkedMissing = await getMarkedMissingItems();
+        const updatedMarkedMissing = [...new Set([...currentMarkedMissing, ...itemsToProcess])];
+        
+        // Save the updated list
+        await saveMarkedMissingItems(updatedMarkedMissing);
+        
+        // Add processed items to the processed items list
+        const newProcessedItems = itemsToProcess.map(barcode => {
+          const item = this.missingItems.find(i => i.barcode === barcode);
+          if (!item) return null;
           
-          // Add newly marked items to the list in session storage
-          const updatedMarkedMissing = [...new Set([...currentMarkedMissing, ...this.selectedItems])];
-          
-          // Save updated list
-          saveMarkedMissingItems(updatedMarkedMissing);
-          
-          // Add selected items to processed items list
-          this.selectedItems.forEach(barcode => {
-            const item = this.missingItems.find(i => i.barcode === barcode);
-            if (!item) return; // Skip if item not found
-            
-            // Use the same item data but set status to missing
-            const itemWithStatus = {
-              ...item,
-              status: 'missing'
-            };
-            
-            // Check if the item is already in the processed items list
-            const existingIndex = this.processedItems.findIndex(i => i.barcode === barcode);
-            if (existingIndex !== -1) {
-              // Update existing item
-              this.processedItems.splice(existingIndex, 1, itemWithStatus);
-            } else {
-              // Add as new item
-              this.processedItems.push(itemWithStatus);
-            }
-          });
-          
-          // Update UI
-          EventBus.emit("showSnackbar", {
-            message: `${this.selectedItems.length} item(s) marked as missing.`,
-            type: "success",
-          });
-          
-          // Recalculate missing items to remove the ones we just marked
-          this.calculateMissingItems();
-          
-          // Emit event to update count in parent component
-          this.$emit("missing-items-updated");
-        })
-        .catch(error => {
-          EventBus.emit("showSnackbar", {
-            message: `Error marking items as missing: ${error.message}`,
-            type: "error",
-          });
-        })
-        .finally(() => {
-          this.loading = false;
+          return {
+            ...item,
+            status: 'missing'
+          };
+        }).filter(item => item !== null);
+        
+        // Update processed items list
+        this.processedItems = [...this.processedItems, ...newProcessedItems];
+        
+        // Remove items from the missing items list
+        this.missingItems = this.missingItems.filter(item => !itemsToProcess.includes(item.barcode));
+        
+        // Clear selection
+        this.selectedItems = [];
+        this.selectAll = false;
+        
+        // Show success message
+        EventBus.emit("message", {
+          text: `${itemsToProcess.length} items marked as missing successfully.`,
+          type: "success",
         });
+        
+        // Notify the parent component about the update
+        this.$emit('missing-items-updated');
+      } catch (error) {
+        console.error("Error marking items as missing:", error);
+        EventBus.emit("message", {
+          text: `Error marking items as missing: ${error.message || 'Unknown error'}`,
+          type: "error",
+        });
+      } finally {
+        this.loading = false;
+      }
     },
     
     closeModal() {

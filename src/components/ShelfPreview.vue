@@ -255,14 +255,50 @@ export default {
     getAuthorizedValueDesc(code) {
       if (!code) return 'N/A';
       
-      // Look for the code in the LOC authorized value category
+      // Look for the code in the LOC authorized value category from props
       if (this.authorizedValueCategories && 
           this.authorizedValueCategories.LOC && 
           this.authorizedValueCategories.LOC[code]) {
         return this.authorizedValueCategories.LOC[code];
       }
       
+      // If not found in props, try localStorage as fallback
+      try {
+        const authorizedValuesLOC = JSON.parse(localStorage.getItem('authorizedValues_LOC') || '{}');
+        if (authorizedValuesLOC[code]) {
+          return authorizedValuesLOC[code];
+        }
+      } catch (e) {
+        console.error('Error accessing localStorage for authorized value:', e);
+      }
+      
+      // If not found in props or localStorage, fetch from API
+      apiService.fetchAuthorizedValues('LOC')
+        .then(() => {
+          // After fetching, try to get the value from localStorage again
+          try {
+            const authorizedValuesLOC = JSON.parse(localStorage.getItem('authorizedValues_LOC') || '{}');
+            if (authorizedValuesLOC[code]) {
+              // This won't update the current rendering, but will be available on next render
+              console.log(`Found location mapping for "${code}" after API fetch: "${authorizedValuesLOC[code]}"`);
+              this.renderKey++; // Force component to re-render
+            }
+          } catch (e) {
+            console.error('Error accessing localStorage after fetch:', e);
+          }
+        })
+        .catch(error => {
+          console.error('Error fetching authorized values:', error);
+        });
+      
+      // Return the code itself as fallback
       return code;
+    },
+    
+    // Fetch authorized values for a category and store in localStorage
+    fetchAuthorizedValues(category) {
+      console.log(`Fetching authorized values for category: ${category}`);
+      return apiService.fetchAuthorizedValues(category);
     },
     
     // Simplify the stripCnSort method to only handle Dewey and LoC formats
@@ -352,17 +388,26 @@ export default {
       return item.biblio.author || 'Unknown Author';
     },
     
-    // Update the location code mapping function to use localStorage
+    // Update the location code mapping function to use props first, then localStorage
     mapLocationCodeToName(locationCode) {
       if (!locationCode) return '';
       
+      // First try to use props
+      if (this.authorizedValueCategories && 
+          this.authorizedValueCategories.LOC && 
+          this.authorizedValueCategories.LOC[locationCode]) {
+        console.log(`Found location mapping for "${locationCode}" in props: "${this.authorizedValueCategories.LOC[locationCode]}"`);
+        return this.authorizedValueCategories.LOC[locationCode];
+      }
+      
+      // Fallback to localStorage if not found in props
       try {
         // Get authorized values map from localStorage
         const authorizedValuesLOC = JSON.parse(localStorage.getItem('authorizedValues_LOC') || '{}');
         
         // If we have a mapping for this code, use it
         if (authorizedValuesLOC[locationCode]) {
-          console.log(`Found location mapping for "${locationCode}": "${authorizedValuesLOC[locationCode]}"`);
+          console.log(`Found location mapping for "${locationCode}" in localStorage: "${authorizedValuesLOC[locationCode]}"`);
           return authorizedValuesLOC[locationCode];
         }
         
