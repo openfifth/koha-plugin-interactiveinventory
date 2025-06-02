@@ -2073,20 +2073,22 @@ export default {
       }
     },
 
-    handleMissingItemsUpdated() {
+    async handleMissingItemsUpdated() {
       // Update the local set of marked missing items with defensive handling
       try {
-        const markedItems = getMarkedMissingItems();
+        const markedItems = await getMarkedMissingItems();
+        // Make a fresh Set from the array to ensure we don't have duplicates
         this.markedMissingItems = new Set(Array.isArray(markedItems) ? markedItems : []);
+        console.log(`Updated markedMissingItems set with ${this.markedMissingItems.size} items`);
       } catch (error) {
         console.error('Error updating marked missing items:', error);
         this.markedMissingItems = new Set();
       }
       
-      // Recalculate the missing items count for the badge
+      // Force update to re-render any components that depend on this data
       this.$forceUpdate();
     },
-  }
+  },
 }
 </script>
 

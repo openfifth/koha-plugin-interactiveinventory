@@ -26,7 +26,7 @@
               :class="{ 'active': activeTab === 'expected' }" 
               @click="activeTab = 'expected'"
             >
-              Not Found Items ({{ missingItems.length }})
+              Not Processed Items ({{ missingItems.length }})
             </div>
           </div>
           
@@ -35,7 +35,7 @@
             <div class="missing-items-stats">
               <div class="stat-box">
                 <div class="stat-number">{{ missingItems.length }}</div>
-                <div class="stat-label">Not Found Items</div>
+                <div class="stat-label">Not Processed Items</div>
               </div>
               <div class="stat-box">
                 <div class="stat-number">{{ totalExpectedItems }}</div>
@@ -43,7 +43,7 @@
               </div>
               <div class="stat-box">
                 <div class="stat-number">{{ Math.round((missingItems.length / totalExpectedItems) * 100) || 0 }}%</div>
-                <div class="stat-label">Not Found Rate</div>
+                <div class="stat-label">Not Processed Rate</div>
               </div>
             </div>
             
@@ -1146,9 +1146,9 @@ export default {
         
         if (result && result.success) {
           // Get current marked missing items for session storage
-          const currentMarkedMissing = getMarkedMissingItems();
+          const currentMarkedMissing = await getMarkedMissingItems();
           const updatedMarkedMissing = [...new Set([...currentMarkedMissing, item.barcode])];
-          saveMarkedMissingItems(updatedMarkedMissing);
+          await saveMarkedMissingItems(updatedMarkedMissing);
           
           // Update the status in our local data
           const itemIndex = this.processedItems.findIndex(i => i.barcode === item.barcode);
@@ -1196,9 +1196,9 @@ export default {
         
         if (result && result.success) {
           // Remove from marked missing items in session storage
-          const currentMarkedMissing = getMarkedMissingItems();
+          const currentMarkedMissing = await getMarkedMissingItems();
           const updatedMarkedMissing = currentMarkedMissing.filter(barcode => barcode !== item.barcode);
-          saveMarkedMissingItems(updatedMarkedMissing);
+          await saveMarkedMissingItems(updatedMarkedMissing);
           
           // Update the status in our local data
           const itemIndex = this.processedItems.findIndex(i => i.barcode === item.barcode);
@@ -1211,9 +1211,6 @@ export default {
             type: 'success',
             text: `Item "${item.title || item.barcode}" has been marked as Found.`
           });
-          
-          // Emit event to update parent component
-          this.$emit('missing-items-updated');
         } else {
           throw new Error(result.error || 'Unknown error occurred');
         }
@@ -1240,6 +1237,7 @@ export default {
       this.loading = true;
       
       const promises = [];
+      let markingAsMissing = false; // Flag to track if any items are being marked as missing
       
       // For each selected item, toggle its status (missing <-> found)
       this.selectedProcessedItems.forEach(barcode => {
@@ -1258,6 +1256,7 @@ export default {
               text: `Item "${item.title || item.barcode}" is checked out and cannot be marked as missing.`
             });
           } else {
+            markingAsMissing = true;
             promises.push(this.markProcessedItemAsMissing(item));
           }
         }
@@ -1266,9 +1265,12 @@ export default {
       // Wait for all operations to complete
       Promise.all(promises)
         .then(() => {
-          // Refresh data
+          // Refresh data - but only recalculate missing items if we're marking something as missing
           this.loadProcessedItems();
-          this.calculateMissingItems();
+          if (markingAsMissing) {
+            this.calculateMissingItems();
+            this.$emit('missing-items-updated');
+          }
           
           // Clear selection
           this.selectedProcessedItems = [];
