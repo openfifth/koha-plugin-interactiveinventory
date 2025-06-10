@@ -324,7 +324,16 @@ const saveSession = async (sessionData) => {
         const locationData = coreSessionData.response_data?.location_data;
         const rightPlaceList = coreSessionData.response_data?.right_place_list;
 
-        // Remove large datasets from core session data
+        // Store large datasets in IndexedDB first
+        if (locationData && locationData.length > 0) {
+            await storeData('location_data', locationData);
+        }
+
+        if (rightPlaceList && rightPlaceList.length > 0) {
+            await storeData('right_place_list', rightPlaceList);
+        }
+
+        // Remove large datasets from core session data after successful storage
         if (coreSessionData.response_data) {
             coreSessionData.response_data.location_data = [];
             coreSessionData.response_data.right_place_list = [];
@@ -334,13 +343,12 @@ const saveSession = async (sessionData) => {
         localStorage.setItem(SESSION_KEY, JSON.stringify(sanitizeForStorage(coreSessionData)));
         localStorage.setItem(SESSION_EXPIRY_KEY, Date.now() + SESSION_DURATION);
 
-        // Store large datasets in IndexedDB
-        if (locationData && locationData.length > 0) {
-            await storeData('location_data', locationData);
+        // Immediately retrieve and attach the data back to the session object
+        if (locationData?.length > 0) {
+            sessionData.response_data.location_data = locationData;
         }
-
-        if (rightPlaceList && rightPlaceList.length > 0) {
-            await storeData('right_place_list', rightPlaceList);
+        if (rightPlaceList?.length > 0) {
+            sessionData.response_data.right_place_list = rightPlaceList;
         }
     } catch (error) {
         console.error('Error saving session:', error);
