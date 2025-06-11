@@ -26,7 +26,7 @@
               :class="{ 'active': activeTab === 'expected' }" 
               @click="activeTab = 'expected'"
             >
-              Not Processed Items ({{ missingItems.length }})
+              Items Not Processed ({{ missingItems.length }})
             </div>
           </div>
           
@@ -35,7 +35,7 @@
             <div class="missing-items-stats">
               <div class="stat-box">
                 <div class="stat-number">{{ missingItems.length }}</div>
-                <div class="stat-label">Not Processed Items</div>
+                <div class="stat-label">Items Not Processed</div>
               </div>
               <div class="stat-box">
                 <div class="stat-number">{{ totalExpectedItems }}</div>
@@ -43,7 +43,7 @@
               </div>
               <div class="stat-box">
                 <div class="stat-number">{{ Math.round((missingItems.length / totalExpectedItems) * 100) || 0 }}%</div>
-                <div class="stat-label">Not Processed Rate</div>
+                <div class="stat-label">Not Yet Processed</div>
               </div>
             </div>
             
