@@ -4,8 +4,8 @@
     "module": "Koha::Plugin::Com::InteractiveInventory",
     "pm_path": "Koha/Plugin/Com/InteractiveInventory.pm"
   },
-  "version": "1.2.2",
-  "previous_version": "1.2.1",
+  "version": "1.2.3",
+  "previous_version": "1.2.2",
   "private": true,
   "scripts": {
     "dev": "vite",
