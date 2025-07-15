@@ -171,27 +171,78 @@ sub checkInItem {
     }
     
     try {
-        # Get the Koha item
-        my $item_object = $item->unblessed;
-        
-        # Check if the item is checked out
-        if ($item_object->{onloan}) {
-            # Here you would implement the check-in logic
-            # For demo purposes, we're just updating the onloan status directly
-            $item->onloan(undef);
-            $item->store;
-            
+        # Get the current branch from user environment, fallback to item's homebranch
+        my $branch = C4::Context->userenv->{branch} || $item->homebranch;
+        my $return_date = $date ? dt_from_string($date) : dt_from_string();
+
+        # Use Koha's proper circulation system for check-in
+        # AddReturn handles all circulation logic including:
+        # - Updating circulation records
+        # - Recording statistics
+        # - Handling fines and fees
+        # - Processing holds
+        # - Updating item status
+        my ($doreturn, $messages, $iteminformation, $borrower) = AddReturn(
+            $barcode,
+            $branch,
+            undef,  # exemptfine - don't exempt fines by default
+            $return_date
+        );
+
+        if ($doreturn) {
+            my $response = {
+                success => "Item checked in successfully",
+                return_date => $return_date->ymd,
+                branch => $branch
+            };
+
+            # Include any important messages from the checkin process
+            if ($messages && keys %$messages) {
+                $response->{messages} = $messages;
+
+                # Add specific message handling for common scenarios
+                if ($messages->{ResFound}) {
+                    $response->{hold_found} = 1;
+                    $response->{hold_message} = "Item has holds - please process accordingly";
+                }
+                if ($messages->{WasReturned}) {
+                    $response->{was_returned} = 1;
+                }
+                if ($messages->{Wrongbranch}) {
+                    $response->{wrong_branch} = 1;
+                    $response->{correct_branch} = $messages->{Wrongbranch}->{Rightbranch};
+                }
+            }
+
             return $c->render(
                 status => 200,
-                openapi => {
-                    success => "Item checked in successfully"
-                }
+                openapi => $response
             );
         } else {
+            # Check for specific error conditions
+            my $error_msg = "Failed to check in item";
+            my $status_code = 500;
+
+            if ($messages && $messages->{BadBarcode}) {
+                $error_msg = "Invalid barcode: $barcode";
+                $status_code = 400;
+            } elsif ($messages && $messages->{NotIssued}) {
+                $error_msg = "Item was not checked out";
+                $status_code = 200;  # This is actually a success case
+                return $c->render(
+                    status => 200,
+                    openapi => {
+                        success => "Item was not checked out",
+                        messages => $messages
+                    }
+                );
+            }
+
             return $c->render(
-                status => 200,
+                status => $status_code,
                 openapi => {
-                    success => "Item was not checked out"
+                    error => $error_msg,
+                    messages => $messages
                 }
             );
         }
