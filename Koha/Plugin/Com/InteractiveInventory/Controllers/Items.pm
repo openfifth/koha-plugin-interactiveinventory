@@ -5,11 +5,12 @@ use Mojo::Base 'Mojolicious::Controller';
 use Mojo::JSON qw(decode_json);
 use Try::Tiny;
 use C4::Context;
-use C4::Circulation qw( AddReturn );
+use C4::Circulation qw( AddReturn CanBookBeRenewed AddRenewal );
 use Koha::DateUtils qw( dt_from_string );
 use Koha::Items;
 use Koha::Libraries;
 use Koha::Holds;
+use Koha::Checkouts;
 
 =head1 API
 
@@ -321,6 +322,112 @@ sub resolveTransit {
             }
         );
     };
+}
+
+=head3 renewItem
+
+Renews a checkout using the barcode provided
+
+=cut
+
+sub renewItem {
+    my $c = shift->openapi->valid_input or return;
+
+    my $renewal_data = $c->validation->param('body');
+
+    my $barcode = $renewal_data->{barcode};
+    my $seen = defined($renewal_data->{seen}) ? $renewal_data->{seen} : 1;
+
+    unless ($barcode) {
+        return $c->render(
+            status => 400,
+            openapi => { error => "Missing barcode" }
+        );
+    }
+
+    my $item = Koha::Items->find({ barcode => $barcode });
+
+    unless ($item) {
+        return $c->render(
+            status => 404,
+            openapi => { error => "Item not found" }
+        );
+    }
+
+    # Find the current checkout for this item
+    my $checkout = Koha::Checkouts->search({ itemnumber => $item->itemnumber })->next;
+
+    unless ($checkout) {
+        return $c->render(
+            status => 404,
+            openapi => { error => "Item is not currently checked out" }
+        );
+    }
+
+    eval {
+        my $patron = $checkout->patron;
+        # Check if the item can be renewed
+        my ($can_renew, $error) = CanBookBeRenewed($patron, $checkout);
+
+        unless ($can_renew) {
+            return $c->render(
+                status => 403,
+                openapi => {
+                    error => "Cannot renew checkout",
+                    details => $error || "Renewal not allowed"
+                }
+            );
+        }
+
+        # Get the current branch from user environment
+        my $branch = C4::Context->userenv->{branch} || $item->homebranch;
+
+
+
+        unless ($item && $checkout->borrowernumber) {
+            return $c->render(
+                status => 500,
+                openapi => { error => "Missing itemnumber or borrowernumber" }
+            );
+        }
+
+        my $renewal_result = AddRenewal({
+            borrowernumber => $checkout->borrowernumber,
+            itemnumber     => $item->itemnumber,
+            branch         => $branch,
+            seen           => $seen
+        });
+
+        if ($renewal_result) {
+            # Fetch the updated checkout to get new due date and renewal count
+            my $updated_checkout = Koha::Checkouts->find($checkout->issue_id);
+
+            return $c->render(
+                status => 200,
+                openapi => {
+                    success => "Item renewed successfully",
+                    checkout_id => $checkout->issue_id,
+                    new_due_date => $updated_checkout->date_due,
+                    renewals_count => $updated_checkout->renewals_count
+                }
+            );
+        } else {
+            return $c->render(
+                status => 500,
+                openapi => {
+                    error => "Failed to renew item"
+                }
+            );
+        }
+    };
+    if ($@) {
+        return $c->render(
+            status => 500,
+            openapi => {
+                error => "Error renewing item: $@"
+            }
+        );
+    }
 }
 
 1;

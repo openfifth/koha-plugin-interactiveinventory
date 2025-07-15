@@ -354,47 +354,32 @@ export default {
           type: 'status',
           text: `Renewing item ${barcode}...`
         });
-        
-        // Get the current checkout
-        const checkoutResponse = await fetch(`/api/v1/checkouts?checked_out_id=${barcode}`, {
-          headers: {
-            'Accept': 'application/json'
-          }
-        });
-        
-        if (!checkoutResponse.ok) {
-          throw new Error(`HTTP error ${checkoutResponse.status}`);
-        }
-        
-        const checkouts = await checkoutResponse.json();
-        
-        if (!checkouts || checkouts.length === 0) {
-          throw new Error('No active checkout found for this item');
-        }
-        
-        const checkout = checkouts[0];
-        
-        // Renew the checkout
-        const renewResponse = await fetch(`/api/v1/checkouts/${checkout.checkout_id}/renewal`, {
+
+        // Use the plugin's renewal endpoint
+        const response = await fetch('/api/v1/contrib/interactiveinventory/item/renew', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'Accept': 'application/json'
           },
-          body: JSON.stringify({})
+          body: JSON.stringify({
+            barcode: barcode,
+            seen: true
+          })
         });
-        
-        if (!renewResponse.ok) {
-          throw new Error(`HTTP error ${renewResponse.status}`);
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.error || `HTTP error ${response.status}`);
         }
-        
-        const renewData = await renewResponse.json();
-        
+
+        const data = await response.json();
+
         EventBus.emit('message', {
           type: 'success',
-          text: `Item ${barcode} has been renewed successfully`
+          text: `Item ${barcode} has been renewed successfully. New due date: ${data.new_due_date}`
         });
-        
+
         return true;
       } catch (error) {
         EventBus.emit('message', {

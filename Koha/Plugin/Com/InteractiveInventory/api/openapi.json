@@ -287,5 +287,87 @@
         }
       }
     }
+  },
+  "/item/renew": {
+    "post": {
+      "x-mojo-to": "Com::InteractiveInventory::Controllers::Items#renewItem",
+      "operationId": "renewItem",
+      "tags": [
+        "inventory"
+      ],
+      "produces": [
+        "application/json"
+      ],
+      "consumes": [
+        "application/json"
+      ],
+      "parameters": [
+        {
+          "name": "body",
+          "in": "body",
+          "required": true,
+          "description": "Item renewal data",
+          "schema": {
+            "type": "object",
+            "required": [
+              "barcode"
+            ],
+            "properties": {
+              "barcode": {
+                "type": "string",
+                "description": "The barcode of the item to renew"
+              },
+              "seen": {
+                "type": "boolean",
+                "description": "Whether the item was seen during renewal (defaults to true)"
+              }
+            }
+          }
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "Item renewed successfully",
+          "schema": {
+            "type": "object",
+            "properties": {
+              "success": {
+                "type": "string"
+              },
+              "checkout_id": {
+                "type": "integer"
+              },
+              "new_due_date": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "renewals_count": {
+                "type": "integer"
+              }
+            }
+          }
+        },
+        "400": {
+          "description": "Missing barcode or invalid request"
+        },
+        "403": {
+          "description": "Cannot renew checkout"
+        },
+        "404": {
+          "description": "Item not found or not checked out"
+        },
+        "500": {
+          "description": "Error renewing item",
+          "schema": {
+            "type": "object",
+            "properties": {
+              "error": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    }
   }
 }
