@@ -21,6 +21,7 @@
       <span v-if="item.pendingResolution" class="resolution-badge">PENDING RESOLUTION</span>
       <span v-if="item.resolutionAction && !item.pendingResolution" class="resolution-badge-resolved">✓ RESOLVED</span>
       <span v-if="item.resolutionAction && item.pendingResolution" class="resolution-badge-skipped">SKIPPED</span>
+      <span v-if="item.needs_transfer" class="transfer-badge">NEEDS TRANSFER</span>
       {{ item.biblio.title }} - {{ item.external_id }}
     </p>
     <div v-if="isExpanded" class="item-details">
@@ -76,6 +77,10 @@
           <span v-else>
             and has been checked in automatically.
           </span>
+        </p>
+        <p v-if="item.needs_transfer" class="item-warning"><strong>Transfer Required:</strong></p>
+        <p v-if="item.needs_transfer" class="item-warning">
+          This item needs to be transferred to {{ item.transfer_to }}. Please initiate the transfer process to move this item to its correct location.
         </p>
         <p v-if="item.in_transit && alertSettings.showInTransitAlerts" class="item-warning"><strong>Warning:</strong></p>
         <p v-if="item.in_transit && alertSettings.showInTransitAlerts" class="item-warning">
@@ -402,6 +407,17 @@ export default {
 .resolution-badge-skipped {
   display: inline-block;
   background-color: #7f8c8d;
+  color: white;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.8em;
+  margin-right: 8px;
+  font-weight: bold;
+}
+
+.transfer-badge {
+  display: inline-block;
+  background-color: #f39c12;
   color: white;
   padding: 2px 6px;
   border-radius: 4px;

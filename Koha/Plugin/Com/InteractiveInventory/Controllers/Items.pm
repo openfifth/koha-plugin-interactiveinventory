@@ -213,6 +213,16 @@ sub checkInItem {
                     $response->{wrong_branch} = 1;
                     $response->{correct_branch} = $messages->{Wrongbranch}->{Rightbranch};
                 }
+                if ($messages->{NeedsTransfer}) {
+                    $response->{needs_transfer} = 1;
+                    $response->{transfer_to} = $messages->{NeedsTransfer};
+                    $response->{transfer_message} = "Item needs to be transferred to another library";
+                }
+                if ($messages->{TransferTo}) {
+                    $response->{needs_transfer} = 1;
+                    $response->{transfer_to} = $messages->{TransferTo};
+                    $response->{transfer_message} = "Item needs to be transferred to another library";
+                }
             }
 
             return $c->render(

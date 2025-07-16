@@ -289,7 +289,8 @@ export default {
           this.$emit('resolved', {
             item: this.item,
             action: this.selectedAction,
-            type: this.type
+            type: this.type,
+            result: result
           });
           
           // Close the modal
@@ -331,11 +332,15 @@ export default {
         const data = await response.json();
         
         if (data.success) {
+          let message = `Item ${barcode} has been checked in successfully`;
+          if (data.needs_transfer) {
+            message = `Item ${barcode} checked in and needs transfer to ${data.transfer_to}. Please initiate transfer process.`;
+          }
           EventBus.emit('message', {
             type: 'success',
-            text: `Item ${barcode} has been checked in successfully`
+            text: message
           });
-          return true;
+          return data;
         } else {
           throw new Error(data.error || 'Unknown error checking in item');
         }

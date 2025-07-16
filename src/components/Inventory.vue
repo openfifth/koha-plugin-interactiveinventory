@@ -926,11 +926,17 @@ export default {
         }
 
         if (combinedData.checked_out_date && !this.sessionData.doNotCheckIn) {
-          await this.checkInItem(combinedData.external_id);
+          const checkInResult = await this.checkInItem(combinedData.external_id);
           // Add resolution flags for display since item was automatically checked in
           combinedData.resolutionType = 'checkedout';
           combinedData.resolutionAction = 'checked in';
           combinedData.pendingResolution = false;
+          
+          // Store transit information if present
+          if (checkInResult && checkInResult.needs_transfer) {
+            combinedData.needs_transfer = true;
+            combinedData.transfer_to = checkInResult.transfer_to;
+          }
         }
 
         // Check if the item is marked as lost and update its status
@@ -1008,7 +1014,11 @@ export default {
           }
         );
         
-        EventBus.emit('message', { text: 'Item checked in successfully', type: 'status' });
+        let message = 'Item checked in successfully';
+        if (data.needs_transfer) {
+          message = `Item checked in and needs transfer to ${data.transfer_to}. Please initiate transfer process.`;
+        }
+        EventBus.emit('message', { text: message, type: 'status' });
         return data;
       } catch (error) {
         EventBus.emit('message', { text: `Error checking in item: ${error.message}`, type: 'error' });
@@ -1957,6 +1967,12 @@ export default {
               // Update resolution information
               updatedItem.pendingResolution = false;
               updatedItem.resolutionAction = 'checked in';
+              
+              // Store transit information if present
+              if (result.result && result.result.needs_transfer) {
+                updatedItem.needs_transfer = true;
+                updatedItem.transfer_to = result.result.transfer_to;
+              }
             } else if (action === 'renew') {
               // Update resolution information
               updatedItem.pendingResolution = false;
