@@ -600,19 +600,16 @@ export default {
             }
             
             if ( item.checked_out_date ) {
-              console.log(`Skipping checked out item: ${item.barcode}`);
               return false;
             }
             
             // Skip items that are in transit if the session is configured to do so
             if (this.sessionData.skipInTransitItems && item.in_transit) {
-              console.log(`Skipping in-transit item: ${item.barcode}`);
               return false;
             }
             
             // Skip items that have branch mismatch if the session is configured to do so
             if (this.sessionData.skipBranchMismatchItems && item.homebranch !== item.holdingbranch) {
-              console.log(`Skipping branch mismatch item: ${item.barcode} (homebranch: ${item.homebranch}, holdingbranch: ${item.holdingbranch})`);
               return false;
             }
             
@@ -724,8 +721,6 @@ export default {
       }
 
       try {
-        console.log('Updating multiple item statuses:', items);
-
         // Add progress indicator for large batches
         if (items.length > 50) {
           EventBus.emit('message', { text: `Processing ${items.length} items, please wait...`, type: 'status' });
@@ -824,8 +819,6 @@ export default {
       try {
         EventBus.emit('message', { type: 'status', text: 'Searching for item...' });
         
-        // Debug: log alert settings to confirm they're correctly set
-        console.log("Alert settings when scanning:", this.alertSettings);
 
         // Fetch item with embedded biblio data in a single API call
         let response = await fetch(`/api/v1/items?external_id=${encodeURIComponent(this.barcode)}`, {
@@ -909,13 +902,6 @@ export default {
         const statusAnalysis = this.analyzeItemStatus(combinedData);
         combinedData.statusAnalysis = statusAnalysis;
 
-        // Debug: log the combined data to check if withdrawn field is present and its value
-        console.log("Combined item data:", {
-          barcode: combinedData.external_id,
-          title: combinedData.biblio.title,
-          withdrawn: combinedData.withdrawn,
-          withdrawnType: typeof combinedData.withdrawn
-        });
 
         // Add running 'fields to amend' variable
         var fieldsToAmend = {};
@@ -1015,11 +1001,6 @@ export default {
 
         // Check if item is withdrawn and should be automatically restored
         if ((combinedData.withdrawn === '1' || combinedData.withdrawn === 1) && this.resolutionSettings.resolveWithdrawnItems) {
-          console.log("Executing automatic withdrawn item resolution:", {
-            barcode: combinedData.external_id,
-            withdrawn: combinedData.withdrawn,
-            resolveWithdrawnItems: this.resolutionSettings.resolveWithdrawnItems
-          });
           
           // Store the original withdrawn status for reference
           combinedData.originalWithdrawnStatus = combinedData.withdrawn;
@@ -1029,7 +1010,6 @@ export default {
           const withdrawnResolved = await this.updateSingleItemStatus(combinedData.external_id, fieldsToUpdate);
           
           if (withdrawnResolved) {
-            console.log("Withdrawn status successfully removed from system");
             // Clear withdrawn status in the UI data
             combinedData.withdrawn = '0';
             combinedData.wasWithdrawn = true; // Keep track that it was withdrawn
@@ -1043,17 +1023,11 @@ export default {
               type: 'success', 
               text: `Withdrawn status removed for ${combinedData.external_id}` 
             });
-          } else {
-            console.log("Failed to remove withdrawn status");
           }
         }
 
         // Check if item is lost and should be automatically marked as found
         if (combinedData.lost_status !== '0' && combinedData.lost_status && this.resolutionSettings.resolveLostItems) {
-          console.log("Executing automatic lost item resolution:", {
-            barcode: combinedData.external_id,
-            lost_status: combinedData.lost_status
-          });
           
           // Store the original lost status for reference and display
           combinedData.originalLostStatus = combinedData.lost_status;
@@ -1064,7 +1038,6 @@ export default {
           const lostResolved = await this.updateSingleItemStatus(combinedData.external_id, fieldsToUpdate);
           
           if (lostResolved) {
-            console.log("Lost status successfully removed from system");
             // We don't clear lost_status in the UI data to preserve the reason for display
             // combinedData.lost_status = '0';
             combinedData.wasLost = true; // Keep track that it was lost
@@ -1079,7 +1052,6 @@ export default {
               text: `Item ${combinedData.external_id} marked as found (was lost)` 
             });
           } else {
-            console.log("Failed to update lost status");
           }
         }
 
@@ -1206,7 +1178,6 @@ export default {
 
     async updateSingleItemStatus(barcode, fields) {
       try {
-        console.log('Updating single item status:', barcode, fields);
         
         // Use the improved apiService
         const data = await apiService.post(
@@ -1223,7 +1194,6 @@ export default {
     },
 
     async resolveReturnClaim(barcode) {
-      console.log('Resolving return claim for barcode:', barcode);
       this.loading = true;
 
       // Get item details to find the claim ID
@@ -1336,11 +1306,9 @@ export default {
       };
       
       // Log resolution settings for debugging
-      console.log('Explicitly initialized resolution settings:', this.resolutionSettings);
       
       // Log preview settings if present
       if (sessionData.previewSettings) {
-        console.log('Preview settings:', sessionData.previewSettings);
       }
       
       // Display filter information to the user
@@ -1417,7 +1385,6 @@ export default {
           console.warn('Invalid location_data in response:', data);
           data.location_data = [];
         } else {
-          console.log('location_data first item structure:', data.location_data.length > 0 ? data.location_data[0] : 'No items found');
         }
         
         if (!data.right_place_list || !Array.isArray(data.right_place_list)) {
@@ -1553,7 +1520,6 @@ export default {
         });
       }
       
-      console.log(`Exporting ${combinedItems.length} items to CSV${this.exportMissingOnly ? ' (missing items only)' : ''}`);
 
       const csvContent = [
         headers.join(','),
@@ -1639,7 +1605,6 @@ export default {
 
       for (const [key, value] of Object.entries(statusKeyValuePairs)) {
         if (value != "0" && (!selectedStatuses[key].includes(String(value)))) {
-          console.log('Invalid status:', key, value);
           item.invalidStatus['key'] = key; // Flag the item as having an invalid status
           item.invalidStatus['value'] = value;
           break;
@@ -1650,7 +1615,6 @@ export default {
     checkItemSpecialStatuses(item) {
       // Check for withdrawn items - handle both string and numeric values
       if ((item.withdrawn === '1' || item.withdrawn === 1) && this.alertSettings.showWithdrawnAlerts) {
-        console.log("Withdrawn item detected:", item.external_id, "withdrawn value:", item.withdrawn);
         EventBus.emit('message', {
           type: 'warning',
           text: `${item.title} (${item.barcode || item.external_id}) has been withdrawn from circulation`
@@ -1739,7 +1703,6 @@ export default {
     },
 
     toggleEndSessionModal() {
-      console.log('Toggle modal', this.showEndSessionModal);
       // Close the Shelf Preview modal if it's open
       if (this.showShelfPreview) {
         this.showShelfPreview = false;
@@ -1900,8 +1863,6 @@ export default {
       }
       
       // Log the status of alerts and resolutions for debugging
-      console.log('Alert settings:', this.alertSettings);
-      console.log('Resolution settings after merge:', this.resolutionSettings);
       
       this.getItems();
     },
@@ -2119,7 +2080,6 @@ export default {
     },
     
     handleResolutionComplete(result) {
-      console.log('Resolution complete:', result);
       const item = result.item;
       const action = result.action;
       const type = result.type;
@@ -2272,7 +2232,6 @@ export default {
         const markedItems = await getMarkedMissingItems();
         // Make a fresh Set from the array to ensure we don't have duplicates
         this.markedMissingItems = new Set(Array.isArray(markedItems) ? markedItems : []);
-        console.log(`Updated markedMissingItems set with ${this.markedMissingItems.size} items`);
       } catch (error) {
         console.error('Error updating marked missing items:', error);
         this.markedMissingItems = new Set();
