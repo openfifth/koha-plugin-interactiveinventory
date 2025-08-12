@@ -11,6 +11,48 @@
       </div>
       
       <div v-else>
+        <!-- Active Filters Display -->
+        <div v-if="sessionData" class="active-filters-container">
+          <div class="filters-header" @click="toggleFiltersDisplay">
+            <h3>
+              Active Filters 
+              <span class="filter-summary">({{ getActiveFiltersCount() }} active)</span>
+            </h3>
+            <button class="toggle-button" :class="{ 'expanded': showFilters }">
+              {{ showFilters ? '▼' : '▶' }}
+            </button>
+          </div>
+          
+          <div v-if="showFilters" class="active-filters">
+            <div class="filters-grid">
+              <div class="filter-item">
+                <strong>Library:</strong> {{ getLibraryName() }}
+              </div>
+              <div class="filter-item">
+                <strong>Shelving Location:</strong> {{ getShelvingLocationName() }}
+              </div>
+              <div class="filter-item">
+                <strong>Collection Code:</strong> {{ getCollectionCodeName() }}
+              </div>
+              <div class="filter-item">
+                <strong>Call Number Range:</strong> {{ getCallNumberRangeText() }}
+              </div>
+              <div class="filter-item">
+                <strong>Item Types:</strong> {{ getSelectedItemTypesText() }}
+              </div>
+              <div v-if="sessionData.dateLastSeen" class="filter-item">
+                <strong>Last Seen After:</strong> {{ formatDate(sessionData.dateLastSeen) }}
+              </div>
+              <div v-if="hasSkipFilters()" class="filter-item">
+                <strong>Excluding:</strong> {{ getSkipFiltersText() }}
+              </div>
+              <div class="filter-item" :class="sessionData.compareBarcodes ? 'comparison-mode' : 'scan-mode'">
+                <strong>Mode:</strong> {{ sessionData.compareBarcodes ? 'Comparing against expected barcodes' : 'Accept all scanned barcodes' }}
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div class="barcode-input-container">
           <form @submit.prevent="submitBarcode" class="barcode-form">
             <div class="input-group">
@@ -245,6 +287,7 @@ export default {
       markedMissingItems: new Set(),
       upcomingItemsCount: 0,
       authorizedValueCategories: {},
+      showFilters: false,
     };
   },
   mounted() {
@@ -263,6 +306,79 @@ export default {
     window.removeEventListener('resize', this.checkDeviceType);
   },
   methods: {
+    // Active filters display methods
+    getLibraryName() {
+      if (!this.sessionData?.selectedLibraryId) return 'All Libraries';
+      // TODO: Enhancement - store library names in session data to show descriptions instead of codes
+      return this.sessionData.selectedLibraryId;
+    },
+
+    getShelvingLocationName() {
+      if (!this.sessionData?.shelvingLocation) return 'All Locations';
+      // TODO: Enhancement - store shelving location descriptions in session data to show names instead of codes
+      return this.sessionData.shelvingLocation;
+    },
+
+    getCollectionCodeName() {
+      if (!this.sessionData?.ccode) return 'All Collections';
+      // TODO: Enhancement - store collection code descriptions in session data to show names instead of codes
+      return this.sessionData.ccode;
+    },
+
+    getSelectedItemTypesText() {
+      if (!this.sessionData?.selectedItypes?.length) return 'All Item Types';
+      const count = this.sessionData.selectedItypes.length;
+      return count === 1 ? this.sessionData.selectedItypes[0] : `${count} selected`;
+    },
+
+    getCallNumberRangeText() {
+      if (!this.sessionData?.minLocation && !this.sessionData?.maxLocation) {
+        return 'All Call Numbers';
+      }
+      if (this.sessionData.minLocation && this.sessionData.maxLocation) {
+        return `${this.sessionData.minLocation} - ${this.sessionData.maxLocation}`;
+      }
+      if (this.sessionData.minLocation) {
+        return `From: ${this.sessionData.minLocation}`;
+      }
+      return `To: ${this.sessionData.maxLocation}`;
+    },
+
+    hasSkipFilters() {
+      return this.sessionData?.skipCheckedOutItems || 
+             this.sessionData?.skipInTransitItems || 
+             this.sessionData?.skipBranchMismatchItems ||
+             this.sessionData?.ignoreWaitingHolds;
+    },
+
+    getSkipFiltersText() {
+      const filters = [];
+      if (this.sessionData?.skipCheckedOutItems) filters.push('Checked out items');
+      if (this.sessionData?.skipInTransitItems) filters.push('In-transit items');
+      if (this.sessionData?.skipBranchMismatchItems) filters.push('Branch mismatch items');
+      if (this.sessionData?.ignoreWaitingHolds) filters.push('Items on hold');
+      return filters.join(', ');
+    },
+
+    formatDate(dateString) {
+      if (!dateString) return '';
+      return new Date(dateString).toLocaleDateString();
+    },
+
+    toggleFiltersDisplay() {
+      this.showFilters = !this.showFilters;
+    },
+
+    getActiveFiltersCount() {
+      let count = 5; // Always show: Library, Location, Collection, Call Numbers, Item Types
+      
+      // Add optional filters when they exist
+      if (this.sessionData?.dateLastSeen) count++;
+      if (this.hasSkipFilters()) count++;
+      count++; // Always count the scanning mode
+      
+      return count;
+    },
     // Transit status analysis methods
     getTransitInfo(item) {
       if (!item.transfer) {
@@ -2685,5 +2801,120 @@ h3 {
 @keyframes spin {
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
+}
+
+/* Active filters display styles */
+.active-filters-container {
+  margin-bottom: 15px;
+  background-color: #f8f9fa;
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+}
+
+.filters-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 15px;
+  cursor: pointer;
+  border-bottom: 1px solid #dee2e6;
+  transition: background-color 0.2s;
+}
+
+.filters-header:hover {
+  background-color: #e9ecef;
+}
+
+.filters-header h3 {
+  margin: 0;
+  color: #495057;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.filter-summary {
+  font-size: 0.9rem;
+  font-weight: normal;
+  color: #6c757d;
+}
+
+.toggle-button {
+  background: none;
+  border: none;
+  font-size: 1rem;
+  color: #495057;
+  cursor: pointer;
+  padding: 4px;
+  transition: transform 0.2s;
+}
+
+.toggle-button.expanded {
+  transform: rotate(0deg);
+}
+
+.active-filters {
+  padding: 15px;
+}
+
+.filters-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 12px;
+}
+
+.filter-item {
+  background-color: #fff;
+  padding: 8px 12px;
+  border-radius: 4px;
+  border: 1px solid #e9ecef;
+  font-size: 0.9rem;
+}
+
+.filter-item strong {
+  color: #495057;
+  margin-right: 8px;
+}
+
+.comparison-mode {
+  background-color: #e3f2fd;
+  border-color: #2196f3;
+}
+
+.scan-mode {
+  background-color: #e8f5e9;
+  border-color: #4caf50;
+}
+
+/* Responsive adjustments for active filters */
+@media (max-width: 767px) {
+  .filters-grid {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+  
+  .active-filters-container {
+    margin-bottom: 10px;
+  }
+  
+  .filters-header {
+    padding: 10px 12px;
+  }
+  
+  .filters-header h3 {
+    font-size: 1rem;
+  }
+  
+  .filter-summary {
+    font-size: 0.8rem;
+  }
+  
+  .active-filters {
+    padding: 12px;
+  }
+  
+  .filter-item {
+    padding: 6px 10px;
+    font-size: 0.85rem;
+  }
 }
 </style>
