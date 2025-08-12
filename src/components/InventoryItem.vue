@@ -131,7 +131,7 @@ import { EventBus } from './eventBus';
 export default {
   props: {
     currentItemWithHighestCallNumber: String,
-    currentBiblioWithHighestCallNumber: Number,
+    currentBiblioWithHighestCallNumber: [Number, String, null],
     sessionData: Object,
     item: Object,
     isExpanded: Boolean,
@@ -165,7 +165,8 @@ export default {
   },
   computed: {
     highestCallNumberUrl() {
-      return `/cgi-bin/koha/catalogue/detail.pl?biblionumber=${this.currentBiblioWithHighestCallNumber}`;
+      const biblioId = this.currentBiblioWithHighestCallNumber;
+      return (biblioId && biblioId !== '') ? `/cgi-bin/koha/catalogue/detail.pl?biblionumber=${biblioId}` : '';
     },
     hasIssue() {
       if (this.item.resolutionAction && !this.item.pendingResolution) {

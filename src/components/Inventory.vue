@@ -202,7 +202,7 @@ export default {
       sessionInitializing: false,
       highestCallNumberSort: '',
       itemWithHighestCallNumber: '',
-      biblioWithHighestCallNumber: '',
+      biblioWithHighestCallNumber: null,
       showEndSessionModal: false,
       exportToCSV: false,
       exportMissingOnly: false,
@@ -493,6 +493,18 @@ export default {
       return modalMap[issueType];
     },
 
+    // Proper call number comparison following Koha core logic
+    isCallNumberOutOfOrder(currentCallNumberSort, highestCallNumberSort) {
+      // Handle empty/null values - items without call numbers are not considered out of order
+      if (!currentCallNumberSort || !highestCallNumberSort) {
+        return false;
+      }
+      
+      // Use lexicographic comparison like Koha core (cn_sort lt/gt)
+      // In JavaScript, this is equivalent to localeCompare < 0
+      return currentCallNumberSort < highestCallNumberSort;
+    },
+
     checkForExistingSession() {
       if (isSessionActive()) {
         // Chain promises instead of using async/await
@@ -553,8 +565,10 @@ export default {
         let highestBiblioId = '';
 
         this.items.forEach(item => {
-          if (item.call_number_sort > highestSortValue) {
-            highestSortValue = item.call_number_sort;
+          const itemCallNumberSort = item.call_number_sort || '';
+          // Use proper string comparison for call number sorting
+          if (itemCallNumberSort && itemCallNumberSort > highestSortValue) {
+            highestSortValue = itemCallNumberSort;
             highestItemBarcode = item.external_id;
             highestBiblioId = item.biblio_id;
           }
@@ -562,7 +576,7 @@ export default {
 
         this.highestCallNumberSort = highestSortValue;
         this.itemWithHighestCallNumber = highestItemBarcode;
-        this.biblioWithHighestCallNumber = highestBiblioId;
+        this.biblioWithHighestCallNumber = highestBiblioId || null;
       }
     },
 
@@ -1101,12 +1115,12 @@ export default {
           combinedData.pendingResolution = false;
         }
 
-        if (this.sessionData.checkShelvedOutOfOrder && combinedData.call_number_sort < this.highestCallNumberSort) {
+        if (this.sessionData.checkShelvedOutOfOrder && this.isCallNumberOutOfOrder(combinedData.call_number_sort, this.highestCallNumberSort)) {
           combinedData.outOfOrder = true;
         } else {
-          this.highestCallNumberSort = combinedData.call_number_sort;
+          this.highestCallNumberSort = combinedData.call_number_sort || '';
           this.itemWithHighestCallNumber = combinedData.external_id;
-          this.biblioWithHighestCallNumber = combinedData.biblio_id;
+          this.biblioWithHighestCallNumber = combinedData.biblio_id || null;
         }
 
         if (this.sessionData.selectedStatuses && Object.values(this.sessionData.selectedStatuses).some(statusArray => statusArray.length > 0)) {
