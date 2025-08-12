@@ -352,7 +352,6 @@ export default {
   methods: {
     // New method to load all form data
     loadFormData() {
-      console.log('Loading form data for setup form');
       this.createStatuses();
       this.fetchLibraries();
       this.fetchCollectionCodes();
@@ -566,8 +565,6 @@ export default {
         await apiService.fetchAllPaginated('/api/v1/public/libraries', {
           artificialDelay: 300, // Add some delay to make the loading visible
           onPageFetched: (items, pageNum) => {
-            console.log(`Received page ${pageNum} of libraries with ${items.length} items`);
-
             // Replace the loading placeholder with actual data on first page
             if (pageNum === 1) {
               this.libraries = items;
@@ -600,8 +597,6 @@ export default {
         await apiService.fetchAllPaginated('/api/v1/item_types', {
           artificialDelay: 300,
           onPageFetched: (items, pageNum) => {
-            console.log(`Received page ${pageNum} of item types with ${items.length} items`);
-
             // Replace the loading placeholder with actual data on first page
             if (pageNum === 1) {
               this.iTypes = items;

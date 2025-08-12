@@ -55,7 +55,6 @@ export const apiService = {
                     url += `&_per_page=${pageSize}`;
                 }
 
-                console.log(`Fetching page ${currentPage} from ${url}`);
                 const response = await fetch(url);
 
                 if (!response.ok) {
@@ -65,7 +64,6 @@ export const apiService = {
                 }
 
                 const items = await response.json();
-                console.log(`Received ${items.length} items from page ${currentPage}`);
 
                 if (items.length === 0) {
                     hasMorePages = false;
@@ -250,8 +248,6 @@ export const apiService = {
 
             const queryString = queryParams.toString();
             const url = queryString ? `${endpoint}?${queryString}` : endpoint;
-
-            console.log(`API GET: ${url}`);
 
             const response = await fetch(url, {
                 method: 'GET',
