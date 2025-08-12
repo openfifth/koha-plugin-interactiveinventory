@@ -315,6 +315,184 @@ export default {
       return typeMap[reason] || 'other';
     },
 
+    // Comprehensive status analysis system
+    analyzeItemStatus(item) {
+      return {
+        checkout: this.analyzeCheckoutStatus(item),
+        lost: this.analyzeLostStatus(item),
+        withdrawn: this.analyzeWithdrawnStatus(item),
+        damaged: this.analyzeDamagedStatus(item),
+        hold: this.analyzeHoldStatus(item),
+        transit: this.getTransitInfo(item),
+        returnClaim: this.analyzeReturnClaimStatus(item),
+        branch: this.analyzeBranchStatus(item),
+        restrictions: this.analyzeRestrictions(item)
+      };
+    },
+
+    analyzeCheckoutStatus(item) {
+      return {
+        isCheckedOut: !!item.checked_out_date,
+        checkoutDate: item.checked_out_date,
+        dueDate: item.due_date,
+        isOverdue: item.due_date && new Date(item.due_date) < new Date()
+      };
+    },
+
+    analyzeLostStatus(item) {
+      const isLost = item.lost_status && item.lost_status !== '0';
+      return {
+        isLost,
+        lostStatus: item.lost_status,
+        lostDate: item.lost_date,
+        lostDescription: isLost ? this.getLostDescription(item.lost_status) : null
+      };
+    },
+
+    analyzeWithdrawnStatus(item) {
+      const isWithdrawn = item.withdrawn === '1' || item.withdrawn === 1;
+      return {
+        isWithdrawn,
+        withdrawnStatus: item.withdrawn,
+        withdrawnDate: item.withdrawn_date
+      };
+    },
+
+    analyzeDamagedStatus(item) {
+      const isDamaged = item.damaged_status && item.damaged_status !== '0';
+      return {
+        isDamaged,
+        damagedStatus: item.damaged_status,
+        damagedDate: item.damaged_date
+      };
+    },
+
+    analyzeHoldStatus(item) {
+      return {
+        hasHold: !!item.first_hold,
+        isWaiting: !!item.waiting,
+        holdDetails: item.first_hold
+      };
+    },
+
+    analyzeReturnClaimStatus(item) {
+      return {
+        hasReturnClaim: !!item.return_claim,
+        claimDetails: item.return_claim,
+        claimsCount: Array.isArray(item.return_claims) ? item.return_claims.length : 0
+      };
+    },
+
+    analyzeBranchStatus(item) {
+      const hasBranchMismatch = item.homebranch !== item.holding_library_id;
+      return {
+        hasBranchMismatch,
+        homeBranch: item.homebranch,
+        holdingBranch: item.holding_library_id,
+        needsTransfer: hasBranchMismatch && !item.checked_out_date
+      };
+    },
+
+    analyzeRestrictions(item) {
+      return {
+        isRestricted: item.restricted_status && item.restricted_status !== '0',
+        restrictedStatus: item.restricted_status,
+        notForLoan: item.not_for_loan_status && item.not_for_loan_status !== 0,
+        notForLoanStatus: item.not_for_loan_status
+      };
+    },
+
+    getLostDescription(lostStatus) {
+      // This could be enhanced to fetch authorized values
+      const lostDescriptions = {
+        '1': 'Lost',
+        '2': 'Long Overdue (Lost)',
+        '3': 'Lost and Paid For',
+        '4': 'Missing'
+      };
+      return lostDescriptions[lostStatus] || `Lost Status: ${lostStatus}`;
+    },
+
+    // Helper method to get all problematic statuses that need attention
+    getProblematicStatuses(statusAnalysis) {
+      const issues = [];
+      
+      if (statusAnalysis.checkout.isOverdue) {
+        issues.push({ type: 'overdue', severity: 'high', message: 'Item is overdue' });
+      }
+      
+      if (statusAnalysis.lost.isLost) {
+        issues.push({ type: 'lost', severity: 'high', message: statusAnalysis.lost.lostDescription });
+      }
+      
+      if (statusAnalysis.withdrawn.isWithdrawn) {
+        issues.push({ type: 'withdrawn', severity: 'medium', message: 'Item is withdrawn' });
+      }
+      
+      if (statusAnalysis.damaged.isDamaged) {
+        issues.push({ type: 'damaged', severity: 'medium', message: 'Item is damaged' });
+      }
+      
+      if (statusAnalysis.returnClaim.hasReturnClaim) {
+        issues.push({ type: 'return_claim', severity: 'high', message: 'Item has unresolved return claim' });
+      }
+      
+      if (statusAnalysis.transit.inTransit) {
+        const transitMsg = `Item in transit ${this.getTransitDescription ? this.getTransitDescription(statusAnalysis.transit) : ''}`;
+        issues.push({ type: 'transit', severity: 'low', message: transitMsg });
+      }
+      
+      if (statusAnalysis.branch.hasBranchMismatch && !statusAnalysis.checkout.isCheckedOut) {
+        issues.push({ type: 'branch_mismatch', severity: 'medium', message: 'Item at wrong branch' });
+      }
+      
+      if (statusAnalysis.hold.hasHold && statusAnalysis.hold.isWaiting) {
+        issues.push({ type: 'waiting_hold', severity: 'high', message: 'Item has hold waiting for pickup' });
+      }
+      
+      return issues.sort((a, b) => {
+        const severityOrder = { high: 3, medium: 2, low: 1 };
+        return severityOrder[b.severity] - severityOrder[a.severity];
+      });
+    },
+
+    // Handle individual item issues based on type and settings
+    async handleItemIssue(item, issue, statusAnalysis) {
+      const resolutionKey = this.getResolutionSettingKey(issue.type);
+      const shouldAutoResolve = resolutionKey && this.resolutionSettings[resolutionKey];
+      
+      if (!shouldAutoResolve) {
+        // Show manual resolution modal
+        const modalType = this.getModalType(issue.type);
+        if (modalType) {
+          this.openResolutionModal(item, modalType);
+          return true; // Indicates manual resolution is needed
+        }
+      }
+      
+      return false; // Continue processing
+    },
+
+    getResolutionSettingKey(issueType) {
+      const settingMap = {
+        'lost': 'resolveLostItems',
+        'withdrawn': 'resolveWithdrawnItems', 
+        'transit': 'resolveInTransitItems',
+        'return_claim': 'resolveReturnClaims'
+      };
+      return settingMap[issueType];
+    },
+
+    getModalType(issueType) {
+      const modalMap = {
+        'lost': 'lost',
+        'withdrawn': 'withdrawn',
+        'transit': 'intransit', 
+        'return_claim': 'returnclaim'
+      };
+      return modalMap[issueType];
+    },
+
     checkForExistingSession() {
       if (isSessionActive()) {
         // Chain promises instead of using async/await
@@ -737,6 +915,10 @@ export default {
         // Combine item data and biblio data
         const combinedData = { ...itemData, biblio: biblioData };
 
+        // Analyze comprehensive item status
+        const statusAnalysis = this.analyzeItemStatus(combinedData);
+        combinedData.statusAnalysis = statusAnalysis;
+
         // Debug: log the combined data to check if withdrawn field is present and its value
         console.log("Combined item data:", {
           barcode: combinedData.external_id,
@@ -785,74 +967,16 @@ export default {
             return;
           }
           
-          // Handle lost items
-          if (combinedData.lost_status !== '0' && combinedData.lost_status) {
-            console.log("Lost item detected:", {
-              barcode: combinedData.external_id,
-              lost_status: combinedData.lost_status,
-              resolveLostItems: this.resolutionSettings.resolveLostItems
-            });
-            
-            // Only show manual resolution if automatic resolution is not enabled
-            if (!this.resolutionSettings.resolveLostItems) {
-              console.log("Opening resolution modal for lost item");
-              // Show the resolution modal for lost items
-              this.openResolutionModal(combinedData, 'lost');
-              this.barcode = '';
-              this.loading = false;
-              return;
-            } else {
-              console.log("Auto-resolution for lost item should be triggered");
-            }
-          }
+          // Check for issues that require resolution
+          const issues = this.getProblematicStatuses(statusAnalysis);
+          const highPriorityIssues = issues.filter(issue => issue.severity === 'high');
           
-          // Handle withdrawn items
-          if ((combinedData.withdrawn === '1' || combinedData.withdrawn === 1) && this.alertSettings.showWithdrawnAlerts) {
-            console.log("Withdrawn item detected:", {
-              barcode: combinedData.external_id,
-              withdrawn: combinedData.withdrawn,
-              withdrawnType: typeof combinedData.withdrawn,
-              resolveWithdrawnItems: this.resolutionSettings.resolveWithdrawnItems,
-              fullResolutionSettings: this.resolutionSettings
-            });
-            
-            // Only show manual resolution if automatic resolution is not enabled
-            if (!this.resolutionSettings.resolveWithdrawnItems) {
-              console.log("Opening resolution modal for withdrawn item");
-              // Show the resolution modal for withdrawn items
-              this.openResolutionModal(combinedData, 'withdrawn');
+          // Handle each type of issue
+          for (const issue of highPriorityIssues) {
+            if (await this.handleItemIssue(combinedData, issue, statusAnalysis)) {
               this.barcode = '';
               this.loading = false;
-              return;
-            } else {
-              console.log("Auto-resolution for withdrawn item should be triggered");
-            }
-          }
-          
-          // Handle in-transit items
-          const transitInfo = this.getTransitInfo(combinedData);
-          if (transitInfo.inTransit) {
-            // Add transit information to combined data for display
-            combinedData.transitInfo = transitInfo;
-            combinedData.in_transit = true; // Maintain backward compatibility
-            
-            // Only show manual resolution if automatic resolution is not enabled
-            if (!this.resolutionSettings.resolveInTransitItems) {
-              this.openResolutionModal(combinedData, 'intransit');
-              this.barcode = '';
-              this.loading = false;
-              return;
-            }
-          }
-          
-          // Handle return claims
-          if (combinedData.return_claim) {
-            // Only show manual resolution if automatic resolution is not enabled
-            if (!this.resolutionSettings.resolveReturnClaims) {
-              this.openResolutionModal(combinedData, 'returnclaim');
-              this.barcode = '';
-              this.loading = false;
-              return;
+              return; // Stop processing if manual resolution is needed
             }
           }
         }
