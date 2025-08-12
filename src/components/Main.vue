@@ -3,8 +3,8 @@
     <div 
       v-for="(message, index) in messages" 
       :key="message.id"
-      :class="['message', message.type]"
-      :style="{ top: `${index * 60}px` }"
+      :class="['message', message.type, { 'newest': index === messages.length - 1 }]"
+      :style="{ top: `${(messages.length - 1 - index) * 60}px` }"
     >
       {{ message.text }}
     </div>
@@ -110,6 +110,14 @@ export default {
   animation: slideInFade 0.3s ease-out;
 }
 
+.message.newest {
+  font-size: 16px;
+  font-weight: 600;
+  padding: 14px 26px;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+  transform: scale(1.05);
+}
+
 .message.error {
   background-color: #f44336;
   color: white;
@@ -160,6 +168,52 @@ export default {
   100% {
     opacity: 0;
     transform: scale(0.95);
+  }
+}
+
+/* Mobile responsive styles for notifications */
+@media (max-width: 767px) {
+  .notifications-container {
+    top: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 90%;
+    max-width: 320px;
+  }
+  
+  .message {
+    padding: 8px 16px;
+    font-size: 12px;
+    max-width: 100%;
+    left: 0;
+    right: 0;
+    margin: 0 auto;
+    text-align: center;
+  }
+  
+  .message.newest {
+    font-size: 13px;
+    font-weight: 600;
+    padding: 9px 18px;
+    transform: scale(1.02);
+  }
+}
+
+/* Very small screens */
+@media (max-width: 480px) {
+  .notifications-container {
+    width: 95%;
+    max-width: 280px;
+  }
+  
+  .message {
+    padding: 6px 12px;
+    font-size: 11px;
+  }
+  
+  .message.newest {
+    font-size: 12px;
+    padding: 7px 14px;
   }
 }
 </style>
