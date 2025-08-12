@@ -16,6 +16,20 @@
   [%- USE Koha -%]
   [%- USE raw -%]
 
+  <nav id="breadcrumbs" aria-label="Breadcrumb" class="breadcrumb">
+    <ol class="breadcrumb">
+      <li class="breadcrumb-item">
+        <a href="/cgi-bin/koha/mainpage.pl">Home</a>
+      </li>
+      <li class="breadcrumb-item">
+        <a href="/cgi-bin/koha/tools/tools-home.pl">Tools</a>
+      </li>
+      <li class="breadcrumb-item active" id="current-breadcrumb" aria-current="page">
+        Interactive Inventory
+      </li>
+    </ol>
+  </nav>
+
   <div id="__app"></div> 
 
   <script>
