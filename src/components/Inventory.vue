@@ -263,6 +263,58 @@ export default {
     window.removeEventListener('resize', this.checkDeviceType);
   },
   methods: {
+    // Transit status analysis methods
+    getTransitInfo(item) {
+      if (!item.transfer) {
+        return { 
+          inTransit: false, 
+          type: null, 
+          reason: null,
+          isHoldTransit: false,
+          isReturnTransit: false,
+          isManualTransit: false,
+          from: null,
+          to: null,
+          date: null
+        };
+      }
+      
+      const reason = item.transfer.reason;
+      const type = this.getTransitType(reason);
+      
+      return {
+        inTransit: true,
+        reason,
+        type,
+        from: item.transfer.frombranch,
+        to: item.transfer.tobranch,
+        date: item.transfer.datesent,
+        isHoldTransit: reason === 'Reserve',
+        isReturnTransit: ['ReturnToHome', 'ReturnToHolding'].includes(reason),
+        isManualTransit: reason === 'Manual',
+        isStockrotationTransit: ['StockrotationAdvance', 'StockrotationRepatriation'].includes(reason),
+        isCollectionTransit: reason === 'RotatingCollection',
+        isRecallTransit: reason === 'Recall'
+      };
+    },
+
+    getTransitType(reason) {
+      const typeMap = {
+        'Reserve': 'hold',
+        'ReturnToHome': 'return',
+        'ReturnToHolding': 'return', 
+        'Manual': 'manual',
+        'StockrotationAdvance': 'stockrotation',
+        'StockrotationRepatriation': 'stockrotation',
+        'RotatingCollection': 'collection',
+        'Recall': 'recall',
+        'LostReserve': 'lost',
+        'CancelReserve': 'cancelled',
+        'RecallCancellation': 'cancelled'
+      };
+      return typeMap[reason] || 'other';
+    },
+
     checkForExistingSession() {
       if (isSessionActive()) {
         // Chain promises instead of using async/await
@@ -778,7 +830,12 @@ export default {
           }
           
           // Handle in-transit items
-          if (combinedData.in_transit) {
+          const transitInfo = this.getTransitInfo(combinedData);
+          if (transitInfo.inTransit) {
+            // Add transit information to combined data for display
+            combinedData.transitInfo = transitInfo;
+            combinedData.in_transit = true; // Maintain backward compatibility
+            
             // Only show manual resolution if automatic resolution is not enabled
             if (!this.resolutionSettings.resolveInTransitItems) {
               this.openResolutionModal(combinedData, 'intransit');
@@ -820,18 +877,24 @@ export default {
         }
         
         // Check if item is in transit and should be resolved
-        if (combinedData.in_transit && this.resolutionSettings.resolveInTransitItems) {
+        const transitInfo = this.getTransitInfo(combinedData);
+        if (transitInfo.inTransit && this.resolutionSettings.resolveInTransitItems) {
           const transitResolved = await this.resolveTransit(combinedData.external_id);
           if (transitResolved) {
             combinedData.in_transit = false;
-            // Add resolution flags for display
+            // Add resolution flags for display with detailed transit info
             combinedData.resolutionType = 'intransit';
             combinedData.resolutionAction = 'transit resolved';
             combinedData.pendingResolution = false;
+            combinedData.transitInfo = { ...transitInfo, inTransit: false };
             
+            // Emit success message with specific transit type details
+            const transitTypeMsg = transitInfo.isHoldTransit ? ' (hold transit)' : 
+                                  transitInfo.isReturnTransit ? ' (return transit)' : 
+                                  transitInfo.isManualTransit ? ' (manual transit)' : '';
             EventBus.emit('message', { 
               type: 'success', 
-              text: `In-transit status resolved for ${combinedData.external_id}` 
+              text: `In-transit status resolved for ${combinedData.external_id}${transitTypeMsg}` 
             });
           }
         }

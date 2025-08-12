@@ -84,7 +84,13 @@
         </p>
         <p v-if="item.in_transit && alertSettings.showInTransitAlerts" class="item-warning"><strong>Warning:</strong></p>
         <p v-if="item.in_transit && alertSettings.showInTransitAlerts" class="item-warning">
-          This item is currently in transit from {{ item.homebranch }} to {{ item.holdingbranch }}.
+          <span v-if="item.transitInfo">
+            This item is in transit {{ getTransitDescription(item.transitInfo) }} 
+            from {{ item.transitInfo.from || item.homebranch }} to {{ item.transitInfo.to || item.holdingbranch }}.
+          </span>
+          <span v-else>
+            This item is currently in transit from {{ item.homebranch }} to {{ item.holdingbranch }}.
+          </span>
         </p>
         <p v-if="item.homebranch !== item.holdingbranch && alertSettings.showBranchMismatchAlerts" class="item-warning"><strong>Warning:</strong></p>
         <p v-if="item.homebranch !== item.holdingbranch && alertSettings.showBranchMismatchAlerts" class="item-warning">
@@ -202,6 +208,29 @@ export default {
     }
   },
   methods: {
+    getTransitDescription(transitInfo) {
+      if (!transitInfo || !transitInfo.inTransit) return '';
+      
+      switch (transitInfo.type) {
+        case 'hold':
+          return 'to fulfill a hold';
+        case 'return':
+          return 'returning to its home/holding branch';
+        case 'manual':
+          return 'via manual transfer';
+        case 'stockrotation':
+          return 'for stock rotation';
+        case 'collection':
+          return 'for rotating collection';
+        case 'recall':
+          return 'to fulfill a recall';
+        case 'cancelled':
+          return 'for cancelled hold/recall';
+        default:
+          return `(${transitInfo.reason || 'unknown reason'})`;
+      }
+    },
+
     toggleExpand() {
       this.$emit('toggleExpand', `${this.index}-${this.item.id}`);
     },
