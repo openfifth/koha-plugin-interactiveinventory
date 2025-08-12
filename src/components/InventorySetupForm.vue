@@ -133,7 +133,7 @@
           <div v-for="iType in iTypes" :key="iType.item_type_id" class="item-type-box"
             @click="toggleItype(iType.item_type_id)" :class="{ 'loading': iType.item_type_id === 'loading' }">
             <input type="checkbox" :id="'iType_' + iType.item_type_id" :value="iType.item_type_id"
-              v-model="selectedItypes" @click.stop" :disabled="iType.item_type_id === 'loading'" />
+              v-model="selectedItypes" @click.stop :disabled="iType.item_type_id === 'loading'" />
             <label :for="'iType_' + iType.item_type_id">{{ iType.description }}</label>
           </div>
         </div>
