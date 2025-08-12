@@ -827,8 +827,13 @@ export default {
         // Debug: log alert settings to confirm they're correctly set
         console.log("Alert settings when scanning:", this.alertSettings);
 
-        // First get all items with this barcode (usually just one)
-        let response = await fetch(`/api/v1/items?external_id=${encodeURIComponent(this.barcode)}`);
+        // Fetch item with embedded biblio data in a single API call
+        let response = await fetch(`/api/v1/items?external_id=${encodeURIComponent(this.barcode)}`, {
+          headers: {
+            'Accept': 'application/json',
+            'x-koha-embed': 'biblio'
+          }
+        });
 
         if (!response.ok) {
           throw new Error(`Failed to fetch items: ${response.statusText}`);
@@ -840,14 +845,15 @@ export default {
           throw new Error('Item not found: ' + this.barcode);
         }
 
-        const itemData = items[0];
+        // Item data now includes embedded biblio data
+        const combinedData = items[0];
 
-        if (!itemData.biblio_id) {
-          throw new Error('Item found but missing biblio data: ' + this.barcode);
+        if (!combinedData.biblio) {
+          throw new Error('Item found but missing embedded biblio data: ' + this.barcode);
         }
 
         // Check if the item is checked out and the user has chosen to skip checked out items
-        if (this.sessionData.skipCheckedOutItems && itemData.checked_out_date) {
+        if (this.sessionData.skipCheckedOutItems && combinedData.checked_out_date) {
           EventBus.emit('message', { 
             type: 'warning', 
             text: `Item ${this.barcode} is currently checked out. Skipping according to settings.` 
@@ -864,7 +870,7 @@ export default {
         }
         
         // Check if the item is in transit and the user has chosen to skip in-transit items
-        if (this.sessionData.skipInTransitItems && itemData.in_transit) {
+        if (this.sessionData.skipInTransitItems && combinedData.in_transit) {
           EventBus.emit('message', { 
             type: 'warning', 
             text: `Item ${this.barcode} is currently in transit. Skipping according to settings.` 
@@ -881,10 +887,10 @@ export default {
         }
 
         // Check if the item has branch mismatch and the user has chosen to skip such items
-        if (this.sessionData.skipBranchMismatchItems && itemData.homebranch !== itemData.holdingbranch) {
+        if (this.sessionData.skipBranchMismatchItems && combinedData.homebranch !== combinedData.holdingbranch) {
           EventBus.emit('message', { 
             type: 'warning', 
-            text: `Item ${this.barcode} has different holding branch (${itemData.holdingbranch}) than home branch (${itemData.homebranch}). Skipping according to settings.` 
+            text: `Item ${this.barcode} has different holding branch (${combinedData.holdingbranch}) than home branch (${combinedData.homebranch}). Skipping according to settings.` 
           });
           
           // Clear the barcode input and focus on it
@@ -897,23 +903,7 @@ export default {
           return; // Skip processing this item
         }
 
-        EventBus.emit('message', { type: 'status', text: 'Fetching bibliographic details...' });
-
-        // Fetch the biblio data - Add Accept header to fix the Not Acceptable error
-        response = await fetch(`/api/v1/biblios/${itemData.biblio_id}`, {
-          headers: {
-            'Accept': 'application/json'
-          }
-        });
-
-        if (!response.ok) {
-          throw new Error(`Failed to fetch biblio: ${response.statusText}`);
-        }
-
-        const biblioData = await response.json();
-
-        // Combine item data and biblio data
-        const combinedData = { ...itemData, biblio: biblioData };
+        // Data is already combined with embedded biblio from the single API call
 
         // Analyze comprehensive item status
         const statusAnalysis = this.analyzeItemStatus(combinedData);
