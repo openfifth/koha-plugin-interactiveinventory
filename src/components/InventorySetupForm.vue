@@ -44,8 +44,8 @@
             disabled>
             Loading shelving locations...
           </option>
-          <option v-for="(description, code) in filteredShelvingLocations" :key="code" :value="code">
-            {{ description }}
+          <option v-for="item in sortedShelvingLocations" :key="item.code" :value="item.code">
+            {{ item.description }}
           </option>
         </select>
         <div v-if="shelvingLocationsLoading" class="loading-indicator">Loading shelving locations...</div>
@@ -57,8 +57,8 @@
           <option v-if="collectionCodesLoading && Object.keys(collectionCodes).length <= 1" value="loading" disabled>
             Loading collection codes...
           </option>
-          <option v-for="(description, code) in filteredCollectionCodes" :key="code" :value="code">
-            {{ description }}
+          <option v-for="item in sortedCollectionCodes" :key="item.code" :value="item.code">
+            {{ item.description }}
           </option>
         </select>
         <div v-if="compareBarcodes && ccode" class="help-text info-text">
@@ -343,6 +343,16 @@ export default {
         }
       });
       return filtered;
+    },
+    sortedShelvingLocations() {
+      return Object.entries(this.filteredShelvingLocations)
+        .map(([code, description]) => ({ code, description }))
+        .sort((a, b) => a.description.localeCompare(b.description));
+    },
+    sortedCollectionCodes() {
+      return Object.entries(this.filteredCollectionCodes)
+        .map(([code, description]) => ({ code, description }))
+        .sort((a, b) => a.description.localeCompare(b.description));
     }
   },
   created() {
