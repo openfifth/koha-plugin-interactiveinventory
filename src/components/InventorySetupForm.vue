@@ -44,7 +44,7 @@
             disabled>
             Loading shelving locations...
           </option>
-          <option v-for="(description, code) in shelvingLocations" :key="code" :value="code" v-if="code !== 'loading'">
+          <option v-for="(description, code) in filteredShelvingLocations" :key="code" :value="code">
             {{ description }}
           </option>
         </select>
@@ -57,7 +57,7 @@
           <option v-if="collectionCodesLoading && Object.keys(collectionCodes).length <= 1" value="loading" disabled>
             Loading collection codes...
           </option>
-          <option v-for="(description, code) in collectionCodes" :key="code" :value="code" v-if="code !== 'loading'">
+          <option v-for="(description, code) in filteredCollectionCodes" :key="code" :value="code">
             {{ description }}
           </option>
         </select>
@@ -324,6 +324,26 @@ export default {
       showItemIssues: true,
       autoOpenPreview: false,
     };
+  },
+  computed: {
+    filteredShelvingLocations() {
+      const filtered = {};
+      Object.entries(this.shelvingLocations || {}).forEach(([key, value]) => {
+        if (key && key !== 'loading' && key !== 'undefined' && key !== undefined && key !== null) {
+          filtered[key] = value;
+        }
+      });
+      return filtered;
+    },
+    filteredCollectionCodes() {
+      const filtered = {};
+      Object.entries(this.collectionCodes || {}).forEach(([key, value]) => {
+        if (key && key !== 'loading' && key !== 'undefined' && key !== undefined && key !== null) {
+          filtered[key] = value;
+        }
+      });
+      return filtered;
+    }
   },
   created() {
     // We don't need to load anything in the setup form if it won't be shown
