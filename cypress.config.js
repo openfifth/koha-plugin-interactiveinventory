@@ -15,6 +15,11 @@ module.exports = defineConfig({
       apiPassword: process.env.KOHA_PASS || 'koha'
     },
     setupNodeEvents(on, config) {
+      // Koha's mockData.js resolves YAML specs via relative paths from CWD.
+      // When running Cypress from the plugin dir, CWD must be set to kohaRoot
+      // so that api/v1/swagger/definitions/*.yaml files can be found.
+      process.chdir(kohaRoot)
+
       const { query } = require(path.join(kohaPlugins, 'db.js'))
       const { getBasicAuthHeader } = require(path.join(kohaPlugins, 'auth.js'))
       const { buildSampleObject, buildSampleObjects } = require(
