@@ -9,10 +9,7 @@ use C4::Auth;
 use DBI;
 use CGI;
 use JSON;
-use Data::Dumper;
 use URI::Escape;
-
-#use Mojo::JSON qw(decode_json);
 use C4::Auth   qw( get_template_and_user );
 use C4::Output qw( output_html_with_http_headers );
 use C4::Items  qw( GetItemsForInventory );
@@ -130,7 +127,6 @@ sub start_session {
 
         # Quote each item type manually
         my @quoted_itemtypes = map { "'$_'" } @itemtype_codes;
-        warn Dumper(@itemtype_codes);
 
         # Extract and validate session parameters with defaults
         my $minLocation = $session_data->{'minLocation'} || '';
@@ -149,21 +145,8 @@ sub start_session {
         my $skipBranchMismatchItems = $session_data->{'skipBranchMismatchItems'} || 0;
         my $compareBarcodes = $session_data->{'compareBarcodes'} || 0;
         
-        # Log if we're skipping checked out items
         if ($skipCheckedOutItems) {
-            warn "Skipping checked out items is enabled";
-            # Make sure ignoreIssued is set correctly
             $ignoreIssued = 1;
-        }
-        
-        # Log if we're skipping in-transit items
-        if ($skipInTransitItems) {
-            warn "Skipping in-transit items is enabled";
-        }
-        
-        # Log if we're skipping branch mismatch items
-        if ($skipBranchMismatchItems) {
-            warn "Skipping items with holding branch different from home branch is enabled";
         }
         
         # Ensure selectedItypes is an array
@@ -174,10 +157,6 @@ sub start_session {
         
         my $selectedbranchcode = $session_data->{'selectedLibraryId'} || '';
         my $shelvingLocation = $session_data->{'shelvingLocation'} || '';
-
-        # Add debug logging
-        warn "Shelving location filter: " . ($shelvingLocation || 'not set');
-        warn "Session data: " . Dumper($session_data);
 
         # Build common parameters for both queries
         my $common_params = {
@@ -190,41 +169,14 @@ sub start_session {
         # If shelving location is set, use it as the location parameter
         if ($shelvingLocation) {
             $common_params->{location} = $shelvingLocation;
-            # Replace locationLoop with shelving location if both are set
-            warn "Applying shelving location filter: $shelvingLocation (replacing location: " . ($locationLoop || 'none') . ")";
-            
-            # Log that we're using the shelving location filter
-            warn "Using shelving location filter in location parameter: $shelvingLocation";
         } elsif ($locationLoop) {
             $common_params->{location} = $locationLoop;
         }
 
-        # Add debug logging for parameters
-        warn "Common parameters: " . Dumper($common_params);
-
         # Only generate right_place_list if compareBarcodes is enabled
         my $rightPlaceList = [];
         if ($compareBarcodes) {
-            warn "Compare barcodes is enabled, generating right place list";
-            
-            # If ccode is set, log that it will limit the expected barcodes list
-            if ($ccode) {
-                warn "Collection Code filter ($ccode) will limit expected barcodes list";
-            }
-            
             ($rightPlaceList) = GetItemsForInventory($common_params);
-            warn "Right place list count: " . ($rightPlaceList ? scalar(@$rightPlaceList) : 0);
-            
-            # If the list is empty and ccode is set, log a potential issue
-            if (!$rightPlaceList || scalar(@$rightPlaceList) == 0) {
-                if ($ccode) {
-                    warn "Expected barcodes list is empty, possibly due to Collection Code filter: $ccode";
-                } else {
-                    warn "Expected barcodes list is empty with no Collection Code filter";
-                }
-            }
-        } else {
-            warn "Compare barcodes is disabled, skipping right place list generation";
         }
 
         # Ensure rightPlaceList is an array reference, even if empty
@@ -253,15 +205,7 @@ sub start_session {
             $location_params->{homebranch_match_holdingbranch} = 1;
         }
 
-        # Add debug logging for location parameters
-        warn "Location parameters: " . Dumper($location_params);
-
         my ($location_data, $iTotalRecords) = GetItemsForInventory($location_params);
-
-        # Add debug logging for location data
-        warn "Location data count: " . ($location_data ? scalar(@$location_data) : 0);
-        warn "Total records: " . ($iTotalRecords || 0);
-        warn "Using location parameter: " . ($common_params->{location} || 'not set');
 
         # Ensure location_data is an array reference, even if empty
         $location_data = [] unless defined $location_data;
@@ -329,7 +273,6 @@ sub static_routes {
 
     my $spec_str = $self->mbf_read('api/staticapi.json');
     my $spec     = decode_json($spec_str);
-    warn Dumper($spec);
 
     return $spec;
 }
