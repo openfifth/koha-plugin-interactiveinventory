@@ -279,7 +279,6 @@ sub resolveTransit {
     my $transit_data = $c->validation->param('body');
     
     my $barcode = $transit_data->{barcode};
-    my $branch_code = $transit_data->{branchCode} || C4::Context->userenv->{branch};
     
     unless ($barcode) {
         return $c->render(
@@ -297,10 +296,10 @@ sub resolveTransit {
         );
     }
     
-    # Check if the item is in transit
-    my $item_data = $item->unblessed;
+    # Get the active transfer using Koha's transfer API
+    my $transfer = $item->get_transfer;
     
-    unless ($item_data->{in_transit}) {
+    unless ($transfer && $transfer->in_transit) {
         return $c->render(
             status => 404,
             openapi => { error => "Item is not in transit" }
@@ -308,19 +307,14 @@ sub resolveTransit {
     }
     
     try {
-        # Reset the in_transit flag
-        $item->in_transit(0);
-        
-        # Update the holding branch to the current branch
-        $item->holdingbranch($branch_code);
-        
-        # Store the changes
-        $item->store;
+        # Use Koha's proper transfer API to receive the item
+        # This sets datearrived, updates date_last_seen, and maintains audit trail
+        $transfer->receive;
         
         return $c->render(
             status => 200,
             openapi => {
-                status => "success",
+                status  => "success",
                 message => "Transit resolved successfully"
             }
         );
