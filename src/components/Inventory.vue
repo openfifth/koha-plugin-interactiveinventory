@@ -283,6 +283,21 @@ import {
 } from '../services/sessionStorage'
 import { apiService } from '../services/apiService'
 import { filterMissingItems } from '../utils/missingItems'
+import {
+  analyzeItemStatus as _analyzeItemStatus,
+  analyzeCheckoutStatus,
+  analyzeLostStatus,
+  analyzeWithdrawnStatus,
+  analyzeDamagedStatus,
+  analyzeHoldStatus,
+  analyzeReturnClaimStatus,
+  analyzeBranchStatus,
+  analyzeRestrictions,
+  getProblematicStatuses,
+  getLostDescription
+} from '../composables/useItemStatusAnalysis'
+import { useActiveFiltersDisplay } from '../composables/useActiveFiltersDisplay'
+import { useCallNumberTracking } from '../composables/useCallNumberTracking'
 
 export default {
   components: {
@@ -292,6 +307,50 @@ export default {
     ResolutionModal,
     MissingItemsModal,
     ShelfPreview
+  },
+  setup() {
+    const {
+      showFilters,
+      getLibraryName: _getLibraryName,
+      getShelvingLocationName: _getShelvingLocationName,
+      getCollectionCodeName: _getCollectionCodeName,
+      getSelectedItemTypesText: _getSelectedItemTypesText,
+      getCallNumberRangeText: _getCallNumberRangeText,
+      hasSkipFilters: _hasSkipFilters,
+      getSkipFiltersText: _getSkipFiltersText,
+      getActiveFiltersCount: _getActiveFiltersCount,
+      toggleFiltersDisplay,
+      formatDate
+    } = useActiveFiltersDisplay()
+
+    const {
+      highestCallNumberSort,
+      itemWithHighestCallNumber,
+      biblioWithHighestCallNumber,
+      isCallNumberOutOfOrder: _isCallNumberOutOfOrder,
+      checkItemStatuses: _checkItemStatuses,
+      updateHighestCallNumber: _updateHighestCallNumber
+    } = useCallNumberTracking()
+
+    return {
+      showFilters,
+      toggleFiltersDisplay,
+      formatDate,
+      highestCallNumberSort,
+      itemWithHighestCallNumber,
+      biblioWithHighestCallNumber,
+      _getLibraryName,
+      _getShelvingLocationName,
+      _getCollectionCodeName,
+      _getSelectedItemTypesText,
+      _getCallNumberRangeText,
+      _hasSkipFilters,
+      _getSkipFiltersText,
+      _getActiveFiltersCount,
+      _isCallNumberOutOfOrder,
+      _checkItemStatuses,
+      _updateHighestCallNumber
+    }
   },
   computed: {
     uniqueBarcodesCount() {
@@ -321,9 +380,6 @@ export default {
       sessionData: null,
       sessionStarted: false,
       sessionInitializing: false,
-      highestCallNumberSort: '',
-      itemWithHighestCallNumber: '',
-      biblioWithHighestCallNumber: null,
       showEndSessionModal: false,
       exportToCSV: false,
       exportMissingOnly: false,
@@ -365,8 +421,7 @@ export default {
       manualResolutionEnabled: true,
       markedMissingItems: new Set(),
       upcomingItemsCount: 0,
-      authorizedValueCategories: {},
-      showFilters: false
+      authorizedValueCategories: {}
     }
   },
   mounted() {
@@ -385,80 +440,36 @@ export default {
     window.removeEventListener('resize', this.checkDeviceType)
   },
   methods: {
-    // Active filters display methods
     getLibraryName() {
-      if (!this.sessionData?.selectedLibraryId) return 'All Libraries'
-      // TODO: Enhancement - store library names in session data to show descriptions instead of codes
-      return this.sessionData.selectedLibraryId
+      return this._getLibraryName(this.sessionData)
     },
 
     getShelvingLocationName() {
-      if (!this.sessionData?.shelvingLocation) return 'All Locations'
-      // TODO: Enhancement - store shelving location descriptions in session data to show names instead of codes
-      return this.sessionData.shelvingLocation
+      return this._getShelvingLocationName(this.sessionData)
     },
 
     getCollectionCodeName() {
-      if (!this.sessionData?.ccode) return 'All Collections'
-      // TODO: Enhancement - store collection code descriptions in session data to show names instead of codes
-      return this.sessionData.ccode
+      return this._getCollectionCodeName(this.sessionData)
     },
 
     getSelectedItemTypesText() {
-      if (!this.sessionData?.selectedItypes?.length) return 'All Item Types'
-      const count = this.sessionData.selectedItypes.length
-      return count === 1 ? this.sessionData.selectedItypes[0] : `${count} selected`
+      return this._getSelectedItemTypesText(this.sessionData)
     },
 
     getCallNumberRangeText() {
-      if (!this.sessionData?.minLocation && !this.sessionData?.maxLocation) {
-        return 'All Call Numbers'
-      }
-      if (this.sessionData.minLocation && this.sessionData.maxLocation) {
-        return `${this.sessionData.minLocation} - ${this.sessionData.maxLocation}`
-      }
-      if (this.sessionData.minLocation) {
-        return `From: ${this.sessionData.minLocation}`
-      }
-      return `To: ${this.sessionData.maxLocation}`
+      return this._getCallNumberRangeText(this.sessionData)
     },
 
     hasSkipFilters() {
-      return (
-        this.sessionData?.skipCheckedOutItems ||
-        this.sessionData?.skipInTransitItems ||
-        this.sessionData?.skipBranchMismatchItems ||
-        this.sessionData?.ignoreWaitingHolds
-      )
+      return this._hasSkipFilters(this.sessionData)
     },
 
     getSkipFiltersText() {
-      const filters = []
-      if (this.sessionData?.skipCheckedOutItems) filters.push('Checked out items')
-      if (this.sessionData?.skipInTransitItems) filters.push('In-transit items')
-      if (this.sessionData?.skipBranchMismatchItems) filters.push('Branch mismatch items')
-      if (this.sessionData?.ignoreWaitingHolds) filters.push('Items on hold')
-      return filters.join(', ')
-    },
-
-    formatDate(dateString) {
-      if (!dateString) return ''
-      return new Date(dateString).toLocaleDateString()
-    },
-
-    toggleFiltersDisplay() {
-      this.showFilters = !this.showFilters
+      return this._getSkipFiltersText(this.sessionData)
     },
 
     getActiveFiltersCount() {
-      let count = 5 // Always show: Library, Location, Collection, Call Numbers, Item Types
-
-      // Add optional filters when they exist
-      if (this.sessionData?.dateLastSeen) count++
-      if (this.hasSkipFilters()) count++
-      count++ // Always count the scanning mode
-
-      return count
+      return this._getActiveFiltersCount(this.sessionData)
     },
     // Transit status analysis methods
     getTransitInfo(item) {
@@ -514,161 +525,12 @@ export default {
       return typeMap[reason] || 'other'
     },
 
-    // Comprehensive status analysis system
     analyzeItemStatus(item) {
-      return {
-        checkout: this.analyzeCheckoutStatus(item),
-        lost: this.analyzeLostStatus(item),
-        withdrawn: this.analyzeWithdrawnStatus(item),
-        damaged: this.analyzeDamagedStatus(item),
-        hold: this.analyzeHoldStatus(item),
-        transit: this.getTransitInfo(item),
-        returnClaim: this.analyzeReturnClaimStatus(item),
-        branch: this.analyzeBranchStatus(item),
-        restrictions: this.analyzeRestrictions(item)
-      }
+      return _analyzeItemStatus(item, this.getTransitInfo.bind(this))
     },
 
-    analyzeCheckoutStatus(item) {
-      return {
-        isCheckedOut: !!item.checked_out_date,
-        checkoutDate: item.checked_out_date,
-        dueDate: item.due_date,
-        isOverdue: item.due_date && new Date(item.due_date) < new Date()
-      }
-    },
-
-    analyzeLostStatus(item) {
-      const isLost = item.lost_status && item.lost_status !== '0'
-      return {
-        isLost,
-        lostStatus: item.lost_status,
-        lostDate: item.lost_date,
-        lostDescription: isLost ? this.getLostDescription(item.lost_status) : null
-      }
-    },
-
-    analyzeWithdrawnStatus(item) {
-      const isWithdrawn = item.withdrawn === '1' || item.withdrawn === 1
-      return {
-        isWithdrawn,
-        withdrawnStatus: item.withdrawn,
-        withdrawnDate: item.withdrawn_date
-      }
-    },
-
-    analyzeDamagedStatus(item) {
-      const isDamaged = item.damaged_status && item.damaged_status !== '0'
-      return {
-        isDamaged,
-        damagedStatus: item.damaged_status,
-        damagedDate: item.damaged_date
-      }
-    },
-
-    analyzeHoldStatus(item) {
-      return {
-        hasHold: !!item.first_hold,
-        isWaiting: !!item.waiting,
-        holdDetails: item.first_hold
-      }
-    },
-
-    analyzeReturnClaimStatus(item) {
-      return {
-        hasReturnClaim: !!item.return_claim,
-        claimDetails: item.return_claim,
-        claimsCount: Array.isArray(item.return_claims) ? item.return_claims.length : 0
-      }
-    },
-
-    analyzeBranchStatus(item) {
-      const hasBranchMismatch = item.homebranch !== item.holding_library_id
-      return {
-        hasBranchMismatch,
-        homeBranch: item.homebranch,
-        holdingBranch: item.holding_library_id,
-        needsTransfer: hasBranchMismatch && !item.checked_out_date
-      }
-    },
-
-    analyzeRestrictions(item) {
-      return {
-        isRestricted: item.restricted_status && item.restricted_status !== '0',
-        restrictedStatus: item.restricted_status,
-        notForLoan: item.not_for_loan_status && item.not_for_loan_status !== 0,
-        notForLoanStatus: item.not_for_loan_status
-      }
-    },
-
-    getLostDescription(lostStatus) {
-      // This could be enhanced to fetch authorized values
-      const lostDescriptions = {
-        1: 'Lost',
-        2: 'Long Overdue (Lost)',
-        3: 'Lost and Paid For',
-        4: 'Missing'
-      }
-      return lostDescriptions[lostStatus] || `Lost Status: ${lostStatus}`
-    },
-
-    // Helper method to get all problematic statuses that need attention
     getProblematicStatuses(statusAnalysis) {
-      const issues = []
-
-      if (statusAnalysis.checkout.isOverdue) {
-        issues.push({ type: 'overdue', severity: 'high', message: 'Item is overdue' })
-      }
-
-      if (statusAnalysis.lost.isLost) {
-        issues.push({
-          type: 'lost',
-          severity: 'high',
-          message: statusAnalysis.lost.lostDescription
-        })
-      }
-
-      if (statusAnalysis.withdrawn.isWithdrawn) {
-        issues.push({ type: 'withdrawn', severity: 'medium', message: 'Item is withdrawn' })
-      }
-
-      if (statusAnalysis.damaged.isDamaged) {
-        issues.push({ type: 'damaged', severity: 'medium', message: 'Item is damaged' })
-      }
-
-      if (statusAnalysis.returnClaim.hasReturnClaim) {
-        issues.push({
-          type: 'return_claim',
-          severity: 'high',
-          message: 'Item has unresolved return claim'
-        })
-      }
-
-      if (statusAnalysis.transit.inTransit) {
-        const transitMsg = `Item in transit ${this.getTransitDescription ? this.getTransitDescription(statusAnalysis.transit) : ''}`
-        issues.push({ type: 'transit', severity: 'low', message: transitMsg })
-      }
-
-      if (statusAnalysis.branch.hasBranchMismatch && !statusAnalysis.checkout.isCheckedOut) {
-        issues.push({
-          type: 'branch_mismatch',
-          severity: 'medium',
-          message: 'Item at wrong branch'
-        })
-      }
-
-      if (statusAnalysis.hold.hasHold && statusAnalysis.hold.isWaiting) {
-        issues.push({
-          type: 'waiting_hold',
-          severity: 'high',
-          message: 'Item has hold waiting for pickup'
-        })
-      }
-
-      return issues.sort((a, b) => {
-        const severityOrder = { high: 3, medium: 2, low: 1 }
-        return severityOrder[b.severity] - severityOrder[a.severity]
-      })
+      return getProblematicStatuses(statusAnalysis)
     },
 
     // Handle individual item issues based on type and settings
@@ -708,16 +570,8 @@ export default {
       return modalMap[issueType]
     },
 
-    // Proper call number comparison following Koha core logic
-    isCallNumberOutOfOrder(currentCallNumberSort, highestCallNumberSort) {
-      // Handle empty/null values - items without call numbers are not considered out of order
-      if (!currentCallNumberSort || !highestCallNumberSort) {
-        return false
-      }
-
-      // Use lexicographic comparison like Koha core (cn_sort lt/gt)
-      // In JavaScript, this is equivalent to localeCompare < 0
-      return currentCallNumberSort < highestCallNumberSort
+    isCallNumberOutOfOrder(currentCallNumberSort, highest) {
+      return this._isCallNumberOutOfOrder(currentCallNumberSort, highest)
     },
 
     checkForExistingSession() {
@@ -776,26 +630,7 @@ export default {
     },
 
     updateHighestCallNumber() {
-      // Find the item with the highest call number sort value
-      if (this.items.length > 0) {
-        let highestSortValue = ''
-        let highestItemBarcode = ''
-        let highestBiblioId = ''
-
-        this.items.forEach((item) => {
-          const itemCallNumberSort = item.call_number_sort || ''
-          // Use proper string comparison for call number sorting
-          if (itemCallNumberSort && itemCallNumberSort > highestSortValue) {
-            highestSortValue = itemCallNumberSort
-            highestItemBarcode = item.external_id
-            highestBiblioId = item.biblio_id
-          }
-        })
-
-        this.highestCallNumberSort = highestSortValue
-        this.itemWithHighestCallNumber = highestItemBarcode
-        this.biblioWithHighestCallNumber = highestBiblioId || null
-      }
+      this._updateHighestCallNumber(this.items)
     },
 
     async endSession() {
@@ -1922,23 +1757,7 @@ export default {
     },
 
     checkItemStatuses(item, selectedStatuses) {
-      // Initialize invalidStatus as an object
-      item.invalidStatus = {}
-
-      const statusKeyValuePairs = {
-        'items.itemlost': item.lost_status,
-        'items.notforloan': item.not_for_loan_status,
-        'items.withdrawn': item.withdrawn,
-        'items.damaged': item.damaged_status
-      }
-
-      for (const [key, value] of Object.entries(statusKeyValuePairs)) {
-        if (value != '0' && !selectedStatuses[key].includes(String(value))) {
-          item.invalidStatus['key'] = key // Flag the item as having an invalid status
-          item.invalidStatus['value'] = value
-          break
-        }
-      }
+      this._checkItemStatuses(item, selectedStatuses)
     },
 
     checkItemSpecialStatuses(item) {
