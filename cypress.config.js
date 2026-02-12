@@ -1,7 +1,7 @@
 const { defineConfig } = require('cypress')
 const path = require('path')
 
-const kohaRoot = process.env.KOHA_ROOT || path.resolve(__dirname, '../../../koha')
+const kohaRoot = process.env.KOHA_ROOT || path.resolve(__dirname, '../../koha')
 const kohaPlugins = path.join(kohaRoot, 't/cypress/plugins')
 
 module.exports = defineConfig({

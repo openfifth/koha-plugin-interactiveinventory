@@ -54,6 +54,7 @@
     "eslint-plugin-cypress": "^2.15.1",
     "eslint-plugin-vue": "^9.23.0",
     "happy-dom": "^20.6.1",
+    "mysql2": "^3.17.0",
     "npm-run-all2": "^6.1.2",
     "prettier": "^3.2.5",
     "start-server-and-test": "^2.0.3",
