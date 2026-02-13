@@ -366,11 +366,16 @@ export default {
 
         if (data.success) {
           let message = `Item ${barcode} has been checked in successfully`
-          if (data.needs_transfer) {
-            message = `Item ${barcode} checked in and needs transfer to ${data.transfer_to}. Please initiate transfer process.`
+          let messageType = 'success'
+          if (data.hold_found) {
+            message = `Item ${barcode} checked in - hold found. Do not reshelve.`
+            messageType = 'warning'
+          } else if (data.needs_transfer) {
+            message = `Item ${barcode} checked in - needs transfer to ${data.transfer_to}.`
+            messageType = 'warning'
           }
           EventBus.emit('message', {
-            type: 'success',
+            type: messageType,
             text: message
           })
           return data

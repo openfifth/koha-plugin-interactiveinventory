@@ -51,6 +51,7 @@
       <span v-if="item.resolutionAction && item.pendingResolution" class="resolution-badge-skipped"
         >SKIPPED</span
       >
+      <span v-if="item.hold_found" class="hold-found-badge">HOLD FOUND</span>
       <span v-if="item.needs_transfer" class="transfer-badge">NEEDS TRANSFER</span>
       {{ item.biblio.title }} - {{ item.external_id }}
     </p>
@@ -116,6 +117,10 @@
           This item was checked out on: {{ item.checked_out_date }}
           <span v-if="sessionData.doNotCheckIn"> and has not been checked in. </span>
           <span v-else> and has been checked in automatically. </span>
+        </p>
+        <p v-if="item.hold_found" class="item-warning"><strong>Hold Found:</strong></p>
+        <p v-if="item.hold_found" class="item-warning">
+          This item has been trapped for a hold. Do not reshelve.
         </p>
         <p v-if="item.needs_transfer" class="item-warning"><strong>Transfer Required:</strong></p>
         <p v-if="item.needs_transfer" class="item-warning">
@@ -523,6 +528,17 @@ export default {
 .resolution-badge-skipped {
   display: inline-block;
   background-color: #7f8c8d;
+  color: white;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.8em;
+  margin-right: 8px;
+  font-weight: bold;
+}
+
+.hold-found-badge {
+  display: inline-block;
+  background-color: #e74c3c;
   color: white;
   padding: 2px 6px;
   border-radius: 4px;

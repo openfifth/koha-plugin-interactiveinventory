@@ -1184,7 +1184,11 @@ export default {
           combinedData.resolutionAction = 'checked in'
           combinedData.pendingResolution = false
 
-          // Store transit information if present
+          // Store hold/transfer information from check-in for display
+          if (checkInResult && checkInResult.hold_found) {
+            combinedData.hold_found = true
+            combinedData.hold_message = checkInResult.hold_message
+          }
           if (checkInResult && checkInResult.needs_transfer) {
             combinedData.needs_transfer = true
             combinedData.transfer_to = checkInResult.transfer_to
@@ -1283,10 +1287,15 @@ export default {
         })
 
         let message = 'Item checked in successfully'
-        if (data.needs_transfer) {
-          message = `Item checked in and needs transfer to ${data.transfer_to}. Please initiate transfer process.`
+        let messageType = 'status'
+        if (data.hold_found) {
+          message = `Item ${barcode} checked in - hold found. Do not reshelve.`
+          messageType = 'warning'
+        } else if (data.needs_transfer) {
+          message = `Item ${barcode} checked in - needs transfer to ${data.transfer_to}.`
+          messageType = 'warning'
         }
-        EventBus.emit('message', { text: message, type: 'status' })
+        EventBus.emit('message', { text: message, type: messageType })
         return data
       } catch (error) {
         EventBus.emit('message', {
@@ -1785,7 +1794,11 @@ export default {
               updatedItem.pendingResolution = false
               updatedItem.resolutionAction = 'checked in'
 
-              // Store transit information if present
+              // Store hold/transfer information from check-in
+              if (result.result && result.result.hold_found) {
+                updatedItem.hold_found = true
+                updatedItem.hold_message = result.result.hold_message
+              }
               if (result.result && result.result.needs_transfer) {
                 updatedItem.needs_transfer = true
                 updatedItem.transfer_to = result.result.transfer_to
