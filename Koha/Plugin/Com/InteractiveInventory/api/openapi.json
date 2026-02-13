@@ -1,4 +1,39 @@
 {
+  "/item/scan/{barcode}": {
+    "get": {
+      "x-mojo-to": "Com::InteractiveInventory::Controllers::Items#scanItem",
+      "operationId": "scanItem",
+      "tags": ["inventory"],
+      "produces": ["application/json"],
+      "parameters": [
+        {
+          "name": "barcode",
+          "in": "path",
+          "required": true,
+          "type": "string",
+          "description": "The barcode of the item to scan"
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "Item data retrieved successfully",
+          "schema": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "400": {
+          "description": "Missing barcode parameter"
+        },
+        "404": {
+          "description": "Item not found"
+        },
+        "500": {
+          "description": "Internal server error"
+        }
+      }
+    }
+  },
   "/item/field": {
     "post": {
       "x-mojo-to": "Com::InteractiveInventory::Controllers::Items#modifyItemField",
@@ -374,98 +409,7 @@
           "description": "Nearby items retrieved successfully",
           "schema": {
             "type": "object",
-            "properties": {
-              "items": {
-                "type": "array",
-                "items": {
-                  "type": "object",
-                  "properties": {
-                    "itemnumber": {
-                      "type": "integer"
-                    },
-                    "biblionumber": {
-                      "type": "integer"
-                    },
-                    "itemcallnumber": {
-                      "type": "string"
-                    },
-                    "cn_sort": {
-                      "type": "string"
-                    },
-                    "title": {
-                      "type": "string"
-                    },
-                    "subtitle": {
-                      "type": "string"
-                    },
-                    "medium": {
-                      "type": "string"
-                    },
-                    "part_number": {
-                      "type": "string"
-                    },
-                    "part_name": {
-                      "type": "string"
-                    }
-                  }
-                }
-              },
-              "prev_item": {
-                "type": "object",
-                "properties": {
-                  "itemnumber": {
-                    "type": "integer"
-                  },
-                  "biblionumber": {
-                    "type": "integer"
-                  }
-                }
-              },
-              "next_item": {
-                "type": "object",
-                "properties": {
-                  "itemnumber": {
-                    "type": "integer"
-                  },
-                  "biblionumber": {
-                    "type": "integer"
-                  }
-                }
-              },
-              "starting_homebranch": {
-                "type": "object",
-                "properties": {
-                  "code": {
-                    "type": "string"
-                  },
-                  "description": {
-                    "type": "string"
-                  }
-                }
-              },
-              "starting_location": {
-                "type": "object",
-                "properties": {
-                  "code": {
-                    "type": "string"
-                  },
-                  "description": {
-                    "type": "string"
-                  }
-                }
-              },
-              "starting_ccode": {
-                "type": "object",
-                "properties": {
-                  "code": {
-                    "type": "string"
-                  },
-                  "description": {
-                    "type": "string"
-                  }
-                }
-              }
-            }
+            "additionalProperties": true
           }
         },
         "400": {

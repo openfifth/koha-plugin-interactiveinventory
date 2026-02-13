@@ -12,6 +12,7 @@ use Koha::Items;
 use Koha::Libraries;
 use Koha::Holds;
 use Koha::Checkouts;
+use Koha::Item::Transfers;
 
 =head1 API
 
@@ -437,7 +438,8 @@ sub renewItem {
 
 =head3 shelfBrowser
 
-Gets nearby items on the shelf, filtered by inventory session parameters
+Gets nearby items on the shelf, filtered by inventory session parameters.
+Optimized for speed with simple range queries.
 
 =cut
 
@@ -457,7 +459,6 @@ sub shelfBrowser {
         );
     }
 
-    # Verify item exists
     my $item = Koha::Items->find($itemnumber);
     unless ($item) {
         return $c->render(
@@ -468,121 +469,234 @@ sub shelfBrowser {
 
     try {
         my $dbh = C4::Context->dbh;
-        my $gap = ($num_each_side * 2) + 1;
+        my $start_cn_sort = $item->cn_sort // '';
+        
+        # Use provided filters or fall back to item's values
+        my $filter_homebranch = $homebranch // $item->homebranch;
+        my $filter_location = $location // $item->location;
+        my $filter_ccode = $ccode // $item->ccode;
 
-        # Get starting item details
-        my $start_cn_sort = $item->cn_sort;
-        my $start_homebranch = $homebranch || $item->homebranch;
-        my $start_location = $location || $item->location;
-        my $start_ccode = $ccode || $item->ccode;
+        # Build WHERE conditions - simple AND conditions use indexes well
+        # Exclude items without call numbers (NULL or empty)
+        my @conditions = ("cn_sort IS NOT NULL", "cn_sort != ''", "itemcallnumber IS NOT NULL", "itemcallnumber != ''");
+        my @params;
 
-        # Build query conditions based on provided filters
-        my @params = ($start_cn_sort, $itemnumber, $start_cn_sort);
-        my $query_cond = '';
-
-        if ($start_homebranch) {
-            $query_cond .= 'AND homebranch = ? ';
-            push @params, $start_homebranch;
+        if ($filter_homebranch) {
+            push @conditions, 'homebranch = ?';
+            push @params, $filter_homebranch;
         }
-        if ($start_location) {
-            $query_cond .= 'AND location = ? ';
-            push @params, $start_location;
+        if ($filter_location) {
+            push @conditions, 'location = ?';
+            push @params, $filter_location;
         }
-        if ($start_ccode) {
-            $query_cond .= 'AND ccode = ? ';
-            push @params, $start_ccode;
+        if ($filter_ccode) {
+            push @conditions, 'ccode = ?';
+            push @params, $filter_ccode;
         }
 
-        # Query for previous items (before current cn_sort)
-        my $prev_query = qq{
-            SELECT i.itemnumber, i.biblionumber, i.cn_sort, i.itemcallnumber,
-                   b.title, b.subtitle, b.medium, b.part_number, b.part_name
-            FROM items i
-            LEFT JOIN biblio b ON i.biblionumber = b.biblionumber
-            WHERE ((i.cn_sort = ? AND i.itemnumber < ?) OR i.cn_sort < ?)
-            $query_cond
-            ORDER BY i.cn_sort DESC, i.itemnumber DESC
-            LIMIT ?
-        };
+        my $where_base = join(' AND ', @conditions);
 
-        # Query for next items (after current cn_sort)
-        my $next_query = qq{
-            SELECT i.itemnumber, i.biblionumber, i.cn_sort, i.itemcallnumber,
-                   b.title, b.subtitle, b.medium, b.part_number, b.part_name
-            FROM items i
-            LEFT JOIN biblio b ON i.biblionumber = b.biblionumber
-            WHERE ((i.cn_sort = ? AND i.itemnumber >= ?) OR i.cn_sort > ?)
-            $query_cond
-            ORDER BY i.cn_sort, i.itemnumber
-            LIMIT ?
-        };
+        # Step 1: Fast queries to get just itemnumbers (no JOIN)
+        my $prev_sql = "SELECT itemnumber FROM items WHERE $where_base AND cn_sort < ? ORDER BY cn_sort DESC LIMIT ?";
+        my $next_sql = "SELECT itemnumber FROM items WHERE $where_base AND cn_sort >= ? ORDER BY cn_sort ASC LIMIT ?";
 
-        my @prev_items = @{
-            $dbh->selectall_arrayref($prev_query, { Slice => {} }, (@params, $gap))
-        };
-        my @next_items = @{
-            $dbh->selectall_arrayref($next_query, { Slice => {} }, (@params, $gap + 1))
-        };
+        my $prev_ids = $dbh->selectcol_arrayref($prev_sql, {}, @params, $start_cn_sort, $num_each_side);
+        my $next_ids = $dbh->selectcol_arrayref($next_sql, {}, @params, $start_cn_sort, $num_each_side + 1);
 
-        # Store the furthest items for prev/next navigation
-        my $prev_item = $prev_items[-1];
-        my $next_item = $next_items[-1];
-
-        # Trim to requested number
-        @next_items = splice(@next_items, 0, $num_each_side + 1);
-        @prev_items = reverse splice(@prev_items, 0, $num_each_side);
-
-        # Combine: previous items + current item onwards
-        my @items = (@prev_items, @next_items);
-
-        # Format the response
-        my @formatted_items = map {
-            {
-                itemnumber     => $_->{itemnumber},
-                biblionumber   => $_->{biblionumber},
-                itemcallnumber => $_->{itemcallnumber},
-                cn_sort        => $_->{cn_sort},
-                title          => $_->{title},
-                subtitle       => $_->{subtitle},
-                medium         => $_->{medium},
-                part_number    => $_->{part_number},
-                part_name      => $_->{part_name},
-            }
-        } @items;
-
-        # Get descriptions for the starting filters
-        my $starting_homebranch_desc;
-        if ($start_homebranch) {
-            my $lib = Koha::Libraries->find($start_homebranch);
-            $starting_homebranch_desc = {
-                code => $start_homebranch,
-                description => $lib ? $lib->branchname : $start_homebranch
+        # Combine and fetch full data only for the items we need
+        my @all_ids = (@{$prev_ids || []}, @{$next_ids || []});
+        
+        my @items;
+        if (@all_ids) {
+            my $placeholders = join(',', ('?') x @all_ids);
+            my $detail_sql = qq{
+                SELECT i.itemnumber, i.biblionumber, i.cn_sort, i.itemcallnumber, i.location,
+                       b.title, b.subtitle, b.medium, b.part_number, b.part_name
+                FROM items i
+                LEFT JOIN biblio b ON i.biblionumber = b.biblionumber
+                WHERE i.itemnumber IN ($placeholders)
+                ORDER BY i.cn_sort ASC
             };
+            my $rows = $dbh->selectall_arrayref($detail_sql, { Slice => {} }, @all_ids);
+            @items = @{$rows || []};
         }
 
         return $c->render(
             status => 200,
             openapi => {
-                items => \@formatted_items,
-                prev_item => $prev_item ? {
-                    itemnumber   => $prev_item->{itemnumber},
-                    biblionumber => $prev_item->{biblionumber},
-                } : undef,
-                next_item => $next_item ? {
-                    itemnumber   => $next_item->{itemnumber},
-                    biblionumber => $next_item->{biblionumber},
-                } : undef,
-                starting_homebranch => $starting_homebranch_desc,
-                starting_location   => $start_location ? { code => $start_location } : undef,
-                starting_ccode      => $start_ccode ? { code => $start_ccode } : undef,
+                items => \@items,
+                starting_homebranch => $filter_homebranch ? { code => $filter_homebranch } : undef,
+                starting_location => $filter_location ? { code => $filter_location } : undef,
+                starting_ccode => $filter_ccode ? { code => $filter_ccode } : undef,
             }
         );
     } catch {
         return $c->render(
             status => 500,
-            openapi => {
-                error => "Error fetching nearby items: $_"
+            openapi => { error => "Error fetching nearby items: $_" }
+        );
+    };
+}
+
+=head3 scanItem
+
+Gets comprehensive item data for inventory scanning, including biblio,
+checkout, transfer, hold, and return claim information.
+
+=cut
+
+sub scanItem {
+    my $c = shift->openapi->valid_input or return;
+
+    my $barcode = $c->validation->param('barcode');
+
+    unless ($barcode) {
+        return $c->render(
+            status => 400,
+            openapi => { error => "Missing barcode parameter" }
+        );
+    }
+
+    my $item = Koha::Items->find({ barcode => $barcode });
+    unless ($item) {
+        return $c->render(
+            status => 404,
+            openapi => { error => "Item not found" }
+        );
+    }
+
+    try {
+        # Build comprehensive item data
+        my $item_data = {
+            item_id             => $item->itemnumber,
+            biblio_id           => $item->biblionumber,
+            external_id         => $item->barcode,
+            home_library_id     => $item->homebranch,
+            holding_library_id  => $item->holdingbranch,
+            location            => $item->location,
+            permanent_location  => $item->permanent_location,
+            callnumber          => $item->itemcallnumber,
+            call_number_sort    => $item->cn_sort,
+            collection_code     => $item->ccode,
+            item_type_id        => $item->itype,
+            lost_status         => $item->itemlost,
+            lost_date           => $item->itemlost_on,
+            damaged_status      => $item->damaged,
+            damaged_date        => $item->damaged_on,
+            withdrawn           => $item->withdrawn,
+            withdrawn_date      => $item->withdrawn_on,
+            not_for_loan_status => $item->notforloan,
+            restricted_status   => $item->restricted,
+            last_seen_date      => $item->datelastseen,
+            last_checkout_date  => $item->datelastborrowed,
+            checkouts_count     => $item->issues,
+            renewals_count      => $item->renewals,
+            holds_count         => $item->reserves,
+            public_notes        => $item->itemnotes,
+            internal_notes      => $item->itemnotes_nonpublic,
+            copy_number         => $item->copynumber,
+            inventory_number    => $item->stocknumber,
+            replacement_price   => $item->replacementprice,
+        };
+
+        # Get biblio data
+        my $biblio = $item->biblio;
+        if ($biblio) {
+            $item_data->{biblio} = {
+                biblio_id   => $biblio->biblionumber,
+                title       => $biblio->title,
+                subtitle    => $biblio->subtitle,
+                author      => $biblio->author,
+                copyrightdate => $biblio->copyrightdate,
+                serial      => $biblio->serial,
+            };
+        }
+
+        # Get checkout data
+        my $checkout = Koha::Checkouts->find({ itemnumber => $item->itemnumber });
+        if ($checkout) {
+            $item_data->{checked_out_date} = $checkout->issuedate;
+            $item_data->{checkout} = {
+                checkout_id     => $checkout->issue_id,
+                patron_id       => $checkout->borrowernumber,
+                due_date        => $checkout->date_due,
+                issue_date      => $checkout->issuedate,
+                renewals_count  => $checkout->renewals_count,
+                auto_renew      => $checkout->auto_renew,
+            };
+            # Get patron name if possible
+            my $patron = $checkout->patron;
+            if ($patron) {
+                $item_data->{checkout}{patron} = {
+                    patron_id  => $patron->borrowernumber,
+                    firstname  => $patron->firstname,
+                    surname    => $patron->surname,
+                    cardnumber => $patron->cardnumber,
+                };
             }
+        }
+
+        # Get active transfer data
+        my $transfer = $item->get_transfer;
+        if ($transfer && $transfer->in_transit) {
+            $item_data->{transfer} = {
+                transfer_id   => $transfer->branchtransfer_id,
+                from_library  => $transfer->frombranch,
+                to_library    => $transfer->tobranch,
+                sent_date     => $transfer->datesent,
+                reason        => $transfer->reason,
+            };
+            $item_data->{in_transit} = 1;
+        }
+
+        # Get first hold (waiting or pending)
+        my $holds = Koha::Holds->search(
+            { itemnumber => $item->itemnumber },
+            { order_by => { -asc => 'priority' }, rows => 1 }
+        );
+        my $first_hold = $holds->next;
+        if ($first_hold) {
+            $item_data->{first_hold} = {
+                hold_id         => $first_hold->reserve_id,
+                patron_id       => $first_hold->borrowernumber,
+                status          => $first_hold->found,
+                priority        => $first_hold->priority,
+                pickup_library  => $first_hold->branchcode,
+                hold_date       => $first_hold->reservedate,
+                expiration_date => $first_hold->expirationdate,
+                waiting_date    => $first_hold->waitingdate,
+            };
+            # Check if it's a waiting hold
+            $item_data->{waiting} = ($first_hold->found && $first_hold->found eq 'W') ? 1 : 0;
+        }
+
+        # Get return claims
+        my @return_claims;
+        my $claims_rs = $item->return_claims;
+        while (my $claim = $claims_rs->next) {
+            push @return_claims, {
+                claim_id    => $claim->id,
+                patron_id   => $claim->borrowernumber,
+                created_on  => $claim->created_on,
+                resolved_on => $claim->resolved_on,
+                resolution  => $claim->resolution,
+            };
+        }
+        if (@return_claims) {
+            $item_data->{return_claims} = \@return_claims;
+            # Set return_claim to first unresolved claim if any
+            my @unresolved = grep { !$_->{resolved_on} } @return_claims;
+            $item_data->{return_claim} = $unresolved[0] if @unresolved;
+        }
+
+        return $c->render(
+            status => 200,
+            openapi => $item_data
+        );
+    } catch {
+        return $c->render(
+            status => 500,
+            openapi => { error => "Error fetching item data: $_" }
         );
     };
 }
