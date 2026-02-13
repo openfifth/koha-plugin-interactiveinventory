@@ -271,33 +271,20 @@ import ResolutionModal from './ResolutionModal.vue'
 import MissingItemsModal from './MissingItemsModal.vue'
 import ShelfPreview from './ShelfPreview.vue'
 import { EventBus } from './eventBus'
-import {
-  saveSession,
-  getSession,
-  saveItems,
-  getItems,
-  clearSession,
-  saveMarkedMissingItems,
-  getMarkedMissingItems,
-  isSessionActive
-} from '../services/sessionStorage'
+import { saveItems, clearSession } from '../services/sessionStorage'
 import { apiService } from '../services/apiService'
 import { filterMissingItems } from '../utils/missingItems'
 import {
   analyzeItemStatus as _analyzeItemStatus,
-  analyzeCheckoutStatus,
-  analyzeLostStatus,
-  analyzeWithdrawnStatus,
-  analyzeDamagedStatus,
-  analyzeHoldStatus,
-  analyzeReturnClaimStatus,
-  analyzeBranchStatus,
-  analyzeRestrictions,
-  getProblematicStatuses,
-  getLostDescription
+  getProblematicStatuses
 } from '../composables/useItemStatusAnalysis'
 import { useActiveFiltersDisplay } from '../composables/useActiveFiltersDisplay'
 import { useCallNumberTracking } from '../composables/useCallNumberTracking'
+import { useTransitResolution } from '../composables/useTransitResolution'
+import { useModalManagement } from '../composables/useModalManagement'
+import { useMissingItems } from '../composables/useMissingItems'
+import { exportDataToCSV as _exportDataToCSV } from '../composables/useCSVExport'
+import { useSessionManagement } from '../composables/useSessionManagement'
 
 export default {
   components: {
@@ -332,6 +319,51 @@ export default {
       updateHighestCallNumber: _updateHighestCallNumber
     } = useCallNumberTracking()
 
+    const {
+      getTransitInfo: _getTransitInfo,
+      getTransitType: _getTransitType,
+      getResolutionSettingKey: _getResolutionSettingKey,
+      getModalType: _getModalType,
+      handleItemIssue: _handleItemIssue
+    } = useTransitResolution()
+
+    const {
+      showEndSessionModal,
+      showMissingItemsModal,
+      showShelfPreview,
+      showResolutionModal,
+      currentResolutionItem,
+      currentResolutionType,
+      currentPatronName,
+      isMobileView,
+      scannerMode,
+      toggleEndSessionModal: _toggleEndSessionModal,
+      toggleMissingItemsModal: _toggleMissingItemsModal,
+      closeMissingItemsModal: _closeMissingItemsModal,
+      toggleShelfPreview: _toggleShelfPreview,
+      closeShelfPreview: _closeShelfPreview,
+      openResolutionModal: _openResolutionModal,
+      closeResolutionModal: _closeResolutionModal,
+      checkDeviceType: _checkDeviceType,
+      toggleScannerMode: _toggleScannerMode,
+      handleToggleExpand: _handleToggleExpand
+    } = useModalManagement()
+
+    const {
+      markedMissingItems,
+      getMissingItemsCount: _getMissingItemsCount,
+      handleItemMarkedMissing: _handleItemMarkedMissing,
+      handleItemsMarkedMissing: _handleItemsMarkedMissing,
+      markItemMissing: _markItemMissing,
+      handleMissingItemsUpdated: _handleMissingItemsUpdated
+    } = useMissingItems()
+
+    const {
+      checkForExistingSession: _checkForExistingSession,
+      initiateInventorySession: _initiateInventorySession,
+      completeSession: _completeSession
+    } = useSessionManagement()
+
     return {
       showFilters,
       toggleFiltersDisplay,
@@ -349,7 +381,40 @@ export default {
       _getActiveFiltersCount,
       _isCallNumberOutOfOrder,
       _checkItemStatuses,
-      _updateHighestCallNumber
+      _updateHighestCallNumber,
+      _getTransitInfo,
+      _getTransitType,
+      _getResolutionSettingKey,
+      _getModalType,
+      _handleItemIssue,
+      showEndSessionModal,
+      showMissingItemsModal,
+      showShelfPreview,
+      showResolutionModal,
+      currentResolutionItem,
+      currentResolutionType,
+      currentPatronName,
+      isMobileView,
+      scannerMode,
+      _toggleEndSessionModal,
+      _toggleMissingItemsModal,
+      _closeMissingItemsModal,
+      _toggleShelfPreview,
+      _closeShelfPreview,
+      _openResolutionModal,
+      _closeResolutionModal,
+      _checkDeviceType,
+      _toggleScannerMode,
+      _handleToggleExpand,
+      markedMissingItems,
+      _getMissingItemsCount,
+      _handleItemMarkedMissing,
+      _handleItemsMarkedMissing,
+      _markItemMissing,
+      _handleMissingItemsUpdated,
+      _checkForExistingSession,
+      _initiateInventorySession,
+      _completeSession
     }
   },
   computed: {
@@ -375,16 +440,13 @@ export default {
   data() {
     return {
       barcode: '',
-      scannerMode: false,
       items: [],
       sessionData: null,
       sessionStarted: false,
       sessionInitializing: false,
-      showEndSessionModal: false,
       exportToCSV: false,
       exportMissingOnly: false,
       markMissingItems: false,
-      isMobileView: false,
       skipCheckedOutItems: true,
       skipInTransitItems: false,
       skipBranchMismatchItems: false,
@@ -412,14 +474,7 @@ export default {
         resolveWithdrawnItems: false,
         resolveLostItems: false
       },
-      showResolutionModal: false,
-      showMissingItemsModal: false,
-      showShelfPreview: false,
-      currentResolutionItem: null,
-      currentResolutionType: '',
-      currentPatronName: '',
       manualResolutionEnabled: true,
-      markedMissingItems: new Set(),
       upcomingItemsCount: 0,
       authorizedValueCategories: {}
     }
@@ -471,58 +526,12 @@ export default {
     getActiveFiltersCount() {
       return this._getActiveFiltersCount(this.sessionData)
     },
-    // Transit status analysis methods
     getTransitInfo(item) {
-      if (!item.transfer) {
-        return {
-          inTransit: false,
-          type: null,
-          reason: null,
-          isHoldTransit: false,
-          isReturnTransit: false,
-          isManualTransit: false,
-          from: null,
-          to: null,
-          date: null
-        }
-      }
-
-      const reason = item.transfer.reason
-      const type = this.getTransitType(reason)
-
-      return {
-        inTransit: true,
-        reason,
-        type,
-        from: item.transfer.frombranch,
-        to: item.transfer.tobranch,
-        date: item.transfer.datesent,
-        isHoldTransit: reason === 'Reserve',
-        isReturnTransit: ['ReturnToHome', 'ReturnToHolding'].includes(reason),
-        isManualTransit: reason === 'Manual',
-        isStockrotationTransit: ['StockrotationAdvance', 'StockrotationRepatriation'].includes(
-          reason
-        ),
-        isCollectionTransit: reason === 'RotatingCollection',
-        isRecallTransit: reason === 'Recall'
-      }
+      return this._getTransitInfo(item)
     },
 
     getTransitType(reason) {
-      const typeMap = {
-        Reserve: 'hold',
-        ReturnToHome: 'return',
-        ReturnToHolding: 'return',
-        Manual: 'manual',
-        StockrotationAdvance: 'stockrotation',
-        StockrotationRepatriation: 'stockrotation',
-        RotatingCollection: 'collection',
-        Recall: 'recall',
-        LostReserve: 'lost',
-        CancelReserve: 'cancelled',
-        RecallCancellation: 'cancelled'
-      }
-      return typeMap[reason] || 'other'
+      return this._getTransitType(reason)
     },
 
     analyzeItemStatus(item) {
@@ -533,41 +542,22 @@ export default {
       return getProblematicStatuses(statusAnalysis)
     },
 
-    // Handle individual item issues based on type and settings
     async handleItemIssue(item, issue, statusAnalysis) {
-      const resolutionKey = this.getResolutionSettingKey(issue.type)
-      const shouldAutoResolve = resolutionKey && this.resolutionSettings[resolutionKey]
-
-      if (!shouldAutoResolve) {
-        // Show manual resolution modal
-        const modalType = this.getModalType(issue.type)
-        if (modalType) {
-          this.openResolutionModal(item, modalType)
-          return true // Indicates manual resolution is needed
-        }
-      }
-
-      return false // Continue processing
+      return this._handleItemIssue(
+        item,
+        issue,
+        statusAnalysis,
+        this.resolutionSettings,
+        this.openResolutionModal.bind(this)
+      )
     },
 
     getResolutionSettingKey(issueType) {
-      const settingMap = {
-        lost: 'resolveLostItems',
-        withdrawn: 'resolveWithdrawnItems',
-        transit: 'resolveInTransitItems',
-        return_claim: 'resolveReturnClaims'
-      }
-      return settingMap[issueType]
+      return this._getResolutionSettingKey(issueType)
     },
 
     getModalType(issueType) {
-      const modalMap = {
-        lost: 'lost',
-        withdrawn: 'withdrawn',
-        transit: 'intransit',
-        return_claim: 'returnclaim'
-      }
-      return modalMap[issueType]
+      return this._getModalType(issueType)
     },
 
     isCallNumberOutOfOrder(currentCallNumberSort, highest) {
@@ -575,58 +565,37 @@ export default {
     },
 
     checkForExistingSession() {
-      if (isSessionActive()) {
-        // Chain promises instead of using async/await
-        getSession()
-          .then((savedSessionData) => {
-            if (savedSessionData) {
-              this.sessionData = savedSessionData
-              this.sessionStarted = true
-
-              // Get saved items
-              return getItems().then((savedItems) => {
-                if (savedItems) {
-                  this.items = savedItems
-                  // Restore the highest call number tracking
-                  this.updateHighestCallNumber()
-                }
-                return getMarkedMissingItems()
-              })
-            }
-            return Promise.reject('No saved session data found')
-          })
-          .then((savedMarkedMissingItems) => {
-            // Restore marked missing items if available
-            if (savedMarkedMissingItems && Array.isArray(savedMarkedMissingItems)) {
-              this.markedMissingItems = new Set(savedMarkedMissingItems)
-            }
-
-            EventBus.emit('message', { text: 'Session restored successfully', type: 'status' })
-
-            // Focus on barcode input after a short delay to ensure the DOM is ready
-            this.$nextTick(() => {
-              if (this.$refs.barcodeInput) {
-                this.$refs.barcodeInput.focus()
-              }
-            })
-          })
-          .catch((error) => {
-            if (error !== 'No saved session data found') {
-              console.error('Error restoring session:', error)
-              EventBus.emit('message', {
-                text: 'Error restoring session: ' + (error.message || error),
-                type: 'error'
-              })
+      this._checkForExistingSession({
+        sessionDataSetter: (val) => {
+          this.sessionData = val
+        },
+        sessionStartedSetter: (val) => {
+          this.sessionStarted = val
+        },
+        itemsSetter: (val) => {
+          this.items = val
+        },
+        markedMissingItemsSetter: (val) => {
+          this.markedMissingItems = val
+        },
+        updateHighestCallNumberFn: () => {
+          this.updateHighestCallNumber()
+        },
+        focusBarcodeInputFn: () => {
+          this.$nextTick(() => {
+            if (this.$refs.barcodeInput) {
+              this.$refs.barcodeInput.focus()
             }
           })
-      } else {
-        // Only load form data if we're showing the form (no active session)
-        this.$nextTick(() => {
-          if (this.$refs.setupForm) {
-            this.$refs.setupForm.loadFormData()
-          }
-        })
-      }
+        },
+        loadFormDataFn: () => {
+          this.$nextTick(() => {
+            if (this.$refs.setupForm) {
+              this.$refs.setupForm.loadFormData()
+            }
+          })
+        }
+      })
     },
 
     updateHighestCallNumber() {
@@ -1420,339 +1389,48 @@ export default {
     },
 
     async initiateInventorySession(sessionData) {
-      this.sessionData = sessionData
-      this.sessionStarted = true
-      this.sessionInitializing = true // Enable the loading indicator
-
-      // Set the manual resolution setting from sessionData
-      this.manualResolutionEnabled =
-        sessionData.resolutionSettings?.enableManualResolution !== undefined
-          ? sessionData.resolutionSettings.enableManualResolution
-          : true
-
-      // Initialize all resolution settings with defaults if not present
-      this.resolutionSettings = {
-        resolveReturnClaims: sessionData.resolutionSettings?.resolveReturnClaims || false,
-        resolveInTransitItems: sessionData.resolutionSettings?.resolveInTransitItems || false,
-        resolveWithdrawnItems: sessionData.resolutionSettings?.resolveWithdrawnItems || false,
-        enableManualResolution: this.manualResolutionEnabled,
-        resolveLostItems: sessionData.resolutionSettings?.resolveLostItems || false
-      }
-
-      // Log resolution settings for debugging
-
-      // Log preview settings if present
-      if (sessionData.previewSettings) {
-      }
-
-      // Display filter information to the user
-      if (sessionData.shelvingLocation) {
-        const locationName =
-          sessionData.shelvingLocations &&
-          sessionData.shelvingLocations[sessionData.shelvingLocation]
-            ? sessionData.shelvingLocations[sessionData.shelvingLocation]
-            : sessionData.shelvingLocation
-        EventBus.emit('message', {
-          type: 'status',
-          text: `Applying shelving location filter: ${locationName}`
-        })
-      }
-
-      // Display comparison mode
-      if (sessionData.compareBarcodes) {
-        EventBus.emit('message', {
-          type: 'status',
-          text: 'Expected barcodes comparison mode is ON. Generating expected barcodes list...'
-        })
-      } else {
-        EventBus.emit('message', {
-          type: 'status',
-          text: 'Expected barcodes comparison mode is OFF. No expected barcodes list will be generated.'
-        })
-      }
-
-      EventBus.emit('message', { type: 'status', text: 'Starting inventory session...' })
-
-      // Make the API request with improved error handling
-      fetch(
-        `/cgi-bin/koha/plugins/run.pl?class=Koha::Plugin::Com::InteractiveInventory&method=start_session&session_data=${encodeURIComponent(JSON.stringify(sessionData))}`,
-        {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-            Accept: 'application/json'
-          }
+      this._initiateInventorySession(sessionData, {
+        sessionDataSetter: (val) => {
+          this.sessionData = val
+        },
+        sessionStartedSetter: (val) => {
+          this.sessionStarted = val
+        },
+        sessionInitializingSetter: (val) => {
+          this.sessionInitializing = val
+        },
+        manualResolutionEnabledSetter: (val) => {
+          this.manualResolutionEnabled = val
+        },
+        resolutionSettingsSetter: (val) => {
+          this.resolutionSettings = val
+        },
+        itemsSetter: (val) => {
+          this.items = val
+        },
+        focusBarcodeInputFn: () => {
+          this.$nextTick(() => {
+            if (this.$refs.barcodeInput) {
+              this.$refs.barcodeInput.focus()
+            }
+          })
         }
-      )
-        .then((response) => {
-          // Check for HTTP errors
-          if (!response.ok) {
-            return response.headers.get('content-type').includes('application/json')
-              ? response.json().then((errorData) => {
-                  throw new Error(
-                    errorData.error || `Server error: ${response.status} ${response.statusText}`
-                  )
-                })
-              : response.text().then((errorText) => {
-                  throw new Error(`Non-JSON error response: ${errorText || response.statusText}`)
-                })
-          }
-
-          // Parse the JSON response with error handling
-          return response.text().then((responseText) => {
-            try {
-              return JSON.parse(responseText)
-            } catch (jsonError) {
-              console.error('JSON Parse Error:', jsonError, 'Response text:', responseText)
-              throw new Error(`Invalid JSON response: ${jsonError.message}`)
-            }
-          })
-        })
-        .then((data) => {
-          // Validate response data
-          if (!data) {
-            throw new Error('Empty response received')
-          }
-
-          // Check for API error in the response
-          if (data.error) {
-            throw new Error(`API error: ${data.error}`)
-          }
-
-          // Validate expected data structure
-          if (!data.location_data || !Array.isArray(data.location_data)) {
-            console.warn('Invalid location_data in response:', data)
-            data.location_data = []
-          } else {
-          }
-
-          if (!data.right_place_list || !Array.isArray(data.right_place_list)) {
-            console.warn('Invalid right_place_list in response:', data)
-            data.right_place_list = []
-          }
-
-          this.sessionData.response_data = data
-
-          // Save session data to session storage
-          return saveSession(this.sessionData).catch((error) => {
-            console.error('Inventory session error when saving session:', error)
-            EventBus.emit('message', {
-              text: `Error saving session data: ${error.message}. Try using fewer filters or a smaller item set.`,
-              type: 'error'
-            })
-          })
-        })
-        .then(() => {
-          // Clear any existing items
-          this.items = []
-          return saveItems(this.items).catch((error) => {
-            console.error('Error saving empty items list:', error)
-          })
-        })
-        .then(() => {
-          // Provide information about expected barcodes list based on compareBarcodes setting
-          if (this.sessionData.compareBarcodes) {
-            const rightPlaceList = this.sessionData.response_data.right_place_list || []
-            if (rightPlaceList.length > 0) {
-              EventBus.emit('message', {
-                text: `Expected barcodes list contains ${rightPlaceList.length} items. Items not on this list will be flagged.`,
-                type: 'status'
-              })
-
-              // Check if collection code is used and provide additional info
-              if (this.sessionData.ccode) {
-                EventBus.emit('message', {
-                  text: `Expected barcodes list is filtered by collection code: ${this.sessionData.ccode}`,
-                  type: 'info'
-                })
-              }
-            } else {
-              // The list might be empty because of a collection code filter
-              if (this.sessionData.ccode) {
-                EventBus.emit('message', {
-                  text: `Expected barcodes list is empty, possibly because of the collection code filter (${this.sessionData.ccode}). No items will be marked as unexpected.`,
-                  type: 'warning'
-                })
-              } else {
-                EventBus.emit('message', {
-                  text: 'Expected barcodes list is empty. No items will be marked as unexpected.',
-                  type: 'warning'
-                })
-              }
-            }
-          } else {
-            EventBus.emit('message', {
-              text: 'Not comparing scanned items to an expected barcodes list. All scanned items will be accepted.',
-              type: 'status'
-            })
-          }
-
-          EventBus.emit('message', {
-            text: `Inventory session started with ${this.sessionData.response_data.total_records || 0} items`,
-            type: 'status'
-          })
-
-          // Give a short delay before disabling the loading state to ensure everything is rendered
-          setTimeout(() => {
-            this.sessionInitializing = false
-
-            // Focus on barcode input after initialization completes
-            this.$nextTick(() => {
-              if (this.$refs.barcodeInput) {
-                this.$refs.barcodeInput.focus()
-              }
-            })
-          }, 1000)
-        })
-        .catch((error) => {
-          console.error('Inventory session error:', error)
-          this.sessionStarted = false
-          this.sessionData = null
-          this.sessionInitializing = false
-
-          EventBus.emit('message', {
-            text: `Error starting inventory session: ${error.message}`,
-            type: 'error'
-          })
-
-          // Show additional guidance if JSON parsing failed
-          if (error.message.includes('JSON')) {
-            EventBus.emit('message', {
-              text: 'There was a problem with the server response. Please try again or contact support.',
-              type: 'error'
-            })
-          }
-        })
+      })
     },
 
     handleToggleExpand(itemId) {
       this.items = this.items.map((item, index) => ({
         ...item,
-        isExpanded: `${index}-${item.id}` === itemId ? !item.isExpanded : false // Toggle the clicked item, collapse others
+        isExpanded: `${index}-${item.id}` === itemId ? !item.isExpanded : false
       }))
     },
 
     exportDataToCSV() {
-      const headers = [
-        'Barcode',
-        'Item ID',
-        'Biblio ID',
-        'Title',
-        'Author',
-        'Publication Year',
-        'Publisher',
-        'ISBN',
-        'Pages',
-        'Location',
-        'Acquisition Date',
-        'Last Seen Date',
-        'URL',
-        'Was Lost',
-        'Wrong Place',
-        'Was Checked Out',
-        'Scanned Out of Order',
-        'Had Invalid "Not for loan" Status',
-        'Scanned',
-        'Status'
-      ]
-
-      // Create a map of scanned items using their barcodes
-      const scannedItemsMap = new Map(this.items.map((item) => [item.external_id, item]))
-
-      // Add defensive check for location_data
-      const locationData = this.sessionData.response_data.location_data || []
-      const expectedBarcodesSet = new Set(locationData.map((item) => item.barcode))
-
-      // Combine expected items and scanned items
-      let combinedItems = [
-        ...locationData,
-        ...this.items.filter((item) => !expectedBarcodesSet.has(item.external_id))
-      ]
-
-      // Filter for missing items only if requested
-      if (this.exportMissingOnly) {
-        combinedItems = combinedItems.filter((item) => {
-          const barcode = item.barcode || item.external_id
-          // Item is missing if it was expected but not scanned
-          return expectedBarcodesSet.has(barcode) && !scannedItemsMap.has(barcode)
-        })
-      }
-
-      const csvContent = [
-        headers.join(','),
-        ...combinedItems.map((item) => {
-          const scannedItem = scannedItemsMap.get(item.barcode)
-          const combinedItem = { ...item }
-
-          if (scannedItem) {
-            for (const key in scannedItem) {
-              if (
-                !combinedItem.hasOwnProperty(key) ||
-                combinedItem[key] === null ||
-                combinedItem[key] === undefined
-              ) {
-                combinedItem[key] = scannedItem[key]
-              }
-            }
-          }
-          const wasScanned = scannedItem || combinedItem.wasScanned
-
-          // Determine item status
-          let status = 'OK'
-          if (
-            !wasScanned &&
-            expectedBarcodesSet.has(combinedItem.barcode || combinedItem.external_id)
-          ) {
-            status = 'Missing'
-          } else if (combinedItem.wrongPlace) {
-            status = 'Wrong Place'
-          } else if (combinedItem.outOfOrder) {
-            status = 'Out of Order'
-          } else if (combinedItem.invalidStatus) {
-            status = 'Invalid Status'
-          } else if (combinedItem.wasLost) {
-            status = 'Was Lost'
-          }
-
-          return [
-            `"${combinedItem.barcode || combinedItem.external_id}"`,
-            `"${combinedItem.itemnumber || combinedItem.item_id}"`,
-            `"${combinedItem.biblionumber || combinedItem.biblio_id}"`,
-            `"${combinedItem.title || (combinedItem.biblio && combinedItem.biblio.title) || 'N/A'}"`,
-            `"${combinedItem.author || (combinedItem.biblio && combinedItem.biblio.author) || 'N/A'}"`,
-            `"${(combinedItem.biblio && combinedItem.biblio.publication_year) || 'N/A'}"`,
-            `"${(combinedItem.biblio && combinedItem.biblio.publisher) || 'N/A'}"`,
-            `"${(combinedItem.biblio && combinedItem.biblio.isbn) || 'N/A'}"`,
-            `"${(combinedItem.biblio && combinedItem.biblio.pages) || 'N/A'}"`,
-            `"${combinedItem.location || 'N/A'}"`,
-            `"${combinedItem.acquisition_date || 'N/A'}"`,
-            `"${combinedItem.datelastseen || combinedItem.last_seen_date || 'N/A'}"`,
-            `"${window.location.origin}/cgi-bin/koha/catalogue/detail.pl?biblionumber=${combinedItem.biblionumber || combinedItem.biblio_id}"`,
-            `"${combinedItem.wasLost ? 'Yes' : 'No'}"`,
-            `"${combinedItem.wrongPlace ? 'Yes' : 'No'}"`,
-            `"${combinedItem.checked_out_date ? 'Yes' : 'No'}"`,
-            `"${combinedItem.outOfOrder ? 'Yes' : 'No'}"`,
-            `"${combinedItem.invalidStatus ? 'Yes' : 'No'}"`,
-            `"${wasScanned ? 'Yes' : 'NOT SCANNED'}"`,
-            `"${status}"`
-          ].join(',')
-        })
-      ].join('\n')
-
-      const blob = new Blob([csvContent], { type: 'text/csv' })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = this.exportMissingOnly ? 'missing_items.csv' : 'inventory.csv'
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      URL.revokeObjectURL(url)
-
-      // Show a message with the count of exported items
-      EventBus.emit('message', {
-        type: 'success',
-        text: `Exported ${combinedItems.length} items to CSV${this.exportMissingOnly ? ' (missing items only)' : ''}`
+      _exportDataToCSV({
+        items: this.items,
+        sessionData: this.sessionData,
+        exportMissingOnly: this.exportMissingOnly,
+        filterMissingItemsFn: filterMissingItems
       })
     },
 
@@ -1814,22 +1492,7 @@ export default {
     },
 
     toggleScannerMode() {
-      // First, force the scanner to stop and release camera
-      if (this.scannerMode) {
-        // If we're currently in scanner mode, make sure it's cleaned up
-        try {
-          EventBus.emit('stop-scanner')
-          // Give time for camera to release before toggling mode
-          setTimeout(() => {
-            this.scannerMode = false
-          }, 200)
-        } catch (e) {
-          this.scannerMode = false
-        }
-      } else {
-        // If we're not in scanner mode, we can switch immediately
-        this.scannerMode = true
-      }
+      this._toggleScannerMode()
     },
 
     onBarcodeDetected(code) {
@@ -1850,47 +1513,27 @@ export default {
     },
 
     checkDeviceType() {
-      this.isMobileView = window.innerWidth < 768
+      this._checkDeviceType()
     },
 
     toggleEndSessionModal() {
-      // Close the Shelf Preview modal if it's open
-      if (this.showShelfPreview) {
-        this.showShelfPreview = false
-      }
-      this.showEndSessionModal = !this.showEndSessionModal
+      this._toggleEndSessionModal()
     },
 
     toggleMissingItemsModal() {
-      // Close the Shelf Preview modal if it's open
-      if (this.showShelfPreview) {
-        this.showShelfPreview = false
-      }
-
-      // Toggle the modal visibility state
-      this.showMissingItemsModal = !this.showMissingItemsModal
-
-      if (this.showMissingItemsModal) {
-        // If opening the modal, update the marked missing items
-        this.handleMissingItemsUpdated()
-      }
+      this._toggleMissingItemsModal(() => this.handleMissingItemsUpdated())
     },
 
     closeMissingItemsModal() {
-      this.showMissingItemsModal = false
+      this._closeMissingItemsModal()
     },
 
     toggleShelfPreview() {
-      this.showShelfPreview = !this.showShelfPreview
-
-      if (this.showShelfPreview) {
-        // Load authorized values for location codes if not already loaded
-        this.loadAuthorizedValueCategories()
-      }
+      this._toggleShelfPreview(() => this.loadAuthorizedValueCategories())
     },
 
     closeShelfPreview() {
-      this.showShelfPreview = false
+      this._closeShelfPreview()
     },
 
     handleUpcomingItemsLoaded(count) {
@@ -1913,58 +1556,15 @@ export default {
     },
 
     handleItemMarkedMissing(barcode) {
-      // Add the barcode to the markedMissingItems set
-      this.markedMissingItems.add(barcode)
-      // Update session storage to keep track of marked items
-      saveMarkedMissingItems(Array.from(this.markedMissingItems))
+      this._handleItemMarkedMissing(barcode)
     },
 
     handleItemsMarkedMissing(barcodes) {
-      // Add all barcodes to the markedMissingItems set
-      barcodes.forEach((barcode) => this.markedMissingItems.add(barcode))
-      // Update session storage
-      saveMarkedMissingItems(Array.from(this.markedMissingItems))
+      this._handleItemsMarkedMissing(barcodes)
     },
 
     getMissingItemsCount() {
-      if (!this.sessionData || !this.sessionData.response_data) {
-        return 0
-      }
-
-      // Get the location data from session response
-      const locationData = this.sessionData.response_data.location_data || []
-
-      // If location data is empty, try to use right_place_list as a fallback
-      let itemsToCheck = locationData
-      if (itemsToCheck.length === 0 && this.sessionData.response_data.right_place_list) {
-        itemsToCheck = this.sessionData.response_data.right_place_list
-      }
-
-      if (itemsToCheck.length === 0) {
-        // No data to process
-        return 0
-      }
-
-      // Get a set of scanned barcodes for quick lookup
-      const scannedBarcodesSet = new Set(this.items.map((item) => item.external_id))
-
-      // Use our already initialized markedMissingItems set
-      const markedMissingSet = this.markedMissingItems
-
-      // Count items that haven't been scanned, aren't marked as missing, and meet session criteria
-      const count = filterMissingItems({
-        locationData: itemsToCheck,
-        rightPlaceList: [],
-        scannedBarcodes: scannedBarcodesSet,
-        markedMissingBarcodes: markedMissingSet,
-        sessionSettings: {
-          skipCheckedOutItems: this.sessionData.skipCheckedOutItems,
-          skipInTransitItems: this.sessionData.skipInTransitItems,
-          skipBranchMismatchItems: this.sessionData.skipBranchMismatchItems
-        }
-      }).length
-
-      return count
+      return this._getMissingItemsCount(this.sessionData, this.items)
     },
 
     setupStarted(data) {
@@ -2002,24 +1602,7 @@ export default {
     },
 
     markItemMissing(barcode) {
-      // Update the Set with the barcode
-      this.markedMissingItems.add(barcode)
-
-      // Convert the Set to an array for storage
-      const barcodesArray = Array.from(this.markedMissingItems)
-
-      // Save to storage
-      saveMarkedMissingItems(barcodesArray)
-        .then(() => {
-          EventBus.emit('message', { text: `Item ${barcode} marked as missing`, type: 'status' })
-        })
-        .catch((error) => {
-          console.error('Error marking item as missing:', error)
-          EventBus.emit('message', {
-            text: 'Error marking item as missing: ' + error.message,
-            type: 'error'
-          })
-        })
+      this._markItemMissing(barcode)
     },
 
     processItem(item) {
@@ -2117,113 +1700,22 @@ export default {
     },
 
     completeSession() {
-      // Save final session data
-      saveSession(this.sessionData)
-        .then(() => {
-          // Save final items list
-          return saveItems(this.items)
-        })
-        .then(() => {
-          // Save final marked missing items if needed
-          if (this.markedMissingItems.size > 0) {
-            return saveMarkedMissingItems(Array.from(this.markedMissingItems))
-          }
-          return Promise.resolve()
-        })
-        .then(() => {
-          // Clear session data and reset UI
-          this.sessionData = null
-          this.sessionStarted = false
-          this.items = []
-          this.markedMissingItems = new Set()
-          this.highestCallNumberSort = ''
-          this.showEndSessionModal = false
-
-          // Clear session storage
-          return clearSession()
-        })
-        .then(() => {
-          // Show success message
-          EventBus.emit('message', { text: 'Inventory session ended', type: 'status' })
-        })
-        .catch((error) => {
-          console.error('Error completing session:', error)
-          EventBus.emit('message', {
-            text: 'Error ending session: ' + error.message,
-            type: 'error'
-          })
-        })
+      this._completeSession(this.sessionData, this.items, this.markedMissingItems, () => {
+        this.sessionData = null
+        this.sessionStarted = false
+        this.items = []
+        this.markedMissingItems = new Set()
+        this.highestCallNumberSort = ''
+        this.showEndSessionModal = false
+      })
     },
 
     openResolutionModal(item, type, patronName = '') {
-      // Mark item as scanned
-      item.wasScanned = true
-
-      // Create a new instance to avoid modifying the original object
-      const newItem = { ...item }
-
-      // Add issue information to the item based on type
-      switch (type) {
-        case 'checkedout':
-          // The InventoryItem component already checks for checked_out_date
-          // This will be detected automatically
-          newItem.pendingResolution = true
-          newItem.resolutionType = 'checkedout'
-          break
-
-        case 'lost':
-          // Set wasLost flag which is already recognized by InventoryItem
-          newItem.wasLost = true
-          newItem.pendingResolution = true
-          newItem.resolutionType = 'lost'
-          newItem.originalLostStatus = newItem.lost_status
-          break
-
-        case 'intransit':
-          // The InventoryItem component already checks for in_transit
-          newItem.pendingResolution = true
-          newItem.resolutionType = 'intransit'
-          break
-
-        case 'returnclaim':
-          // The InventoryItem component already checks for return_claim
-          newItem.pendingResolution = true
-          newItem.resolutionType = 'returnclaim'
-          break
-
-        case 'withdrawn':
-          // Set properties for withdrawn items
-          newItem.pendingResolution = true
-          newItem.resolutionType = 'withdrawn'
-          break
-      }
-
-      // Always add to the top of the list as the latest scan, without removing previous entries
-      this.items.unshift(newItem)
-
-      // Set all items to be collapsed except the first one
-      this.items = this.items.map((itm, index) => ({
-        ...itm,
-        isExpanded: index === 0 // Only expand the first item
-      }))
-
-      // Save updated items to session storage
-      saveItems(this.items).catch((error) => {
-        console.error('Error saving items after resolution modal:', error)
-      })
-
-      // Now set up and show the resolution modal
-      this.currentResolutionItem = newItem
-      this.currentResolutionType = type
-      this.currentPatronName = patronName
-      this.showResolutionModal = true
+      this._openResolutionModal(item, type, patronName, this.items)
     },
 
     closeResolutionModal() {
-      this.showResolutionModal = false
-      this.currentResolutionItem = null
-      this.currentResolutionType = ''
-      this.currentPatronName = ''
+      this._closeResolutionModal()
     },
 
     handleResolutionComplete(result) {
@@ -2375,15 +1867,7 @@ export default {
     },
 
     async handleMissingItemsUpdated() {
-      // Update the local set of marked missing items with defensive handling
-      try {
-        const markedItems = await getMarkedMissingItems()
-        // Make a fresh Set from the array to ensure we don't have duplicates
-        this.markedMissingItems = new Set(Array.isArray(markedItems) ? markedItems : [])
-      } catch (error) {
-        console.error('Error updating marked missing items:', error)
-        this.markedMissingItems = new Set()
-      }
+      await this._handleMissingItemsUpdated()
     }
   }
 }
