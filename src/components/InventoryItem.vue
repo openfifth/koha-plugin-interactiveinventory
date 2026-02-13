@@ -70,7 +70,9 @@
         <p><strong>Pages:</strong></p>
         <p>{{ item.biblio.pages || 'N/A' }}</p>
         <p><strong>Location:</strong></p>
-        <p>{{ item.location }}</p>
+        <p>{{ getLocationDisplay(item.location) }}</p>
+        <p><strong>Item Type:</strong></p>
+        <p>{{ getItemTypeDisplay(item.item_type_id || item.itype) }}</p>
         <p><strong>Home Library:</strong></p>
         <p>{{ item.homebranch || item.home_library_id || 'N/A' }}</p>
         <p><strong>Holding Library:</strong></p>
@@ -343,6 +345,29 @@ export default {
       } catch (error) {
         EventBus.emit('message', { type: 'error', text: 'Error setting authorized values' })
       }
+    },
+
+    getLocationDisplay(locationCode) {
+      if (!locationCode) return 'N/A'
+      // Use shelvingLocations from sessionData to look up description
+      const locations = this.sessionData?.shelvingLocations
+      if (locations && locations[locationCode]) {
+        return locations[locationCode]
+      }
+      return locationCode
+    },
+
+    getItemTypeDisplay(itemTypeCode) {
+      if (!itemTypeCode) return 'N/A'
+      // Use iTypes from sessionData to look up description
+      const itemTypes = this.sessionData?.iTypes
+      if (itemTypes) {
+        const itemType = itemTypes.find((t) => t.itemtype === itemTypeCode)
+        if (itemType) {
+          return itemType.description || itemTypeCode
+        }
+      }
+      return itemTypeCode
     }
   }
 }
