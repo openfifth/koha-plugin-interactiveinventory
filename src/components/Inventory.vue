@@ -1187,6 +1187,43 @@ export default {
           }
         }
 
+        // Check if item matches active filters (runs in ALL modes, not just compareBarcodes)
+        // This ensures items from wrong libraries/locations are flagged even in "Accept all" mode
+        const homeBranch = combinedData.homebranch || combinedData.home_library_id
+        const itemLocation = combinedData.location || combinedData.permanent_location
+        const filterReasons = []
+
+        if (
+          this.sessionData.selectedLibraryId &&
+          homeBranch !== this.sessionData.selectedLibraryId
+        ) {
+          filterReasons.push(
+            `home library is ${homeBranch || 'unknown'}, not ${this.sessionData.selectedLibraryId}`
+          )
+        }
+        if (
+          this.sessionData.shelvingLocation &&
+          itemLocation !== this.sessionData.shelvingLocation
+        ) {
+          filterReasons.push(
+            `shelving location is ${itemLocation || 'unset'}, not ${this.sessionData.shelvingLocation}`
+          )
+        }
+        if (this.sessionData.ccode && combinedData.collection_code !== this.sessionData.ccode) {
+          filterReasons.push(
+            `collection code is ${combinedData.collection_code || 'unset'}, not ${this.sessionData.ccode}`
+          )
+        }
+
+        if (filterReasons.length > 0) {
+          combinedData.wrongPlace = true
+          combinedData.wrongPlaceReason = ` (${filterReasons.join('; ')})`
+          EventBus.emit('message', {
+            type: 'warning',
+            text: `Item ${combinedData.external_id} does not match active filters${combinedData.wrongPlaceReason}`
+          })
+        }
+
         // Only check scanned barcodes against expected list if compareBarcodes is enabled
         if (this.sessionData.compareBarcodes) {
           // Add defensive check before accessing right_place_list
