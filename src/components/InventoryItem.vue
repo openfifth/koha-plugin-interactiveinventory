@@ -78,9 +78,9 @@
         <p><strong>Holding Library:</strong></p>
         <p>{{ item.holdingbranch || item.holding_library_id || 'N/A' }}</p>
         <p><strong>Acquisition Date:</strong></p>
-        <p>{{ item.acquisition_date }}</p>
+        <p>{{ formatDate(item.acquisition_date) }}</p>
         <p><strong>Last Seen Date:</strong></p>
-        <p>{{ item.last_seen_date }}</p>
+        <p>{{ formatDate(item.last_seen_date) }}</p>
         <p><strong>URL:</strong></p>
         <p>
           <a :href="constructedUrl" target="_blank" @click.stop>{{ constructedUrl }}</a>
@@ -381,6 +381,13 @@ export default {
         }
       }
       return itemTypeCode
+    },
+
+    formatDate(dateString) {
+      if (!dateString) return 'N/A'
+      const date = new Date(dateString)
+      if (isNaN(date.getTime())) return 'N/A'
+      return date.toLocaleDateString()
     }
   }
 }
