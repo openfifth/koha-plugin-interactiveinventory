@@ -859,13 +859,16 @@ export default {
       try {
         EventBus.emit('message', { type: 'status', text: 'Searching for item...' })
 
-        // Fetch item with embedded biblio data in a single API call
+        // Fetch item with embedded data in a single API call
+        // - biblio: for bibliographic information
+        // - transfer: for in-transit status (active transfers)
+        // - first_hold: for waiting holds information
         let response = await fetch(
           `/api/v1/items?external_id=${encodeURIComponent(this.barcode)}`,
           {
             headers: {
               Accept: 'application/json',
-              'x-koha-embed': 'biblio'
+              'x-koha-embed': 'biblio,transfer,first_hold'
             }
           }
         )
@@ -904,8 +907,31 @@ export default {
           return // Skip processing this item
         }
 
+        // Check if the item has a waiting hold and the user has chosen to skip such items
+        // first_hold embed contains the first hold if there is one, with status='W' indicating waiting
+        const hasWaitingHold = combinedData.first_hold && combinedData.first_hold.status === 'W'
+        if (this.sessionData.ignoreWaitingHolds && hasWaitingHold) {
+          EventBus.emit('message', {
+            type: 'warning',
+            text: `Item ${this.barcode} has a waiting hold. Skipping according to settings.`
+          })
+
+          // Clear the barcode input and focus on it
+          this.barcode = ''
+          if (this.$refs.barcodeInput) {
+            this.$refs.barcodeInput.focus()
+          }
+
+          this.loading = false
+          return // Skip processing this item
+        }
+
         // Check if the item is in transit and the user has chosen to skip in-transit items
-        if (this.sessionData.skipInTransitItems && combinedData.in_transit) {
+        // transfer embed contains active transfer info if item is in transit
+        const isInTransit = combinedData.transfer && !combinedData.transfer.datearrived
+        // Also add the in_transit flag to combinedData for use elsewhere
+        combinedData.in_transit = isInTransit
+        if (this.sessionData.skipInTransitItems && isInTransit) {
           EventBus.emit('message', {
             type: 'warning',
             text: `Item ${this.barcode} is currently in transit. Skipping according to settings.`
@@ -922,13 +948,16 @@ export default {
         }
 
         // Check if the item has branch mismatch and the user has chosen to skip such items
-        if (
-          this.sessionData.skipBranchMismatchItems &&
-          combinedData.homebranch !== combinedData.holdingbranch
-        ) {
+        // API uses home_library_id and holding_library_id field names
+        const homebranch = combinedData.home_library_id
+        const holdingbranch = combinedData.holding_library_id
+        // Add these as aliases for compatibility with other code
+        combinedData.homebranch = homebranch
+        combinedData.holdingbranch = holdingbranch
+        if (this.sessionData.skipBranchMismatchItems && homebranch !== holdingbranch) {
           EventBus.emit('message', {
             type: 'warning',
-            text: `Item ${this.barcode} has different holding branch (${combinedData.holdingbranch}) than home branch (${combinedData.homebranch}). Skipping according to settings.`
+            text: `Item ${this.barcode} has different holding branch (${holdingbranch}) than home branch (${homebranch}). Skipping according to settings.`
           })
 
           // Clear the barcode input and focus on it

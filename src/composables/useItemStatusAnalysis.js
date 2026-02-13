@@ -74,11 +74,15 @@ export function analyzeReturnClaimStatus(item) {
 }
 
 export function analyzeBranchStatus(item) {
-  const hasBranchMismatch = item.homebranch !== item.holding_library_id
+  // Support both API field names (home_library_id/holding_library_id) and
+  // GetItemsForInventory field names (homebranch) with fallbacks
+  const homeBranch = item.homebranch || item.home_library_id
+  const holdingBranch = item.holdingbranch || item.holding_library_id
+  const hasBranchMismatch = homeBranch !== holdingBranch
   return {
     hasBranchMismatch,
-    homeBranch: item.homebranch,
-    holdingBranch: item.holding_library_id,
+    homeBranch,
+    holdingBranch,
     needsTransfer: hasBranchMismatch && !item.checked_out_date
   }
 }
