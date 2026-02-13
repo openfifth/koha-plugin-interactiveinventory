@@ -268,7 +268,7 @@
                 <tbody>
                   <tr
                     v-for="item in filteredProcessedItems"
-                    :key="item.barcode"
+                    :key="item.uniqueKey"
                     :class="{ 'selected-row': selectedProcessedItemsSet.has(item.barcode) }"
                   >
                     <td>
@@ -687,12 +687,17 @@ export default {
       }
 
       // Process scanned items
+      // Use a counter to generate unique keys for each processed item
+      // This prevents Vue key collisions when the same barcode is scanned multiple times
+      let uniqueIdCounter = 0
+
       if (this.scannedItems && this.scannedItems.length > 0) {
         // Convert scanned items to the format we need
         const scannedProcessed = this.scannedItems.map((item) => {
           // Try to find the item in location data for consistent information
           const barcode = item.external_id || item.barcode
           const locationItem = locationDataMap.get(barcode)
+          const uniqueKey = `scanned-${uniqueIdCounter++}`
 
           // If we found the item in location data, use that for consistent information
           if (locationItem) {
@@ -704,7 +709,8 @@ export default {
                 locationItem.call_number ||
                 locationItem.callnumber ||
                 'N/A',
-              status: 'scanned'
+              status: 'scanned',
+              uniqueKey: uniqueKey
             }
           } else {
             // Extract data from biblio property if available
@@ -737,7 +743,8 @@ export default {
               itype: item.itype || 'N/A',
               datelastseen: item.datelastseen || item.last_seen_date || 'N/A',
               itemnumber: item.item_id || item.itemnumber || 'N/A',
-              status: 'scanned'
+              status: 'scanned',
+              uniqueKey: uniqueKey
             }
           }
         })
@@ -753,6 +760,8 @@ export default {
 
           if (this.markedMissingItems.length > 0) {
             if (lookupData.length > 0) {
+              // Continue unique key counter from where scanned items left off
+              let missingIdCounter = this.processedItems.length
               // Find the items that have been marked as missing using the lookup data
               const missingProcessed = this.markedMissingItems
                 .map((barcode) => {
@@ -764,7 +773,8 @@ export default {
                       // Normalize call number property name for consistent sorting
                       itemcallnumber:
                         item.itemcallnumber || item.call_number || item.callnumber || 'N/A',
-                      status: 'missing'
+                      status: 'missing',
+                      uniqueKey: `missing-${missingIdCounter++}`
                     }
                   }
                   return null
@@ -870,13 +880,16 @@ export default {
           // Use the same item data but set status to missing
           const itemWithStatus = {
             ...item,
-            status: 'missing'
+            status: 'missing',
+            // Generate unique key if not present
+            uniqueKey: item.uniqueKey || `marked-${Date.now()}-${item.barcode}`
           }
 
           // Check if the item is already in the processed items list
           const existingIndex = this.processedItems.findIndex((i) => i.barcode === item.barcode)
           if (existingIndex !== -1) {
-            // Update existing item
+            // Update existing item - preserve existing uniqueKey
+            itemWithStatus.uniqueKey = this.processedItems[existingIndex].uniqueKey
             this.processedItems.splice(existingIndex, 1, itemWithStatus)
           } else {
             // Add as new item
@@ -1072,6 +1085,7 @@ export default {
         await saveMarkedMissingItems(updatedMarkedMissing)
 
         // Add processed items to the processed items list
+        let batchCounter = Date.now()
         const newProcessedItems = itemsToProcess
           .map((barcode) => {
             const item = this.missingItems.find((i) => i.barcode === barcode)
@@ -1079,7 +1093,9 @@ export default {
 
             return {
               ...item,
-              status: 'missing'
+              status: 'missing',
+              // Generate unique key for each batch-processed item
+              uniqueKey: item.uniqueKey || `batch-${batchCounter++}-${barcode}`
             }
           })
           .filter((item) => item !== null)
