@@ -7,31 +7,24 @@
         <label for="inventoryDate">Set inventory date to:</label>
         <input type="date" id="inventoryDate" v-model="inventoryDate" />
       </div>
-      <div class="checkbox-row" @click="compareBarcodes = !compareBarcodes">
-        <input type="checkbox" id="compareBarcodes" v-model="compareBarcodes" @click.stop />
-        <label for="compareBarcodes">Compare expected barcodes list to scanned barcodes</label>
+      <label class="checkbox-option">
+        <input type="checkbox" v-model="compareBarcodes" />
+        <span class="label-text">Compare expected barcodes list to scanned barcodes</span>
         <span class="help-text" v-if="compareBarcodes"
           >(Scanned barcodes will be checked against the expected items list)</span
         >
         <span class="help-text" v-else
           >(All scanned barcodes will be accepted without comparison)</span
         >
-      </div>
-      <div class="checkbox-row" @click="doNotCheckIn = !doNotCheckIn">
-        <input type="checkbox" id="doNotCheckIn" v-model="doNotCheckIn" @click.stop />
-        <label for="doNotCheckIn">Do not check in items scanned during inventory</label>
-      </div>
-      <div class="checkbox-row" @click="checkShelvedOutOfOrder = !checkShelvedOutOfOrder">
-        <input
-          type="checkbox"
-          id="checkShelvedOutOfOrder"
-          v-model="checkShelvedOutOfOrder"
-          @click.stop
-        />
-        <label for="checkShelvedOutOfOrder"
-          >Check barcodes list for items shelved out of order</label
-        >
-      </div>
+      </label>
+      <label class="checkbox-option">
+        <input type="checkbox" v-model="doNotCheckIn" />
+        <span class="label-text">Do not check in items scanned during inventory</span>
+      </label>
+      <label class="checkbox-option">
+        <input type="checkbox" v-model="checkShelvedOutOfOrder" />
+        <span class="label-text">Check barcodes list for items shelved out of order</span>
+      </label>
     </div>
     <div class="section-container">
       <h2>Item Location Filters</h2>
@@ -128,45 +121,35 @@
     <div class="section-container">
       <fieldset id="optionalfilters">
         <legend>Optional filters for inventory list or comparing barcodes</legend>
-        <div class="checkbox-row" @click="skipCheckedOutItems = !skipCheckedOutItems">
-          <input
-            type="checkbox"
-            id="skipCheckedOutItems"
-            v-model="skipCheckedOutItems"
-            @click.stop
-          />
-          <label for="skipCheckedOutItems">Skip/filter checked out items</label>
+        <label class="checkbox-option">
+          <input type="checkbox" v-model="skipCheckedOutItems" />
+          <span class="label-text">Skip/filter checked out items</span>
           <span class="help-text"
             >(Items that are currently checked out will not appear in the inventory list)</span
           >
-        </div>
-        <div class="checkbox-row" @click="skipInTransitItems = !skipInTransitItems">
-          <input type="checkbox" id="skipInTransitItems" v-model="skipInTransitItems" @click.stop />
-          <label for="skipInTransitItems">Skip/filter in-transit items</label>
+        </label>
+        <label class="checkbox-option">
+          <input type="checkbox" v-model="skipInTransitItems" />
+          <span class="label-text">Skip/filter in-transit items</span>
           <span class="help-text"
             >(Items that are currently in transit will not appear in the inventory list)</span
           >
-        </div>
-        <div class="checkbox-row" @click="skipBranchMismatchItems = !skipBranchMismatchItems">
-          <input
-            type="checkbox"
-            id="skipBranchMismatchItems"
-            v-model="skipBranchMismatchItems"
-            @click.stop
-          />
-          <label for="skipBranchMismatchItems">Skip/filter branch mismatch items</label>
+        </label>
+        <label class="checkbox-option">
+          <input type="checkbox" v-model="skipBranchMismatchItems" />
+          <span class="label-text">Skip/filter branch mismatch items</span>
           <span class="help-text"
             >(Items where holdingbranch differs from homebranch will not appear in the inventory
             list)</span
           >
-        </div>
-        <div class="checkbox-row" @click="ignoreWaitingHolds = !ignoreWaitingHolds">
-          <input type="checkbox" id="ignoreWaitingHolds" v-model="ignoreWaitingHolds" @click.stop />
-          <label for="ignoreWaitingHolds">Skip items on hold awaiting pickup</label>
+        </label>
+        <label class="checkbox-option">
+          <input type="checkbox" v-model="ignoreWaitingHolds" />
+          <span class="label-text">Skip items on hold awaiting pickup</span>
           <span class="help-text"
             >(Items with waiting holds will not appear in the inventory list)</span
           >
-        </div>
+        </label>
         <div class="form-row">
           <label for="datelastseen">Last inventory date:</label>
           <input type="date" id="datelastseen" v-model="dateLastSeen" class="flatpickr" />
@@ -181,23 +164,18 @@
           <div id="statuses" class="statuses-grid">
             <div v-for="(statusList, statusKey) in statuses" :key="statusKey" class="status-column">
               <label :for="statusKey">{{ statusKey }}:</label>
-              <div
+              <label
                 v-for="status in statusList"
                 :key="statusKey + '-' + status.authorised_value_id"
-                class="status-row"
-                @click="toggleStatus(statusKey, status.authorised_value_id)"
+                class="checkbox-option compact"
               >
                 <input
                   type="checkbox"
-                  :id="statusKey + '-' + status.authorised_value_id"
                   :value="status.authorised_value_id"
                   v-model="selectedStatuses[statusKey]"
-                  @click.stop
                 />
-                <label :for="statusKey + '-' + status.authorised_value_id">{{
-                  status.description
-                }}</label>
-              </div>
+                <span class="label-text">{{ status.description }}</span>
+              </label>
             </div>
           </div>
         </div>
@@ -206,71 +184,46 @@
         <label>Item Types</label>
         <div v-if="itemTypesLoading" class="loading-indicator">Loading item types...</div>
         <div class="item-types-grid">
-          <div
+          <label
             v-for="iType in iTypes"
             :key="iType.item_type_id"
-            class="item-type-box"
-            @click="toggleItype(iType.item_type_id)"
-            :class="{ loading: iType.item_type_id === 'loading' }"
+            class="checkbox-option compact"
+            :class="{ disabled: iType.item_type_id === 'loading' }"
           >
             <input
               type="checkbox"
-              :id="'iType_' + iType.item_type_id"
               :value="iType.item_type_id"
               v-model="selectedItypes"
-              @click.stop
               :disabled="iType.item_type_id === 'loading'"
             />
-            <label :for="'iType_' + iType.item_type_id">{{ iType.description }}</label>
-          </div>
+            <span class="label-text">{{ iType.description }}</span>
+          </label>
         </div>
       </div>
     </div>
     <div class="section-container">
       <h2>Status Alerts</h2>
       <div class="alert-options">
-        <div class="checkbox-row" @click="showWithdrawnAlerts = !showWithdrawnAlerts">
-          <input
-            type="checkbox"
-            id="showWithdrawnAlerts"
-            v-model="showWithdrawnAlerts"
-            @click.stop
-          />
-          <label for="showWithdrawnAlerts">Show alerts for withdrawn items</label>
-        </div>
-        <div class="checkbox-row" @click="showOnHoldAlerts = !showOnHoldAlerts">
-          <input type="checkbox" id="showOnHoldAlerts" v-model="showOnHoldAlerts" @click.stop />
-          <label for="showOnHoldAlerts">Show alerts for items on hold</label>
-        </div>
-        <div class="checkbox-row" @click="showInTransitAlerts = !showInTransitAlerts">
-          <input
-            type="checkbox"
-            id="showInTransitAlerts"
-            v-model="showInTransitAlerts"
-            @click.stop
-          />
-          <label for="showInTransitAlerts">Show alerts for in-transit items</label>
-        </div>
-        <div class="checkbox-row" @click="showBranchMismatchAlerts = !showBranchMismatchAlerts">
-          <input
-            type="checkbox"
-            id="showBranchMismatchAlerts"
-            v-model="showBranchMismatchAlerts"
-            @click.stop
-          />
-          <label for="showBranchMismatchAlerts"
-            >Show alerts for items belonging to different branches</label
-          >
-        </div>
-        <div class="checkbox-row" @click="showReturnClaimAlerts = !showReturnClaimAlerts">
-          <input
-            type="checkbox"
-            id="showReturnClaimAlerts"
-            v-model="showReturnClaimAlerts"
-            @click.stop
-          />
-          <label for="showReturnClaimAlerts">Show alerts for unresolved return claims</label>
-        </div>
+        <label class="checkbox-option">
+          <input type="checkbox" v-model="showWithdrawnAlerts" />
+          <span class="label-text">Show alerts for withdrawn items</span>
+        </label>
+        <label class="checkbox-option">
+          <input type="checkbox" v-model="showOnHoldAlerts" />
+          <span class="label-text">Show alerts for items on hold</span>
+        </label>
+        <label class="checkbox-option">
+          <input type="checkbox" v-model="showInTransitAlerts" />
+          <span class="label-text">Show alerts for in-transit items</span>
+        </label>
+        <label class="checkbox-option">
+          <input type="checkbox" v-model="showBranchMismatchAlerts" />
+          <span class="label-text">Show alerts for items belonging to different branches</span>
+        </label>
+        <label class="checkbox-option">
+          <input type="checkbox" v-model="showReturnClaimAlerts" />
+          <span class="label-text">Show alerts for unresolved return claims</span>
+        </label>
       </div>
       <p class="help-text">
         These settings control which alert types are displayed during scanning.
@@ -279,100 +232,70 @@
     <div class="section-container">
       <h2>Status Resolution</h2>
       <div class="resolution-options">
-        <div class="checkbox-row" @click="enableManualResolution = !enableManualResolution">
-          <input
-            type="checkbox"
-            id="enableManualResolution"
-            v-model="enableManualResolution"
-            @click.stop
-          />
-          <label for="enableManualResolution">Enable manual resolution for item issues</label>
-          <p class="help-text">
+        <label class="checkbox-option">
+          <input type="checkbox" v-model="enableManualResolution" />
+          <span class="label-text">Enable manual resolution for item issues</span>
+          <span class="help-text">
             When enabled, a resolution dialog will appear when scanning items with issues (checked
             out, lost, etc.).
-          </p>
-        </div>
-
-        <div class="checkbox-row" @click="resolveLostItems = !resolveLostItems">
-          <input type="checkbox" id="resolveLostItems" v-model="resolveLostItems" @click.stop />
-          <label for="resolveLostItems">Automatically mark lost items as found</label>
-          <p class="help-text">
+          </span>
+        </label>
+        <label class="checkbox-option">
+          <input type="checkbox" v-model="resolveLostItems" />
+          <span class="label-text">Automatically mark lost items as found</span>
+          <span class="help-text">
             When a lost item is scanned, it will be automatically marked as found. If disabled, a
             resolution dialog will appear.
-          </p>
-        </div>
-
-        <div class="checkbox-row" @click="resolveReturnClaims = !resolveReturnClaims">
-          <input
-            type="checkbox"
-            id="resolveReturnClaims"
-            v-model="resolveReturnClaims"
-            @click.stop
-          />
-          <label for="resolveReturnClaims"
-            >Automatically resolve return claims when item is scanned</label
-          >
-          <p class="help-text">
+          </span>
+        </label>
+        <label class="checkbox-option">
+          <input type="checkbox" v-model="resolveReturnClaims" />
+          <span class="label-text">Automatically resolve return claims when item is scanned</span>
+          <span class="help-text">
             When an item with a return claim is scanned, the claim will be automatically resolved.
-          </p>
-        </div>
-
-        <div class="checkbox-row" @click="resolveInTransitItems = !resolveInTransitItems">
-          <input
-            type="checkbox"
-            id="resolveInTransitItems"
-            v-model="resolveInTransitItems"
-            @click.stop
-          />
-          <label for="resolveInTransitItems"
-            >Automatically resolve in-transit status to current branch</label
-          >
-          <p class="help-text">
+          </span>
+        </label>
+        <label class="checkbox-option">
+          <input type="checkbox" v-model="resolveInTransitItems" />
+          <span class="label-text">Automatically resolve in-transit status to current branch</span>
+          <span class="help-text">
             When an item in transit is scanned, the transit will be completed to the current branch.
-          </p>
-        </div>
-
-        <div class="checkbox-row" @click="resolveWithdrawnItems = !resolveWithdrawnItems">
-          <input
-            type="checkbox"
-            id="resolveWithdrawnItems"
-            v-model="resolveWithdrawnItems"
-            @click.stop
-          />
-          <label for="resolveWithdrawnItems"
-            >Automatically restore withdrawn items to circulation</label
-          >
-          <p class="help-text">
+          </span>
+        </label>
+        <label class="checkbox-option">
+          <input type="checkbox" v-model="resolveWithdrawnItems" />
+          <span class="label-text">Automatically restore withdrawn items to circulation</span>
+          <span class="help-text">
             When a withdrawn item is scanned, it will be automatically restored to circulation.
-          </p>
-        </div>
+          </span>
+        </label>
       </div>
     </div>
 
     <div class="section-container">
       <h2>Preview Settings</h2>
       <div class="preview-options">
-        <div class="checkbox-row" @click="enableShelfPreview = !enableShelfPreview">
-          <input type="checkbox" id="enableShelfPreview" v-model="enableShelfPreview" @click.stop />
-          <label for="enableShelfPreview">Enable shelf preview functionality</label>
-          <p class="help-text">
+        <label class="checkbox-option">
+          <input type="checkbox" v-model="enableShelfPreview" />
+          <span class="label-text">Enable shelf preview functionality</span>
+          <span class="help-text">
             Allows visualization of upcoming items on the shelf based on call number sequence.
-          </p>
-        </div>
-        <div class="checkbox-row" @click="showItemIssues = !showItemIssues">
-          <input type="checkbox" id="showItemIssues" v-model="showItemIssues" @click.stop />
-          <label for="showItemIssues">Show item issues in preview</label>
-          <p class="help-text">
+          </span>
+        </label>
+        <label class="checkbox-option">
+          <input type="checkbox" v-model="showItemIssues" />
+          <span class="label-text">Show item issues in preview</span>
+          <span class="help-text">
             Highlights items with special statuses (checked out, on hold, etc.) in the preview.
-          </p>
-        </div>
-        <div class="checkbox-row" @click="autoOpenPreview = !autoOpenPreview">
-          <input type="checkbox" id="autoOpenPreview" v-model="autoOpenPreview" @click.stop />
-          <label for="autoOpenPreview">Auto-open preview on first scan</label>
-          <p class="help-text">
+          </span>
+        </label>
+        <label class="checkbox-option">
+          <input type="checkbox" v-model="autoOpenPreview" />
+          <span class="label-text">Auto-open preview on first scan</span>
+          <span class="help-text">
             Automatically opens the shelf preview when the first item is scanned.
-          </p>
-        </div>
+          </span>
+        </label>
       </div>
     </div>
 
@@ -839,24 +762,6 @@ export default {
           text: `Error fetching shelving locations: ${error.message}`
         })
       }
-    },
-
-    toggleItype(itemTypeId) {
-      const index = this.selectedItypes.indexOf(itemTypeId)
-      if (index > -1) {
-        this.selectedItypes.splice(index, 1)
-      } else {
-        this.selectedItypes.push(itemTypeId)
-      }
-    },
-
-    toggleStatus(statusKey, statusValue) {
-      const index = this.selectedStatuses[statusKey].indexOf(statusValue)
-      if (index > -1) {
-        this.selectedStatuses[statusKey].splice(index, 1)
-      } else {
-        this.selectedStatuses[statusKey].push(statusValue)
-      }
     }
   }
 }
@@ -889,27 +794,6 @@ button {
   flex-direction: column;
 }
 
-.status-row {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.5rem;
-  margin: 0.25rem 0;
-  cursor: pointer;
-  border-radius: 4px;
-  transition: background-color 0.15s ease-in-out;
-}
-
-.status-row:hover {
-  background-color: #f8f9fa;
-}
-
-.status-row label {
-  font-weight: normal;
-  cursor: pointer;
-  /* Ensure labels are not bold */
-}
-
 /* Add media query for mobile responsiveness */
 @media (max-width: 767px) {
   .statuses-grid {
@@ -938,29 +822,73 @@ button {
   margin-bottom: 1rem;
 }
 
-.checkbox-row {
-  display: flex;
-  flex-wrap: wrap;
+/* Clickable checkbox option - uses label as wrapper for native click behavior */
+.checkbox-option {
+  display: inline-grid;
+  grid-template-columns: auto auto;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.5rem;
-  margin: 0.25rem 0;
+  padding: 0.625rem 0.75rem;
+  margin: 0.375rem 0.375rem 0.375rem 0;
   cursor: pointer;
-  border-radius: 4px;
-  transition: background-color 0.15s ease-in-out;
-}
-
-.checkbox-row:hover {
+  border: 1px solid #dee2e6;
+  border-radius: 0.375rem;
   background-color: #f8f9fa;
+  transition: all 0.15s ease-in-out;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
-.checkbox-row input[type='checkbox'] {
-  cursor: pointer;
+.checkbox-option:hover {
+  background-color: #f8f9fa;
+  border-color: #adb5bd;
 }
 
-.checkbox-row label {
-  cursor: pointer;
+.checkbox-option:has(input:checked) {
+  background-color: #e7f1ff;
+  border-color: #86b7fe;
+}
+
+.checkbox-option:has(input:checked):hover {
+  background-color: #cfe2ff;
+}
+
+.checkbox-option.disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.checkbox-option.compact {
+  padding: 0.5rem 0.625rem;
+  margin: 0.25rem 0;
+}
+
+.checkbox-option input[type='checkbox'] {
+  width: 1rem;
+  height: 1rem;
   margin: 0;
+  cursor: pointer;
+}
+
+.checkbox-option.disabled input[type='checkbox'] {
+  cursor: not-allowed;
+}
+
+.checkbox-option .label-text {
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.checkbox-option .help-text {
+  grid-column: 2;
+  justify-self: start;
+  font-size: 0.85rem;
+  color: #495057;
+  background-color: #f1f3f4;
+  border-left: 3px solid #2196f3;
+  padding: 0.375rem 0.5rem;
+  margin-top: 0.375rem;
+  border-radius: 0 4px 4px 0;
 }
 
 .form-control {
@@ -996,27 +924,6 @@ button {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
   gap: 10px;
-}
-
-.item-type-box {
-  border: 1px solid #ccc;
-  padding: 10px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-}
-
-.item-type-box input {
-  margin-right: 10px;
-}
-
-.item-type-box:hover {
-  background-color: #f0f0f0;
-}
-
-.item-type-box.loading {
-  opacity: 0.6;
-  cursor: default;
 }
 
 .no-numbering {
