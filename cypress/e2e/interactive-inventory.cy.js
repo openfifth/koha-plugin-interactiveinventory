@@ -153,10 +153,10 @@ describe('Interactive Inventory Plugin', () => {
     it('should load item types and allow selection', () => {
       cy.visit(pluginUrl)
       cy.get('.item-types-grid', { timeout: 10000 })
-        .find('.item-type-box')
+        .find('.checkbox-option')
         .should('have.length.greaterThan', 0)
-      cy.get('.item-types-grid .item-type-box').first().click()
-      cy.get('.item-types-grid .item-type-box')
+      cy.get('.item-types-grid .checkbox-option').first().click()
+      cy.get('.item-types-grid .checkbox-option')
         .first()
         .find('input[type="checkbox"]')
         .should('be.checked')
