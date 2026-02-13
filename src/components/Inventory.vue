@@ -868,7 +868,7 @@ export default {
           {
             headers: {
               Accept: 'application/json',
-              'x-koha-embed': 'biblio,transfer,first_hold'
+              'x-koha-embed': 'biblio,transfer,first_hold,return_claim'
             }
           }
         )
@@ -1044,7 +1044,10 @@ export default {
 
         // Check if item has a return claim and should be resolved
         if (combinedData.return_claim && this.resolutionSettings.resolveReturnClaims) {
-          const claimResolved = await this.resolveReturnClaim(combinedData.external_id)
+          const claimResolved = await this.resolveReturnClaim(
+            combinedData.external_id,
+            combinedData.return_claim
+          )
           if (claimResolved) {
             combinedData.return_claim = false
             // Add resolution flags for display
@@ -1314,7 +1317,7 @@ export default {
       }
     },
 
-    async resolveReturnClaim(barcode) {
+    async resolveReturnClaim(barcode, embeddedClaim) {
       this.loading = true
 
       try {
@@ -1323,61 +1326,49 @@ export default {
           text: `Resolving return claim for item ${barcode}...`
         })
 
-        // Get item details to find the claim ID
-        const itemResponse = await fetch(
-          `/api/v1/items?external_id=${encodeURIComponent(barcode)}`,
-          {
-            headers: { Accept: 'application/json' }
+        let claimId = embeddedClaim?.claim_id
+
+        // If no embedded claim data, fetch from the API
+        if (!claimId) {
+          const itemResponse = await fetch(
+            `/api/v1/items?external_id=${encodeURIComponent(barcode)}`,
+            {
+              headers: {
+                Accept: 'application/json',
+                'x-koha-embed': 'return_claim'
+              }
+            }
+          )
+
+          if (!itemResponse.ok) {
+            throw new Error(`Failed to fetch item: ${itemResponse.statusText}`)
           }
-        )
 
-        if (!itemResponse.ok) {
-          throw new Error(`Failed to fetch item: ${itemResponse.statusText}`)
-        }
-
-        const items = await itemResponse.json()
-        if (!items || items.length === 0) {
-          throw new Error(`Item not found with barcode: ${barcode}`)
-        }
-
-        const item = items[0]
-
-        // Fetch unresolved claims for this item
-        const claimsResponse = await fetch(
-          `/api/v1/return_claims?q={"itemnumber":${item.item_id},"resolved":0}`,
-          {
-            headers: { Accept: 'application/json' }
+          const items = await itemResponse.json()
+          if (!items || items.length === 0) {
+            throw new Error(`Item not found with barcode: ${barcode}`)
           }
-        )
 
-        if (!claimsResponse.ok) {
-          throw new Error(`Failed to fetch claims: ${claimsResponse.statusText}`)
+          const item = items[0]
+          if (!item.return_claim) {
+            throw new Error('No unresolved return claim found for this item')
+          }
+          claimId = item.return_claim.claim_id
         }
 
-        const claims = await claimsResponse.json()
-        if (!claims || claims.length === 0) {
-          throw new Error('No unresolved claims found for this item')
-        }
-
-        // Resolve each claim
-        for (const claim of claims) {
-          const resolveResponse = await fetch(`/api/v1/return_claims/${claim.claim_id}/resolve`, {
-            method: 'PUT',
-            headers: {
-              'Content-Type': 'application/json',
-              Accept: 'application/json'
-            },
-            body: JSON.stringify({
-              resolution: 'FOUND:INVENTORY',
-              resolved_by: claim.created_by
-            })
+        const resolveResponse = await fetch(`/api/v1/return_claims/${claimId}/resolve`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json'
+          },
+          body: JSON.stringify({
+            resolution: 'FOUND:INVENTORY'
           })
+        })
 
-          if (!resolveResponse.ok) {
-            throw new Error(
-              `Failed to resolve claim ${claim.claim_id}: ${resolveResponse.statusText}`
-            )
-          }
+        if (!resolveResponse.ok) {
+          throw new Error(`Failed to resolve claim ${claimId}: ${resolveResponse.statusText}`)
         }
 
         EventBus.emit('message', {

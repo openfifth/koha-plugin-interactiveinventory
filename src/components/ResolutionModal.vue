@@ -41,9 +41,12 @@
               </div>
 
               <div v-if="type === 'returnclaim'" class="issue-details">
-                <p><strong>Return claimed on:</strong> {{ formatDate(item.return_claim_date) }}</p>
                 <p>
-                  <strong>Claimed by:</strong> {{ item.return_claim_patron || 'Unknown Patron' }}
+                  <strong>Return claimed on:</strong>
+                  {{ formatDate(item.return_claim?.created_on) }}
+                </p>
+                <p v-if="item.return_claim?.notes">
+                  <strong>Notes:</strong> {{ item.return_claim.notes }}
                 </p>
               </div>
             </div>
@@ -543,95 +546,65 @@ export default {
           text: `Resolving return claim for item ${barcode}...`
         })
 
-        // Get item details to find the claim ID
-        const itemResponse = await fetch(
-          `/api/v1/items?external_id=${encodeURIComponent(barcode)}`,
-          {
-            headers: {
-              Accept: 'application/json'
+        // Use embedded return_claim data if available
+        let claimId = this.item?.return_claim?.claim_id
+
+        // If no embedded claim, fetch the item with return_claim embed
+        if (!claimId) {
+          const itemResponse = await fetch(
+            `/api/v1/items?external_id=${encodeURIComponent(barcode)}`,
+            {
+              headers: {
+                Accept: 'application/json',
+                'x-koha-embed': 'return_claim'
+              }
             }
+          )
+
+          if (!itemResponse.ok) {
+            throw new Error(`Failed to fetch item: ${itemResponse.statusText}`)
           }
-        )
 
-        if (!itemResponse.ok) {
-          throw new Error(`Failed to fetch item: ${itemResponse.statusText}`)
-        }
-
-        const items = await itemResponse.json()
-        if (!items || items.length === 0) {
-          throw new Error(`Item not found with barcode: ${barcode}`)
-        }
-
-        const item = items[0]
-
-        // Get all claims for this item
-        const claimsResponse = await fetch(
-          `/api/v1/return_claims?q={"itemnumber":${item.itemnumber},"resolved":0}`,
-          {
-            headers: {
-              Accept: 'application/json'
-            }
+          const items = await itemResponse.json()
+          if (!items || items.length === 0) {
+            throw new Error(`Item not found with barcode: ${barcode}`)
           }
-        )
 
-        if (!claimsResponse.ok) {
-          throw new Error(`Failed to fetch claims: ${claimsResponse.statusText}`)
+          const item = items[0]
+          if (!item.return_claim) {
+            throw new Error(`No unresolved return claims found for item ${barcode}`)
+          }
+          claimId = item.return_claim.claim_id
         }
 
-        const claimsData = await claimsResponse.json()
-
-        if (!claimsData || claimsData.length === 0) {
-          throw new Error(`No unresolved return claims found for item ${barcode}`)
-        }
-
-        // Get current user details for the resolution
-        const userResponse = await fetch('/api/v1/auth/session', {
+        // Resolve the claim - resolved_by defaults to current user
+        const resolveResponse = await fetch(`/api/v1/return_claims/${claimId}/resolve`, {
+          method: 'PUT',
           headers: {
+            'Content-Type': 'application/json',
             Accept: 'application/json'
-          }
+          },
+          body: JSON.stringify({
+            resolution: 'FOUND:INVENTORY',
+            new_lost_status: '0'
+          })
         })
 
-        if (!userResponse.ok) {
-          throw new Error(`Failed to fetch user session: ${userResponse.statusText}`)
-        }
-
-        const userData = await userResponse.json()
-        const userId = userData.patron_id
-
-        // Resolve each claim using Koha's native API
-        let resolvedClaims = 0
-        for (const claim of claimsData) {
-          const resolveResponse = await fetch(`/api/v1/return_claims/${claim.id}/resolve`, {
-            method: 'PUT',
-            headers: {
-              'Content-Type': 'application/json',
-              Accept: 'application/json'
-            },
-            body: JSON.stringify({
-              resolution: 'FOUND',
-              resolved_by: userId,
-              new_lost_status: '0' // Set to not lost
-            })
-          })
-
-          if (resolveResponse.ok) {
-            resolvedClaims++
-          } else {
-            const errorData = await resolveResponse.json()
-            throw new Error(
-              `Error resolving claim ${claim.id}: ${errorData.error || 'Unknown error'}`
-            )
-          }
+        if (!resolveResponse.ok) {
+          const errorData = await resolveResponse.json().catch(() => ({}))
+          throw new Error(
+            `Error resolving claim ${claimId}: ${errorData.error || resolveResponse.statusText}`
+          )
         }
 
         // Check if item is checked out - if so, check it in
-        if (item.checkout) {
+        if (this.item?.checked_out_date) {
           await this.checkInItem(barcode)
         }
 
         EventBus.emit('message', {
           type: 'success',
-          text: `Successfully resolved ${resolvedClaims} return claim(s) for item ${barcode}`
+          text: `Return claim resolved for item ${barcode}`
         })
 
         return true
