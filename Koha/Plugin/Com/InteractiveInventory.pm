@@ -173,6 +173,7 @@ sub start_session {
             minlocation  => $minLocation,
             maxlocation  => $maxLocation,
             branch       => 'homebranch',
+            branchcode   => $selectedbranchcode,
             ccode        => $ccode,
         };
 
