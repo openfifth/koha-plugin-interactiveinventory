@@ -8,7 +8,7 @@
         <input type="date" id="inventoryDate" v-model="inventoryDate" />
       </div>
       <label class="checkbox-option">
-        <input type="checkbox" v-model="compareBarcodes" />
+        <input type="checkbox" id="compareBarcodes" v-model="compareBarcodes" />
         <span class="label-text">Compare expected barcodes list to scanned barcodes</span>
         <span class="help-text" v-if="compareBarcodes"
           >(Scanned barcodes will be checked against the expected items list)</span
@@ -18,11 +18,11 @@
         >
       </label>
       <label class="checkbox-option">
-        <input type="checkbox" v-model="doNotCheckIn" />
+        <input type="checkbox" id="doNotCheckIn" v-model="doNotCheckIn" />
         <span class="label-text">Do not check in items scanned during inventory</span>
       </label>
       <label class="checkbox-option">
-        <input type="checkbox" v-model="checkShelvedOutOfOrder" />
+        <input type="checkbox" id="checkShelvedOutOfOrder" v-model="checkShelvedOutOfOrder" />
         <span class="label-text">Check barcodes list for items shelved out of order</span>
       </label>
     </div>
@@ -122,21 +122,21 @@
       <fieldset id="optionalfilters">
         <legend>Optional filters for inventory list or comparing barcodes</legend>
         <label class="checkbox-option">
-          <input type="checkbox" v-model="skipCheckedOutItems" />
+          <input type="checkbox" id="skipCheckedOutItems" v-model="skipCheckedOutItems" />
           <span class="label-text">Skip/filter checked out items</span>
           <span class="help-text"
             >(Items that are currently checked out will not appear in the inventory list)</span
           >
         </label>
         <label class="checkbox-option">
-          <input type="checkbox" v-model="skipInTransitItems" />
+          <input type="checkbox" id="skipInTransitItems" v-model="skipInTransitItems" />
           <span class="label-text">Skip/filter in-transit items</span>
           <span class="help-text"
             >(Items that are currently in transit will not appear in the inventory list)</span
           >
         </label>
         <label class="checkbox-option">
-          <input type="checkbox" v-model="skipBranchMismatchItems" />
+          <input type="checkbox" id="skipBranchMismatchItems" v-model="skipBranchMismatchItems" />
           <span class="label-text">Skip/filter branch mismatch items</span>
           <span class="help-text"
             >(Items where holdingbranch differs from homebranch will not appear in the inventory
@@ -144,7 +144,7 @@
           >
         </label>
         <label class="checkbox-option">
-          <input type="checkbox" v-model="ignoreWaitingHolds" />
+          <input type="checkbox" id="ignoreWaitingHolds" v-model="ignoreWaitingHolds" />
           <span class="label-text">Skip items on hold awaiting pickup</span>
           <span class="help-text"
             >(Items with waiting holds will not appear in the inventory list)</span
@@ -205,23 +205,23 @@
       <h2>Status Alerts</h2>
       <div class="alert-options">
         <label class="checkbox-option">
-          <input type="checkbox" v-model="showWithdrawnAlerts" />
+          <input type="checkbox" id="showWithdrawnAlerts" v-model="showWithdrawnAlerts" />
           <span class="label-text">Show alerts for withdrawn items</span>
         </label>
         <label class="checkbox-option">
-          <input type="checkbox" v-model="showOnHoldAlerts" />
+          <input type="checkbox" id="showOnHoldAlerts" v-model="showOnHoldAlerts" />
           <span class="label-text">Show alerts for items on hold</span>
         </label>
         <label class="checkbox-option">
-          <input type="checkbox" v-model="showInTransitAlerts" />
+          <input type="checkbox" id="showInTransitAlerts" v-model="showInTransitAlerts" />
           <span class="label-text">Show alerts for in-transit items</span>
         </label>
         <label class="checkbox-option">
-          <input type="checkbox" v-model="showBranchMismatchAlerts" />
+          <input type="checkbox" id="showBranchMismatchAlerts" v-model="showBranchMismatchAlerts" />
           <span class="label-text">Show alerts for items belonging to different branches</span>
         </label>
         <label class="checkbox-option">
-          <input type="checkbox" v-model="showReturnClaimAlerts" />
+          <input type="checkbox" id="showReturnClaimAlerts" v-model="showReturnClaimAlerts" />
           <span class="label-text">Show alerts for unresolved return claims</span>
         </label>
       </div>
@@ -233,7 +233,7 @@
       <h2>Status Resolution</h2>
       <div class="resolution-options">
         <label class="checkbox-option">
-          <input type="checkbox" v-model="enableManualResolution" />
+          <input type="checkbox" id="enableManualResolution" v-model="enableManualResolution" />
           <span class="label-text">Enable manual resolution for item issues</span>
           <span class="help-text">
             When enabled, a resolution dialog will appear when scanning items with issues (checked
@@ -241,7 +241,7 @@
           </span>
         </label>
         <label class="checkbox-option">
-          <input type="checkbox" v-model="resolveLostItems" />
+          <input type="checkbox" id="resolveLostItems" v-model="resolveLostItems" />
           <span class="label-text">Automatically mark lost items as found</span>
           <span class="help-text">
             When a lost item is scanned, it will be automatically marked as found. If disabled, a
@@ -249,21 +249,21 @@
           </span>
         </label>
         <label class="checkbox-option">
-          <input type="checkbox" v-model="resolveReturnClaims" />
+          <input type="checkbox" id="resolveReturnClaims" v-model="resolveReturnClaims" />
           <span class="label-text">Automatically resolve return claims when item is scanned</span>
           <span class="help-text">
             When an item with a return claim is scanned, the claim will be automatically resolved.
           </span>
         </label>
         <label class="checkbox-option">
-          <input type="checkbox" v-model="resolveInTransitItems" />
+          <input type="checkbox" id="resolveInTransitItems" v-model="resolveInTransitItems" />
           <span class="label-text">Automatically resolve in-transit status to current branch</span>
           <span class="help-text">
             When an item in transit is scanned, the transit will be completed to the current branch.
           </span>
         </label>
         <label class="checkbox-option">
-          <input type="checkbox" v-model="resolveWithdrawnItems" />
+          <input type="checkbox" id="resolveWithdrawnItems" v-model="resolveWithdrawnItems" />
           <span class="label-text">Automatically restore withdrawn items to circulation</span>
           <span class="help-text">
             When a withdrawn item is scanned, it will be automatically restored to circulation.
@@ -276,21 +276,21 @@
       <h2>Preview Settings</h2>
       <div class="preview-options">
         <label class="checkbox-option">
-          <input type="checkbox" v-model="enableShelfPreview" />
+          <input type="checkbox" id="enableShelfPreview" v-model="enableShelfPreview" />
           <span class="label-text">Enable shelf preview functionality</span>
           <span class="help-text">
             Allows visualization of upcoming items on the shelf based on call number sequence.
           </span>
         </label>
         <label class="checkbox-option">
-          <input type="checkbox" v-model="showItemIssues" />
+          <input type="checkbox" id="showItemIssues" v-model="showItemIssues" />
           <span class="label-text">Show item issues in preview</span>
           <span class="help-text">
             Highlights items with special statuses (checked out, on hold, etc.) in the preview.
           </span>
         </label>
         <label class="checkbox-option">
-          <input type="checkbox" v-model="autoOpenPreview" />
+          <input type="checkbox" id="autoOpenPreview" v-model="autoOpenPreview" />
           <span class="label-text">Auto-open preview on first scan</span>
           <span class="help-text">
             Automatically opens the shelf preview when the first item is scanned.
@@ -346,7 +346,7 @@ export default {
       compareBarcodes: false,
       doNotCheckIn: false,
       checkShelvedOutOfOrder: false,
-      skipCheckedOutItems: false,
+      skipCheckedOutItems: true,
       skipInTransitItems: false,
       skipBranchMismatchItems: false,
       showWithdrawnAlerts: true,
