@@ -5,31 +5,31 @@
         <h2>Inventory Dashboard</h2>
         <button class="close-button" @click="closeModal">&times;</button>
       </div>
-      
+
       <div class="missing-items-modal-body">
         <div v-if="loading" class="loading-indicator">
           <div class="spinner"></div>
           <p>Processing...</p>
         </div>
-        
+
         <div v-else>
           <div class="tab-container">
-            <div 
-              class="tab" 
-              :class="{ 'active': activeTab === 'processed' }" 
+            <div
+              class="tab"
+              :class="{ active: activeTab === 'processed' }"
               @click="activeTab = 'processed'"
             >
               Processed Items ({{ processedItems.length }})
-            </div> 
-            <div 
-              class="tab" 
-              :class="{ 'active': activeTab === 'expected' }" 
+            </div>
+            <div
+              class="tab"
+              :class="{ active: activeTab === 'expected' }"
               @click="activeTab = 'expected'"
             >
               Items Not Processed ({{ missingItems.length }})
             </div>
           </div>
-          
+
           <!-- Expected (Missing) Items Tab Content -->
           <div v-if="activeTab === 'expected'">
             <div class="missing-items-stats">
@@ -42,22 +42,24 @@
                 <div class="stat-label">Expected Items</div>
               </div>
               <div class="stat-box">
-                <div class="stat-number">{{ Math.round((missingItems.length / totalExpectedItems) * 100) || 0 }}%</div>
+                <div class="stat-number">
+                  {{ Math.round((missingItems.length / totalExpectedItems) * 100) || 0 }}%
+                </div>
                 <div class="stat-label">Not Yet Processed</div>
               </div>
             </div>
-            
+
             <div class="missing-items-controls">
               <div class="search-filter">
-                <input 
-                  type="text" 
-                  v-model="searchQuery" 
-                  placeholder="Search by title, author, barcode..." 
+                <input
+                  type="text"
+                  v-model="searchQuery"
+                  placeholder="Search by title, author, barcode..."
                   @input="applyFilters"
                   class="search-input"
                 />
               </div>
-              
+
               <div class="filter-controls">
                 <select v-model="sortBy" @change="applyFilters" class="filter-select">
                   <option value="title">Sort by Title</option>
@@ -65,36 +67,41 @@
                   <option value="callNumber">Sort by Call Number</option>
                   <option value="barcode">Sort by Barcode</option>
                 </select>
-                
+
                 <div class="checkbox-control">
-                  <input type="checkbox" id="selectAll" v-model="selectAll" @change="toggleSelectAll" />
+                  <input
+                    type="checkbox"
+                    id="selectAll"
+                    v-model="selectAll"
+                    @change="toggleSelectAll"
+                  />
                   <label for="selectAll">Select All</label>
                 </div>
               </div>
-              
+
               <div class="action-buttons">
-                <button 
-                  class="export-button" 
-                  @click="exportSelectedToCSV" 
+                <button
+                  class="export-button"
+                  @click="exportSelectedToCSV"
                   :disabled="selectedItems.length === 0"
                 >
                   Export Selected
                 </button>
-                <button 
-                  class="mark-button" 
-                  @click="markSelectedAsMissing" 
+                <button
+                  class="mark-button"
+                  @click="markSelectedAsMissing"
                   :disabled="selectedItems.length === 0"
                 >
                   Set Status to Missing
                 </button>
               </div>
             </div>
-            
+
             <div v-if="filteredItems.length === 0" class="no-missing-items">
               <p v-if="searchQuery">No items match your search criteria.</p>
               <p v-else>No items were missing from inventory.</p>
             </div>
-            
+
             <div v-else class="missing-items-list">
               <table>
                 <thead>
@@ -109,12 +116,16 @@
                   </tr>
                 </thead>
                 <tbody>
-                  <tr v-for="item in filteredItems" :key="item.barcode" :class="{'selected-row': selectedItemsSet.has(item.barcode)}">
+                  <tr
+                    v-for="item in filteredItems"
+                    :key="item.barcode"
+                    :class="{ 'selected-row': selectedItemsSet.has(item.barcode) }"
+                  >
                     <td>
-                      <input 
-                        type="checkbox" 
-                        :id="'item-' + item.barcode" 
-                        :value="item.barcode" 
+                      <input
+                        type="checkbox"
+                        :id="'item-' + item.barcode"
+                        :value="item.barcode"
                         v-model="selectedItems"
                         @change="updateSelectAllState"
                       />
@@ -125,25 +136,27 @@
                     <td>{{ item.itemcallnumber || 'N/A' }}</td>
                     <td>{{ item.location || 'N/A' }}</td>
                     <td>
-                      <button class="action-button" @click="markItemAsMissing(item)">Set to Missing</button>
+                      <button class="action-button" @click="markItemAsMissing(item)">
+                        Set to Missing
+                      </button>
                       <button class="action-button" @click="viewItemDetails(item)">Details</button>
                     </td>
                   </tr>
                 </tbody>
               </table>
             </div>
-            
+
             <div class="pagination-controls" v-if="filteredItems.length > 0">
-              <button 
-                @click="currentPage > 1 ? currentPage-- : null" 
+              <button
+                @click="currentPage > 1 ? currentPage-- : null"
                 :disabled="currentPage === 1"
                 class="page-button"
               >
                 Previous
               </button>
               <span class="page-info">Page {{ currentPage }} of {{ totalPages }}</span>
-              <button 
-                @click="currentPage < totalPages ? currentPage++ : null" 
+              <button
+                @click="currentPage < totalPages ? currentPage++ : null"
                 :disabled="currentPage === totalPages"
                 class="page-button"
               >
@@ -151,7 +164,7 @@
               </button>
             </div>
           </div>
-          
+
           <!-- Processed Items Tab Content -->
           <div v-if="activeTab === 'processed'">
             <div class="processed-items-stats">
@@ -168,61 +181,74 @@
                 <div class="stat-label">Total Processed</div>
               </div>
             </div>
-            
+
             <div class="missing-items-controls">
               <div class="search-filter">
-                <input 
-                  type="text" 
-                  v-model="processedSearchQuery" 
-                  placeholder="Search by title, author, barcode..." 
+                <input
+                  type="text"
+                  v-model="processedSearchQuery"
+                  placeholder="Search by title, author, barcode..."
                   @input="applyProcessedFilters"
                   class="search-input"
                 />
               </div>
-              
+
               <div class="filter-controls">
-                <select v-model="processedSortBy" @change="applyProcessedFilters" class="filter-select">
+                <select
+                  v-model="processedSortBy"
+                  @change="applyProcessedFilters"
+                  class="filter-select"
+                >
                   <option value="title">Sort by Title</option>
                   <option value="author">Sort by Author</option>
                   <option value="callNumber">Sort by Call Number</option>
                   <option value="barcode">Sort by Barcode</option>
                 </select>
-                
+
                 <div class="checkbox-control">
-                  <input type="checkbox" id="selectAllProcessed" v-model="selectAllProcessed" @change="toggleSelectAllProcessed" />
+                  <input
+                    type="checkbox"
+                    id="selectAllProcessed"
+                    v-model="selectAllProcessed"
+                    @change="toggleSelectAllProcessed"
+                  />
                   <label for="selectAllProcessed">Select All</label>
                 </div>
-                
-                <select v-model="processedFilterType" @change="applyProcessedFilters" class="filter-select">
+
+                <select
+                  v-model="processedFilterType"
+                  @change="applyProcessedFilters"
+                  class="filter-select"
+                >
                   <option value="all">All Items</option>
                   <option value="scanned">Scanned Items</option>
                   <option value="missing">Marked Missing</option>
                 </select>
               </div>
-              
+
               <div class="action-buttons">
-                <button 
-                  class="export-button" 
-                  @click="exportSelectedProcessedToCSV" 
+                <button
+                  class="export-button"
+                  @click="exportSelectedProcessedToCSV"
                   :disabled="selectedProcessedItems.length === 0"
                 >
                   Export Selected
                 </button>
-                <button 
-                  class="mark-button" 
-                  @click="toggleSelectedStatus" 
+                <button
+                  class="mark-button"
+                  @click="toggleSelectedStatus"
                   :disabled="selectedProcessedItems.length === 0"
                 >
                   Toggle Status
                 </button>
               </div>
             </div>
-            
+
             <div v-if="filteredProcessedItems.length === 0" class="no-missing-items">
               <p v-if="processedSearchQuery">No items match your search criteria.</p>
               <p v-else>No processed items available.</p>
             </div>
-            
+
             <div v-else class="missing-items-list">
               <table>
                 <thead>
@@ -237,12 +263,16 @@
                   </tr>
                 </thead>
                 <tbody>
-                  <tr v-for="item in filteredProcessedItems" :key="item.barcode" :class="{'selected-row': selectedProcessedItemsSet.has(item.barcode)}">
+                  <tr
+                    v-for="item in filteredProcessedItems"
+                    :key="item.barcode"
+                    :class="{ 'selected-row': selectedProcessedItemsSet.has(item.barcode) }"
+                  >
                     <td>
-                      <input 
-                        type="checkbox" 
-                        :id="'processed-item-' + item.barcode" 
-                        :value="item.barcode" 
+                      <input
+                        type="checkbox"
+                        :id="'processed-item-' + item.barcode"
+                        :value="item.barcode"
                         v-model="selectedProcessedItems"
                         @change="updateSelectAllProcessedState"
                       />
@@ -252,31 +282,50 @@
                     <td>{{ item.barcode }}</td>
                     <td>{{ item.itemcallnumber || 'N/A' }}</td>
                     <td>
-                      <span :class="{'status-scanned': item.status === 'scanned', 'status-missing': item.status === 'missing'}">
+                      <span
+                        :class="{
+                          'status-scanned': item.status === 'scanned',
+                          'status-missing': item.status === 'missing'
+                        }"
+                      >
                         {{ item.status === 'scanned' ? 'Scanned' : 'Missing' }}
                       </span>
                     </td>
                     <td>
-                      <button v-if="item.status === 'scanned'" class="action-button warning" @click="markProcessedItemAsMissing(item)">Set to Missing</button>
-                      <button v-else class="action-button success" @click="markProcessedItemAsFound(item)">Set as Found</button>
+                      <button
+                        v-if="item.status === 'scanned'"
+                        class="action-button warning"
+                        @click="markProcessedItemAsMissing(item)"
+                      >
+                        Set to Missing
+                      </button>
+                      <button
+                        v-else
+                        class="action-button success"
+                        @click="markProcessedItemAsFound(item)"
+                      >
+                        Set as Found
+                      </button>
                       <button class="action-button" @click="viewItemDetails(item)">Details</button>
                     </td>
                   </tr>
                 </tbody>
               </table>
             </div>
-            
+
             <div class="pagination-controls" v-if="filteredProcessedItems.length > 0">
-              <button 
-                @click="processedCurrentPage > 1 ? processedCurrentPage-- : null" 
+              <button
+                @click="processedCurrentPage > 1 ? processedCurrentPage-- : null"
                 :disabled="processedCurrentPage === 1"
                 class="page-button"
               >
                 Previous
               </button>
-              <span class="page-info">Page {{ processedCurrentPage }} of {{ processedTotalPages }}</span>
-              <button 
-                @click="processedCurrentPage < processedTotalPages ? processedCurrentPage++ : null" 
+              <span class="page-info"
+                >Page {{ processedCurrentPage }} of {{ processedTotalPages }}</span
+              >
+              <button
+                @click="processedCurrentPage < processedTotalPages ? processedCurrentPage++ : null"
                 :disabled="processedCurrentPage === processedTotalPages"
                 class="page-button"
               >
@@ -286,7 +335,7 @@
           </div>
         </div>
       </div>
-      
+
       <!-- Item Detail Modal -->
       <div v-if="showDetailModal" class="detail-modal">
         <div class="detail-modal-content">
@@ -332,13 +381,24 @@
                 </div>
                 <div class="detail-row">
                   <div class="detail-label">Last seen:</div>
-                  <div class="detail-value">{{ formatDate(selectedItemDetail.datelastseen) || 'Never' }}</div>
+                  <div class="detail-value">
+                    {{ formatDate(selectedItemDetail.datelastseen) || 'Never' }}
+                  </div>
                 </div>
               </div>
               <div class="detail-actions">
-                <button class="action-button primary" @click="markItemAsMissing(selectedItemDetail)">Set Status to Missing</button>
-                <a :href="`/cgi-bin/koha/catalogue/detail.pl?biblionumber=${selectedItemDetail.biblionumber}`" 
-                   target="_blank" class="action-button">View in Catalog</a>
+                <button
+                  class="action-button primary"
+                  @click="markItemAsMissing(selectedItemDetail)"
+                >
+                  Set Status to Missing
+                </button>
+                <a
+                  :href="`/cgi-bin/koha/catalogue/detail.pl?biblionumber=${selectedItemDetail.biblionumber}`"
+                  target="_blank"
+                  class="action-button"
+                  >View in Catalog</a
+                >
               </div>
             </div>
           </div>
@@ -349,9 +409,10 @@
 </template>
 
 <script>
-import { EventBus } from './eventBus';
-import { apiService } from '../services/apiService';
-import { saveMarkedMissingItems, getMarkedMissingItems } from "../services/sessionStorage";
+import { EventBus } from './eventBus'
+import { apiService } from '../services/apiService'
+import { saveMarkedMissingItems, getMarkedMissingItems } from '../services/sessionStorage'
+import { filterMissingItems } from '../utils/missingItems'
 
 export default {
   props: {
@@ -377,266 +438,237 @@ export default {
       itemsPerPage: 20,
       selectAll: false,
       activeTab: 'processed',
-      
+
       // For processed items tab
       processedItems: [],
       markedMissingItems: [],
       processedSearchQuery: '',
       processedSortBy: 'title',
       selectedProcessedItems: [],
-      processedCurrentPage: 1, 
+      processedCurrentPage: 1,
       selectAllProcessed: false,
-      processedFilterType: 'all',
-    };
+      processedFilterType: 'all'
+    }
   },
   computed: {
     totalExpectedItems() {
-      return this.sessionData?.response_data?.location_data?.length || 0;
+      return this.sessionData?.response_data?.location_data?.length || 0
     },
     filteredItems() {
-      if (!this.missingItems.length) return [];
-      
+      if (!this.missingItems.length) return []
+
       // Apply search filter if there's a query
-      let filtered = this.missingItems;
+      let filtered = this.missingItems
       if (this.searchQuery) {
-        const query = this.searchQuery.toLowerCase();
-        filtered = this.missingItems.filter(item => {
+        const query = this.searchQuery.toLowerCase()
+        filtered = this.missingItems.filter((item) => {
           return (
             (item.title && item.title.toLowerCase().includes(query)) ||
             (item.author && item.author.toLowerCase().includes(query)) ||
             (item.barcode && item.barcode.toLowerCase().includes(query)) ||
             (item.itemcallnumber && item.itemcallnumber.toLowerCase().includes(query))
-          );
-        });
+          )
+        })
       }
-      
+
       // Apply sorting
       if (this.sortBy) {
         filtered.sort((a, b) => {
-          const aVal = a[this.sortBy] || '';
-          const bVal = b[this.sortBy] || '';
-          return aVal.toString().localeCompare(bVal.toString());
-        });
+          const aVal = a[this.sortBy] || ''
+          const bVal = b[this.sortBy] || ''
+          return aVal.toString().localeCompare(bVal.toString())
+        })
       }
-      
+
       // Apply pagination
-      const start = (this.currentPage - 1) * this.itemsPerPage;
-      const end = start + this.itemsPerPage;
-      return filtered.slice(start, end);
+      const start = (this.currentPage - 1) * this.itemsPerPage
+      const end = start + this.itemsPerPage
+      return filtered.slice(start, end)
     },
     totalPages() {
-      if (!this.missingItems.length) return 1;
-      return Math.ceil(this.missingItems.length / this.itemsPerPage);
+      if (!this.missingItems.length) return 1
+      return Math.ceil(this.missingItems.length / this.itemsPerPage)
     },
     selectedItemsSet() {
-      return new Set(this.selectedItems);
+      return new Set(this.selectedItems)
     },
-    
+
     // New computed properties for processed items
     totalProcessedItems() {
-      return this.processedItems.length;
+      return this.processedItems.length
     },
     filteredProcessedItems() {
-      if (!this.processedItems.length) return [];
-      
+      if (!this.processedItems.length) return []
+
       // Apply type filter first
-      let filtered = this.processedItems;
+      let filtered = this.processedItems
       if (this.processedFilterType !== 'all') {
-        filtered = this.processedItems.filter(item => item.status === this.processedFilterType);
+        filtered = this.processedItems.filter((item) => item.status === this.processedFilterType)
       }
-      
+
       // Apply search filter if there's a query
       if (this.processedSearchQuery) {
-        const query = this.processedSearchQuery.toLowerCase();
-        filtered = filtered.filter(item => {
+        const query = this.processedSearchQuery.toLowerCase()
+        filtered = filtered.filter((item) => {
           return (
             (item.title && item.title.toLowerCase().includes(query)) ||
             (item.author && item.author.toLowerCase().includes(query)) ||
             (item.barcode && item.barcode.toLowerCase().includes(query)) ||
             (item.itemcallnumber && item.itemcallnumber.toLowerCase().includes(query))
-          );
-        });
+          )
+        })
       }
-      
+
       // Apply sorting
       if (this.processedSortBy) {
         filtered.sort((a, b) => {
-          const aVal = a[this.processedSortBy] || '';
-          const bVal = b[this.processedSortBy] || '';
-          return aVal.toString().localeCompare(bVal.toString());
-        });
+          const aVal = a[this.processedSortBy] || ''
+          const bVal = b[this.processedSortBy] || ''
+          return aVal.toString().localeCompare(bVal.toString())
+        })
       }
-      
+
       // Apply pagination
-      const start = (this.processedCurrentPage - 1) * this.itemsPerPage;
-      const end = start + this.itemsPerPage;
-      return filtered.slice(start, end);
+      const start = (this.processedCurrentPage - 1) * this.itemsPerPage
+      const end = start + this.itemsPerPage
+      return filtered.slice(start, end)
     },
     processedTotalPages() {
-      if (!this.processedItems.length) return 1;
-      return Math.ceil(this.processedItems.length / this.itemsPerPage);
+      if (!this.processedItems.length) return 1
+      return Math.ceil(this.processedItems.length / this.itemsPerPage)
     },
     selectedProcessedItemsSet() {
-      return new Set(this.selectedProcessedItems);
+      return new Set(this.selectedProcessedItems)
     }
   },
   created() {
-    this.calculateMissingItems();
-    this.loadProcessedItems();
+    this.calculateMissingItems()
+    this.loadProcessedItems()
   },
   methods: {
     calculateMissingItems() {
       if (!this.sessionData || !this.sessionData.response_data) {
-        this.missingItems = [];
-        return;
+        this.missingItems = []
+        return
       }
-      
+
       // Get the location data from session response
-      const locationData = this.sessionData.response_data.location_data || [];
-      
+      const locationData = this.sessionData.response_data.location_data || []
+
       // If location data is empty, try to use right_place_list as a fallback
-      let itemsToCheck = locationData;
+      let itemsToCheck = locationData
       if (itemsToCheck.length === 0 && this.sessionData.response_data.right_place_list) {
-        itemsToCheck = this.sessionData.response_data.right_place_list;
+        itemsToCheck = this.sessionData.response_data.right_place_list
       }
-      
+
       if (itemsToCheck.length === 0) {
         // No data to process
-        this.missingItems = [];
-        return;
+        this.missingItems = []
+        return
       }
-      
+
       // Get a set of scanned barcodes for quick lookup
-      const scannedBarcodesSet = new Set(this.scannedItems.map(item => item.external_id));
-      
+      const scannedBarcodesSet = new Set(this.scannedItems.map((item) => item.external_id))
+
       // Get marked missing items asynchronously
-      this.loading = true;
+      this.loading = true
       getMarkedMissingItems()
-        .then(markedMissingItems => {
-          const markedMissingSet = new Set(markedMissingItems || []);
-          
+        .then((markedMissingItems) => {
+          const markedMissingSet = new Set(markedMissingItems || [])
+
           // Filter out items that are checked out, in transit, etc. based on session settings
-          this.missingItems = itemsToCheck.filter(item => {
-            // Skip items that have already been scanned
-            if (scannedBarcodesSet.has(item.barcode)) {
-              return false;
+          this.missingItems = filterMissingItems({
+            locationData: itemsToCheck,
+            rightPlaceList: [],
+            scannedBarcodes: scannedBarcodesSet,
+            markedMissingBarcodes: markedMissingSet,
+            sessionSettings: {
+              skipCheckedOutItems: this.sessionData.skipCheckedOutItems,
+              skipInTransitItems: this.sessionData.skipInTransitItems,
+              skipBranchMismatchItems: this.sessionData.skipBranchMismatchItems
             }
-            
-            // Skip items that have already been marked as missing
-            if (markedMissingSet.has(item.barcode)) {
-              return false;
-            }
-            
-            // Skip items that are checked out if the session is configured to do so
-            if (this.sessionData.skipCheckedOutItems && (item.checked_out || item.checked_out_date)) {
-              return false;
-            }
-            
-            // Skip items that are in transit if the session is configured to do so
-            if (this.sessionData.skipInTransitItems && item.in_transit) {
-              return false;
-            }
-            
-            // Skip items that have branch mismatch if the session is configured to do so
-            if (this.sessionData.skipBranchMismatchItems && item.homebranch !== item.holdingbranch) {
-              return false;
-            }
-            
-            return true;
-          });
-          
+          })
+
           // Reset pagination when loading new data
-          this.currentPage = 1;
-          this.selectedItems = [];
-          this.selectAll = false;
-          this.loading = false;
+          this.currentPage = 1
+          this.selectedItems = []
+          this.selectAll = false
+          this.loading = false
         })
-        .catch(error => {
-          console.error('Error getting marked missing items:', error);
+        .catch((error) => {
+          console.error('Error getting marked missing items:', error)
           // Continue with empty markedMissingSet
-          this.missingItems = itemsToCheck.filter(item => {
-            // Skip items that have already been scanned
-            if (scannedBarcodesSet.has(item.barcode)) {
-              return false;
+          this.missingItems = filterMissingItems({
+            locationData: itemsToCheck,
+            rightPlaceList: [],
+            scannedBarcodes: scannedBarcodesSet,
+            markedMissingBarcodes: [],
+            sessionSettings: {
+              skipCheckedOutItems: this.sessionData.skipCheckedOutItems,
+              skipInTransitItems: this.sessionData.skipInTransitItems,
+              skipBranchMismatchItems: this.sessionData.skipBranchMismatchItems
             }
-            
-            // Skip items that are checked out if the session is configured to do so
-            if (this.sessionData.skipCheckedOutItems && (item.checked_out || item.checked_out_date)) {
-              return false;
-            }
-            
-            // Skip items that are in transit if the session is configured to do so
-            if (this.sessionData.skipInTransitItems && item.in_transit) {
-              return false;
-            }
-            
-            // Skip items that have branch mismatch if the session is configured to do so
-            if (this.sessionData.skipBranchMismatchItems && item.homebranch !== item.holdingbranch) {
-              return false;
-            }
-            
-            return true;
-          });
-          
+          })
+
           // Reset pagination when loading new data
-          this.currentPage = 1;
-          this.selectedItems = [];
-          this.selectAll = false;
-          this.loading = false;
-        });
+          this.currentPage = 1
+          this.selectedItems = []
+          this.selectAll = false
+          this.loading = false
+        })
     },
-    
+
     loadProcessedItems() {
-      this.loading = true;
-      
+      this.loading = true
+
       // Initialize array to hold all processed items
-      this.processedItems = [];
-      
+      this.processedItems = []
+
       // Get the location data from session response to use for item lookup
-      const locationData = this.sessionData?.response_data?.location_data || [];
-      
+      const locationData = this.sessionData?.response_data?.location_data || []
+
       // If location data is empty, try to use right_place_list as a fallback
-      let lookupData = locationData;
+      let lookupData = locationData
       if (lookupData.length === 0 && this.sessionData?.response_data?.right_place_list) {
-        lookupData = this.sessionData.response_data.right_place_list;
+        lookupData = this.sessionData.response_data.right_place_list
       }
-      
+
       // Create a map for quick barcode lookup
-      const locationDataMap = new Map();
+      const locationDataMap = new Map()
       if (lookupData.length > 0) {
-        lookupData.forEach(item => {
-          locationDataMap.set(item.barcode, item);
-        });
+        lookupData.forEach((item) => {
+          locationDataMap.set(item.barcode, item)
+        })
       }
-      
+
       // Process scanned items
       if (this.scannedItems && this.scannedItems.length > 0) {
         // Convert scanned items to the format we need
-        const scannedProcessed = this.scannedItems.map(item => {
+        const scannedProcessed = this.scannedItems.map((item) => {
           // Try to find the item in location data for consistent information
-          const barcode = item.external_id || item.barcode;
-          const locationItem = locationDataMap.get(barcode);
-          
+          const barcode = item.external_id || item.barcode
+          const locationItem = locationDataMap.get(barcode)
+
           // If we found the item in location data, use that for consistent information
           if (locationItem) {
             return {
               ...locationItem,
               status: 'scanned'
-            };
+            }
           } else {
             // Extract data from biblio property if available
-            let title = item.title;
-            let author = item.author;
-            
+            let title = item.title
+            let author = item.author
+
             // If title/author not directly available, try to get from biblio property
             if ((!title || title === 'N/A') && item.biblio && item.biblio.title) {
-              title = item.biblio.title;
+              title = item.biblio.title
             }
-            
+
             if ((!author || author === 'N/A') && item.biblio && item.biblio.author) {
-              author = item.biblio.author;
+              author = item.biblio.author
             }
-            
+
             // Use the most appropriate fields based on data structure
             return {
               barcode: barcode,
@@ -644,609 +676,617 @@ export default {
               author: author || 'N/A',
               itemcallnumber: item.call_number || item.callnumber || item.itemcallnumber || 'N/A',
               location: item.location || 'N/A',
-              biblionumber: item.biblio_id || item.biblionumber || (item.biblio ? item.biblio.biblionumber : null) || 'N/A',
+              biblionumber:
+                item.biblio_id ||
+                item.biblionumber ||
+                (item.biblio ? item.biblio.biblionumber : null) ||
+                'N/A',
               homebranch: item.homebranch || 'N/A',
               holdingbranch: item.holdingbranch || 'N/A',
               itype: item.itype || 'N/A',
               datelastseen: item.datelastseen || item.last_seen_date || 'N/A',
               itemnumber: item.item_id || item.itemnumber || 'N/A',
               status: 'scanned'
-            };
+            }
           }
-        });
-        
+        })
+
         // Add to processed items list
-        this.processedItems = [...this.processedItems, ...scannedProcessed];
+        this.processedItems = [...this.processedItems, ...scannedProcessed]
       }
-      
+
       // Get marked missing items from session storage asynchronously
       getMarkedMissingItems()
-        .then(markedMissingBarcodes => {
-          this.markedMissingItems = markedMissingBarcodes || [];
-          
+        .then((markedMissingBarcodes) => {
+          this.markedMissingItems = markedMissingBarcodes || []
+
           if (this.markedMissingItems.length > 0) {
             if (lookupData.length > 0) {
               // Find the items that have been marked as missing using the lookup data
               const missingProcessed = this.markedMissingItems
-                .map(barcode => {
+                .map((barcode) => {
                   // Look up the item in our location data map
-                  const item = locationDataMap.get(barcode);
+                  const item = locationDataMap.get(barcode)
                   if (item) {
                     return {
                       ...item,
                       status: 'missing'
-                    };
+                    }
                   }
-                  return null;
+                  return null
                 })
-                .filter(item => item !== null);
-              
+                .filter((item) => item !== null)
+
               // Add to processed items list
-              this.processedItems = [...this.processedItems, ...missingProcessed];
+              this.processedItems = [...this.processedItems, ...missingProcessed]
             }
           }
-          
+
           // Reset pagination and selection for processed items
-          this.processedCurrentPage = 1;
-          this.selectedProcessedItems = [];
-          this.selectAllProcessed = false;
-          this.loading = false;
+          this.processedCurrentPage = 1
+          this.selectedProcessedItems = []
+          this.selectAllProcessed = false
+          this.loading = false
         })
-        .catch(error => {
-          console.error('Error loading marked missing items:', error);
+        .catch((error) => {
+          console.error('Error loading marked missing items:', error)
           // Reset pagination and selection for processed items
-          this.processedCurrentPage = 1;
-          this.selectedProcessedItems = [];
-          this.selectAllProcessed = false;
-          this.loading = false;
-        });
+          this.processedCurrentPage = 1
+          this.selectedProcessedItems = []
+          this.selectAllProcessed = false
+          this.loading = false
+        })
     },
-    
+
     getSortField() {
-      switch(this.sortBy) {
-        case 'author': return 'author';
-        case 'callNumber': return 'itemcallnumber';
-        case 'barcode': return 'barcode';
+      switch (this.sortBy) {
+        case 'author':
+          return 'author'
+        case 'callNumber':
+          return 'itemcallnumber'
+        case 'barcode':
+          return 'barcode'
         case 'title':
-        default: return 'title';
+        default:
+          return 'title'
       }
     },
-    
+
     applyFilters() {
       // Reset pagination when filters change
-      this.currentPage = 1;
+      this.currentPage = 1
       // Reset selection
-      this.selectedItems = [];
-      this.selectAll = false;
+      this.selectedItems = []
+      this.selectAll = false
     },
-    
+
     closeModal() {
-      this.$emit('close');
+      this.$emit('close')
     },
-    
+
     toggleSelectAll() {
       if (this.selectAll) {
-        this.selectedItems = this.filteredItems.map(item => item.barcode);
+        this.selectedItems = this.filteredItems.map((item) => item.barcode)
       } else {
-        this.selectedItems = [];
+        this.selectedItems = []
       }
     },
-    
+
     updateSelectAllState() {
       // If all items are selected, set selectAll to true
-      if (this.filteredItems.length > 0 && this.selectedItems.length === this.filteredItems.length) {
-        this.selectAll = true;
+      if (
+        this.filteredItems.length > 0 &&
+        this.selectedItems.length === this.filteredItems.length
+      ) {
+        this.selectAll = true
       } else {
-        this.selectAll = false;
+        this.selectAll = false
       }
     },
-    
+
     async markItemAsMissing(item) {
       // Prevent executing this function if already in loading state
-      if (this.loading) return;
-      
+      if (this.loading) return
+
       // Don't mark checked out items as missing
       if (item.checked_out || item.checked_out_date) {
         EventBus.emit('message', {
           type: 'warning',
           text: `Item "${item.title || item.barcode}" is checked out and cannot be marked as missing.`
-        });
-        return;
+        })
+        return
       }
-      
+
       try {
         // Set loading state
-        this.loading = true;
-        
+        this.loading = true
+
         // Call API to mark item as missing
-        const result = await apiService.post(
-          `/api/v1/contrib/interactiveinventory/item/field`,
-          { 
-            barcode: item.barcode, 
-            fields: { itemlost: 4 } // 4 is the code for "Missing"
-          }
-        );
-        
+        const result = await apiService.post(`/api/v1/contrib/interactiveinventory/item/field`, {
+          barcode: item.barcode,
+          fields: { itemlost: 4 } // 4 is the code for "Missing"
+        })
+
         if (result && result.success) {
           // Get current marked missing items for session storage
-          const currentMarkedMissing = await getMarkedMissingItems();
-          const updatedMarkedMissing = [...new Set([...currentMarkedMissing, item.barcode])];
-          await saveMarkedMissingItems(updatedMarkedMissing);
-          
+          const currentMarkedMissing = await getMarkedMissingItems()
+          const updatedMarkedMissing = [...new Set([...currentMarkedMissing, item.barcode])]
+          await saveMarkedMissingItems(updatedMarkedMissing)
+
           // Use the same item data but set status to missing
           const itemWithStatus = {
             ...item,
             status: 'missing'
-          };
-          
+          }
+
           // Check if the item is already in the processed items list
-          const existingIndex = this.processedItems.findIndex(i => i.barcode === item.barcode);
+          const existingIndex = this.processedItems.findIndex((i) => i.barcode === item.barcode)
           if (existingIndex !== -1) {
             // Update existing item
-            this.processedItems.splice(existingIndex, 1, itemWithStatus);
+            this.processedItems.splice(existingIndex, 1, itemWithStatus)
           } else {
             // Add as new item
-            this.processedItems.push(itemWithStatus);
+            this.processedItems.push(itemWithStatus)
           }
-          
+
           // Show success message
           EventBus.emit('message', {
             type: 'success',
             text: `Item "${item.title || item.barcode}" has been set to Missing status.`
-          });
-          
+          })
+
           // Remove item from the list if it was successfully marked
-          this.missingItems = this.missingItems.filter(i => i.barcode !== item.barcode);
-          this.selectedItems = this.selectedItems.filter(barcode => barcode !== item.barcode);
-          
+          this.missingItems = this.missingItems.filter((i) => i.barcode !== item.barcode)
+          this.selectedItems = this.selectedItems.filter((barcode) => barcode !== item.barcode)
+
           // Notify the parent component
-          this.$emit('missing-items-updated');
+          this.$emit('missing-items-updated')
         } else {
           // Show error message
           EventBus.emit('message', {
             type: 'error',
             text: `Failed to mark item "${item.title || item.barcode}" as missing. Please try again.`
-          });
+          })
         }
       } catch (error) {
-        console.error('Error marking item as missing:', error);
+        console.error('Error marking item as missing:', error)
         EventBus.emit('message', {
           type: 'error',
           text: `Error marking item as missing: ${error.message || 'Unknown error'}`
-        });
+        })
       } finally {
-        this.loading = false;
+        this.loading = false
       }
     },
-    
+
     markSelectedAsMissing() {
-      this.markAsMissing();
+      this.markAsMissing()
     },
-    
+
     viewItemDetails(item) {
-      this.selectedItemDetail = item;
-      this.showDetailModal = true;
+      this.selectedItemDetail = item
+      this.showDetailModal = true
     },
-    
+
     exportSelectedToCSV() {
       if (this.selectedItems.length === 0) {
-        EventBus.emit("showSnackbar", {
-          message: "No items selected to export.",
-          type: "info",
-        });
-        return;
+        EventBus.emit('showSnackbar', {
+          message: 'No items selected to export.',
+          type: 'info'
+        })
+        return
       }
-      
+
       // Get items that match the selected barcodes
-      const itemsToExport = this.missingItems.filter(item => 
+      const itemsToExport = this.missingItems.filter((item) =>
         this.selectedItems.includes(item.barcode)
-      );
-      
+      )
+
       // Define the CSV headers
       const headers = [
-        "Barcode",
-        "Title",
-        "Author",
-        "Call Number",
-        "Location",
-        "Home Branch",
-        "Holding Branch",
-        "Status"
-      ];
-      
+        'Barcode',
+        'Title',
+        'Author',
+        'Call Number',
+        'Location',
+        'Home Branch',
+        'Holding Branch',
+        'Status'
+      ]
+
       // Create CSV content
-      let csvContent = headers.join(",") + "\n";
-      
-      itemsToExport.forEach(item => {
+      let csvContent = headers.join(',') + '\n'
+
+      itemsToExport.forEach((item) => {
         // Escape values to handle commas and quotes in the data
         const row = [
           item.barcode,
-          this.escapeCsvValue(item.title || ""),
-          this.escapeCsvValue(item.author || ""),
-          this.escapeCsvValue(item.itemcallnumber || ""),
-          this.escapeCsvValue(item.location || ""),
-          this.escapeCsvValue(item.homebranch || ""),
-          this.escapeCsvValue(item.holdingbranch || ""),
-          "Missing"
-        ];
-        
-        csvContent += row.join(",") + "\n";
-      });
-      
+          this.escapeCsvValue(item.title || ''),
+          this.escapeCsvValue(item.author || ''),
+          this.escapeCsvValue(item.itemcallnumber || ''),
+          this.escapeCsvValue(item.location || ''),
+          this.escapeCsvValue(item.homebranch || ''),
+          this.escapeCsvValue(item.holdingbranch || ''),
+          'Missing'
+        ]
+
+        csvContent += row.join(',') + '\n'
+      })
+
       // Create blob and download link
-      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-      
-      link.setAttribute("href", url);
-      link.setAttribute("download", `missing-items-${timestamp}.csv`);
-      link.style.visibility = "hidden";
-      
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      
-      EventBus.emit("showSnackbar", {
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
+
+      link.setAttribute('href', url)
+      link.setAttribute('download', `missing-items-${timestamp}.csv`)
+      link.style.visibility = 'hidden'
+
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+
+      EventBus.emit('showSnackbar', {
         message: `Exported ${itemsToExport.length} items to CSV.`,
-        type: "success",
-      });
+        type: 'success'
+      })
     },
-    
+
     escapeCsvValue(value) {
       // If the value contains commas or quotes, enclose it in quotes and escape any existing quotes
-      if (typeof value !== 'string') return `"${value}"`;
-      
+      if (typeof value !== 'string') return `"${value}"`
+
       if (value.includes(',') || value.includes('"')) {
-        return `"${value.replace(/"/g, '""')}"`;
+        return `"${value.replace(/"/g, '""')}"`
       }
-      return value;
+      return value
     },
-    
+
     formatDate(dateString) {
-      if (!dateString) return '';
-      
+      if (!dateString) return ''
+
       try {
-        const date = new Date(dateString);
-        return date.toLocaleDateString();
+        const date = new Date(dateString)
+        return date.toLocaleDateString()
       } catch (e) {
-        return dateString;
+        return dateString
       }
     },
-    
+
     async markAsMissing() {
       if (this.selectedItems.length === 0) {
-        EventBus.emit("message", {
-          text: "No items selected to mark as missing.",
-          type: "info",
-        });
-        return;
+        EventBus.emit('message', {
+          text: 'No items selected to mark as missing.',
+          type: 'info'
+        })
+        return
       }
-      
+
       // Set loading state
-      this.loading = true;
-      
+      this.loading = true
+
       // Filter out items that shouldn't be processed (checked out items)
-      const itemsToProcess = this.selectedItems.filter(barcode => {
-        const item = this.missingItems.find(i => i.barcode === barcode);
-        if (!item) return false;
-        
+      const itemsToProcess = this.selectedItems.filter((barcode) => {
+        const item = this.missingItems.find((i) => i.barcode === barcode)
+        if (!item) return false
+
         // Don't mark checked out items as missing
         if (item.checked_out || item.checked_out_date) {
-          console.log(`Skipping checked out item: ${item.barcode}`);
-          EventBus.emit("message", {
+          console.log(`Skipping checked out item: ${item.barcode}`)
+          EventBus.emit('message', {
             text: `Item ${item.barcode} is checked out and won't be marked as missing.`,
-            type: "warning",
-          });
-          return false;
+            type: 'warning'
+          })
+          return false
         }
-        
-        return true;
-      });
-      
+
+        return true
+      })
+
       if (itemsToProcess.length === 0) {
-        this.loading = false;
-        EventBus.emit("message", {
-          text: "No items to process after filtering out checked out items.",
-          type: "info",
-        });
-        return;
+        this.loading = false
+        EventBus.emit('message', {
+          text: 'No items to process after filtering out checked out items.',
+          type: 'info'
+        })
+        return
       }
-      
+
       // Process each selected item
-      const promises = itemsToProcess.map(barcode => {
+      const promises = itemsToProcess.map((barcode) => {
         // Find the item object for this barcode
-        const item = this.missingItems.find(i => i.barcode === barcode);
-        if (!item) return Promise.resolve(); // Skip if item not found
-        
+        const item = this.missingItems.find((i) => i.barcode === barcode)
+        if (!item) return Promise.resolve() // Skip if item not found
+
         // Call API to mark item as missing in the system
-        return apiService.post(
-          `/api/v1/contrib/interactiveinventory/item/field`,
-          { 
-            barcode: barcode, 
-            fields: { itemlost: 4 } // 4 is the code for "Missing"
-          }
-        );
-      });
-      
+        return apiService.post(`/api/v1/contrib/interactiveinventory/item/field`, {
+          barcode: barcode,
+          fields: { itemlost: 4 } // 4 is the code for "Missing"
+        })
+      })
+
       // Wait for all API calls to complete
       try {
-        await Promise.all(promises);
-        
+        await Promise.all(promises)
+
         // Get current marked missing items for session storage
-        const currentMarkedMissing = await getMarkedMissingItems();
-        const updatedMarkedMissing = [...new Set([...currentMarkedMissing, ...itemsToProcess])];
-        
+        const currentMarkedMissing = await getMarkedMissingItems()
+        const updatedMarkedMissing = [...new Set([...currentMarkedMissing, ...itemsToProcess])]
+
         // Save the updated list
-        await saveMarkedMissingItems(updatedMarkedMissing);
-        
+        await saveMarkedMissingItems(updatedMarkedMissing)
+
         // Add processed items to the processed items list
-        const newProcessedItems = itemsToProcess.map(barcode => {
-          const item = this.missingItems.find(i => i.barcode === barcode);
-          if (!item) return null;
-          
-          return {
-            ...item,
-            status: 'missing'
-          };
-        }).filter(item => item !== null);
-        
+        const newProcessedItems = itemsToProcess
+          .map((barcode) => {
+            const item = this.missingItems.find((i) => i.barcode === barcode)
+            if (!item) return null
+
+            return {
+              ...item,
+              status: 'missing'
+            }
+          })
+          .filter((item) => item !== null)
+
         // Update processed items list
-        this.processedItems = [...this.processedItems, ...newProcessedItems];
-        
+        this.processedItems = [...this.processedItems, ...newProcessedItems]
+
         // Remove items from the missing items list
-        this.missingItems = this.missingItems.filter(item => !itemsToProcess.includes(item.barcode));
-        
+        this.missingItems = this.missingItems.filter(
+          (item) => !itemsToProcess.includes(item.barcode)
+        )
+
         // Clear selection
-        this.selectedItems = [];
-        this.selectAll = false;
-        
+        this.selectedItems = []
+        this.selectAll = false
+
         // Show success message
-        EventBus.emit("message", {
+        EventBus.emit('message', {
           text: `${itemsToProcess.length} items marked as missing successfully.`,
-          type: "success",
-        });
-        
+          type: 'success'
+        })
+
         // Notify the parent component about the update
-        this.$emit('missing-items-updated');
+        this.$emit('missing-items-updated')
       } catch (error) {
-        console.error("Error marking items as missing:", error);
-        EventBus.emit("message", {
+        console.error('Error marking items as missing:', error)
+        EventBus.emit('message', {
           text: `Error marking items as missing: ${error.message || 'Unknown error'}`,
-          type: "error",
-        });
+          type: 'error'
+        })
       } finally {
-        this.loading = false;
+        this.loading = false
       }
     },
-    
+
     closeModal() {
-      this.$emit('close');
+      this.$emit('close')
     },
-    
+
     refreshMissingItems() {
-      this.calculateMissingItems();
-      this.$emit('missing-items-updated');
+      this.calculateMissingItems()
+      this.$emit('missing-items-updated')
     },
-    
+
     applyProcessedFilters() {
       // Reset pagination when filters change
-      this.processedCurrentPage = 1;
+      this.processedCurrentPage = 1
       // Reset selection
-      this.selectedProcessedItems = [];
-      this.selectAllProcessed = false;
+      this.selectedProcessedItems = []
+      this.selectAllProcessed = false
     },
-    
+
     toggleSelectAllProcessed() {
       if (this.selectAllProcessed) {
-        this.selectedProcessedItems = this.filteredProcessedItems.map(item => item.barcode);
+        this.selectedProcessedItems = this.filteredProcessedItems.map((item) => item.barcode)
       } else {
-        this.selectedProcessedItems = [];
+        this.selectedProcessedItems = []
       }
     },
-    
+
     updateSelectAllProcessedState() {
       // If all items are selected, set selectAllProcessed to true
-      if (this.filteredProcessedItems.length > 0 && this.selectedProcessedItems.length === this.filteredProcessedItems.length) {
-        this.selectAllProcessed = true;
+      if (
+        this.filteredProcessedItems.length > 0 &&
+        this.selectedProcessedItems.length === this.filteredProcessedItems.length
+      ) {
+        this.selectAllProcessed = true
       } else {
-        this.selectAllProcessed = false;
+        this.selectAllProcessed = false
       }
     },
-    
+
     exportSelectedProcessedToCSV() {
       if (this.selectedProcessedItems.length === 0) {
-        EventBus.emit("showSnackbar", {
-          message: "No items selected to export.",
-          type: "info",
-        });
-        return;
+        EventBus.emit('showSnackbar', {
+          message: 'No items selected to export.',
+          type: 'info'
+        })
+        return
       }
-      
+
       // Get items that match the selected barcodes
-      const itemsToExport = this.processedItems.filter(item => 
+      const itemsToExport = this.processedItems.filter((item) =>
         this.selectedProcessedItems.includes(item.barcode)
-      );
-      
+      )
+
       // Define the CSV headers
       const headers = [
-        "Barcode",
-        "Title",
-        "Author",
-        "Call Number",
-        "Location",
-        "Home Branch",
-        "Holding Branch",
-        "Status"
-      ];
-      
+        'Barcode',
+        'Title',
+        'Author',
+        'Call Number',
+        'Location',
+        'Home Branch',
+        'Holding Branch',
+        'Status'
+      ]
+
       // Create CSV content
-      let csvContent = headers.join(",") + "\n";
-      
-      itemsToExport.forEach(item => {
+      let csvContent = headers.join(',') + '\n'
+
+      itemsToExport.forEach((item) => {
         // Escape values to handle commas and quotes in the data
         const row = [
           item.barcode,
-          this.escapeCsvValue(item.title || ""),
-          this.escapeCsvValue(item.author || ""),
-          this.escapeCsvValue(item.itemcallnumber || ""),
-          this.escapeCsvValue(item.location || ""),
-          this.escapeCsvValue(item.homebranch || ""),
-          this.escapeCsvValue(item.holdingbranch || ""),
-          item.status === 'scanned' ? "Found" : "Missing"
-        ];
-        
-        csvContent += row.join(",") + "\n";
-      });
-      
+          this.escapeCsvValue(item.title || ''),
+          this.escapeCsvValue(item.author || ''),
+          this.escapeCsvValue(item.itemcallnumber || ''),
+          this.escapeCsvValue(item.location || ''),
+          this.escapeCsvValue(item.homebranch || ''),
+          this.escapeCsvValue(item.holdingbranch || ''),
+          item.status === 'scanned' ? 'Found' : 'Missing'
+        ]
+
+        csvContent += row.join(',') + '\n'
+      })
+
       // Create blob and download link
-      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-      
-      link.setAttribute("href", url);
-      link.setAttribute("download", `processed-items-${timestamp}.csv`);
-      link.style.visibility = "hidden";
-      
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      
-      EventBus.emit("showSnackbar", {
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
+
+      link.setAttribute('href', url)
+      link.setAttribute('download', `processed-items-${timestamp}.csv`)
+      link.style.visibility = 'hidden'
+
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+
+      EventBus.emit('showSnackbar', {
         message: `Exported ${itemsToExport.length} items to CSV.`,
-        type: "success",
-      });
+        type: 'success'
+      })
     },
-    
+
     async markProcessedItemAsMissing(item) {
       // Don't process if already marked as missing
-      if (item.status === 'missing') return;
-      
+      if (item.status === 'missing') return
+
       // Don't mark checked out items as missing
       if (item.checked_out || item.checked_out_date) {
         EventBus.emit('message', {
           type: 'warning',
           text: `Item "${item.title || item.barcode}" is checked out and cannot be marked as missing.`
-        });
-        return;
+        })
+        return
       }
-      
+
       try {
-        this.loading = true;
-        
+        this.loading = true
+
         // Call API to mark item as missing
-        const result = await apiService.post(
-          `/api/v1/contrib/interactiveinventory/item/field`,
-          { 
-            barcode: item.barcode, 
-            fields: { itemlost: 4 } // 4 is the code for "Missing"
-          }
-        );
-        
+        const result = await apiService.post(`/api/v1/contrib/interactiveinventory/item/field`, {
+          barcode: item.barcode,
+          fields: { itemlost: 4 } // 4 is the code for "Missing"
+        })
+
         if (result && result.success) {
           // Get current marked missing items for session storage
-          const currentMarkedMissing = await getMarkedMissingItems();
-          const updatedMarkedMissing = [...new Set([...currentMarkedMissing, item.barcode])];
-          await saveMarkedMissingItems(updatedMarkedMissing);
-          
+          const currentMarkedMissing = await getMarkedMissingItems()
+          const updatedMarkedMissing = [...new Set([...currentMarkedMissing, item.barcode])]
+          await saveMarkedMissingItems(updatedMarkedMissing)
+
           // Update the status in our local data
-          const itemIndex = this.processedItems.findIndex(i => i.barcode === item.barcode);
+          const itemIndex = this.processedItems.findIndex((i) => i.barcode === item.barcode)
           if (itemIndex !== -1) {
-            this.processedItems[itemIndex].status = 'missing';
+            this.processedItems[itemIndex].status = 'missing'
           }
-          
+
           // Show success message
           EventBus.emit('message', {
             type: 'success',
             text: `Item "${item.title || item.barcode}" has been set to Missing status.`
-          });
-          
+          })
+
           // Emit event to update parent component
-          this.$emit('item-marked-missing', item.barcode);
-          this.$emit('missing-items-updated');
+          this.$emit('item-marked-missing', item.barcode)
+          this.$emit('missing-items-updated')
         } else {
-          throw new Error(result.error || 'Unknown error occurred');
+          throw new Error(result.error || 'Unknown error occurred')
         }
       } catch (error) {
         EventBus.emit('message', {
           type: 'error',
           text: `Failed to set item to Missing status: ${error.message}`
-        });
+        })
       } finally {
-        this.loading = false;
+        this.loading = false
       }
     },
-    
+
     async markProcessedItemAsFound(item) {
       // Don't process if already marked as found (scanned)
-      if (item.status === 'scanned') return;
-      
+      if (item.status === 'scanned') return
+
       try {
-        this.loading = true;
-        
+        this.loading = true
+
         // Call API to mark item as found (remove lost status)
-        const result = await apiService.post(
-          `/api/v1/contrib/interactiveinventory/item/field`,
-          { 
-            barcode: item.barcode, 
-            fields: { itemlost: 0 } // 0 is the code for not lost
-          }
-        );
-        
+        const result = await apiService.post(`/api/v1/contrib/interactiveinventory/item/field`, {
+          barcode: item.barcode,
+          fields: { itemlost: 0 } // 0 is the code for not lost
+        })
+
         if (result && result.success) {
           // Remove from marked missing items in session storage
-          const currentMarkedMissing = await getMarkedMissingItems();
-          const updatedMarkedMissing = currentMarkedMissing.filter(barcode => barcode !== item.barcode);
-          await saveMarkedMissingItems(updatedMarkedMissing);
-          
+          const currentMarkedMissing = await getMarkedMissingItems()
+          const updatedMarkedMissing = currentMarkedMissing.filter(
+            (barcode) => barcode !== item.barcode
+          )
+          await saveMarkedMissingItems(updatedMarkedMissing)
+
           // Update the status in our local data
-          const itemIndex = this.processedItems.findIndex(i => i.barcode === item.barcode);
+          const itemIndex = this.processedItems.findIndex((i) => i.barcode === item.barcode)
           if (itemIndex !== -1) {
-            this.processedItems[itemIndex].status = 'scanned';
+            this.processedItems[itemIndex].status = 'scanned'
           }
-          
+
           // Show success message
           EventBus.emit('message', {
             type: 'success',
             text: `Item "${item.title || item.barcode}" has been marked as Found.`
-          });
+          })
         } else {
-          throw new Error(result.error || 'Unknown error occurred');
+          throw new Error(result.error || 'Unknown error occurred')
         }
       } catch (error) {
         EventBus.emit('message', {
           type: 'error',
           text: `Failed to mark item as Found: ${error.message}`
-        });
+        })
       } finally {
-        this.loading = false;
+        this.loading = false
       }
     },
-    
+
     toggleSelectedStatus() {
       if (this.selectedProcessedItems.length === 0) {
-        EventBus.emit("showSnackbar", {
-          message: "No items selected to update.",
-          type: "info",
-        });
-        return;
+        EventBus.emit('showSnackbar', {
+          message: 'No items selected to update.',
+          type: 'info'
+        })
+        return
       }
-      
+
       // Set loading state
-      this.loading = true;
-      
-      const promises = [];
-      let markingAsMissing = false; // Flag to track if any items are being marked as missing
-      
+      this.loading = true
+
+      const promises = []
+      let markingAsMissing = false // Flag to track if any items are being marked as missing
+
       // For each selected item, toggle its status (missing <-> found)
-      this.selectedProcessedItems.forEach(barcode => {
-        const item = this.processedItems.find(i => i.barcode === barcode);
-        if (!item) return;
-        
+      this.selectedProcessedItems.forEach((barcode) => {
+        const item = this.processedItems.find((i) => i.barcode === barcode)
+        if (!item) return
+
         if (item.status === 'missing') {
           // If currently missing, mark as found
-          promises.push(this.markProcessedItemAsFound(item));
+          promises.push(this.markProcessedItemAsFound(item))
         } else {
           // If currently found/scanned, mark as missing
           // Skip checked out items
@@ -1254,46 +1294,46 @@ export default {
             EventBus.emit('message', {
               type: 'warning',
               text: `Item "${item.title || item.barcode}" is checked out and cannot be marked as missing.`
-            });
+            })
           } else {
-            markingAsMissing = true;
-            promises.push(this.markProcessedItemAsMissing(item));
+            markingAsMissing = true
+            promises.push(this.markProcessedItemAsMissing(item))
           }
         }
-      });
-      
+      })
+
       // Wait for all operations to complete
       Promise.all(promises)
         .then(() => {
           // Refresh data - but only recalculate missing items if we're marking something as missing
-          this.loadProcessedItems();
+          this.loadProcessedItems()
           if (markingAsMissing) {
-            this.calculateMissingItems();
-            this.$emit('missing-items-updated');
+            this.calculateMissingItems()
+            this.$emit('missing-items-updated')
           }
-          
+
           // Clear selection
-          this.selectedProcessedItems = [];
-          this.selectAllProcessed = false;
-          
+          this.selectedProcessedItems = []
+          this.selectAllProcessed = false
+
           // Show success message
-          EventBus.emit("showSnackbar", {
+          EventBus.emit('showSnackbar', {
             message: `Updated status for ${promises.length} items.`,
-            type: "success",
-          });
+            type: 'success'
+          })
         })
-        .catch(error => {
-          EventBus.emit("showSnackbar", {
+        .catch((error) => {
+          EventBus.emit('showSnackbar', {
             message: `Error updating items: ${error.message}`,
-            type: "error",
-          });
+            type: 'error'
+          })
         })
         .finally(() => {
-          this.loading = false;
-        });
-    },
+          this.loading = false
+        })
+    }
   }
-};
+}
 </script>
 
 <style scoped>
@@ -1421,7 +1461,7 @@ export default {
   border-radius: 6px;
   padding: 15px;
   text-align: center;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
 }
 
 .stat-number {
@@ -1484,7 +1524,8 @@ export default {
   gap: 10px;
 }
 
-.export-button, .mark-button {
+.export-button,
+.mark-button {
   padding: 8px 16px;
   border: none;
   border-radius: 4px;
@@ -1717,8 +1758,12 @@ tbody td {
 }
 
 @keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
 }
 
 @media (max-width: 768px) {
@@ -1727,23 +1772,23 @@ tbody td {
     flex-direction: column;
     gap: 10px;
   }
-  
+
   .missing-items-controls {
     flex-direction: column;
     align-items: stretch;
   }
-  
+
   .filter-controls {
     flex-direction: column;
     align-items: stretch;
   }
-  
+
   .action-buttons {
     flex-direction: column;
   }
-  
+
   .detail-row {
     grid-template-columns: 1fr;
   }
 }
-</style> 
+</style>

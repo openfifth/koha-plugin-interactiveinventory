@@ -282,6 +282,7 @@ import {
   isSessionActive
 } from '../services/sessionStorage'
 import { apiService } from '../services/apiService'
+import { filterMissingItems } from '../utils/missingItems'
 
 export default {
   components: {
@@ -819,35 +820,16 @@ export default {
           const scannedBarcodesSet = new Set(this.items.map((item) => item.external_id))
 
           // Filter out items that are checked out if skipCheckedOutItems is enabled
-          const missingItems = locationData.filter((item) => {
-            // Skip items that have already been scanned
-            if (scannedBarcodesSet.has(item.barcode)) {
-              return false
+          const missingItems = filterMissingItems({
+            locationData,
+            rightPlaceList: this.sessionData.response_data.right_place_list || [],
+            scannedBarcodes: scannedBarcodesSet,
+            markedMissingBarcodes: this.markedMissingItems,
+            sessionSettings: {
+              skipCheckedOutItems: true,
+              skipInTransitItems: this.sessionData.skipInTransitItems,
+              skipBranchMismatchItems: this.sessionData.skipBranchMismatchItems
             }
-
-            // Skip items that have already been marked as missing
-            if (this.markedMissingItems.has(item.barcode)) {
-              return false
-            }
-
-            if (item.checked_out_date) {
-              return false
-            }
-
-            // Skip items that are in transit if the session is configured to do so
-            if (this.sessionData.skipInTransitItems && item.in_transit) {
-              return false
-            }
-
-            // Skip items that have branch mismatch if the session is configured to do so
-            if (
-              this.sessionData.skipBranchMismatchItems &&
-              item.homebranch !== item.holdingbranch
-            ) {
-              return false
-            }
-
-            return true
           })
 
           if (missingItems.length > 0) {
@@ -2151,33 +2133,16 @@ export default {
       const markedMissingSet = this.markedMissingItems
 
       // Count items that haven't been scanned, aren't marked as missing, and meet session criteria
-      const count = itemsToCheck.filter((item) => {
-        // Skip items that have already been scanned
-        if (scannedBarcodesSet.has(item.barcode)) {
-          return false
+      const count = filterMissingItems({
+        locationData: itemsToCheck,
+        rightPlaceList: [],
+        scannedBarcodes: scannedBarcodesSet,
+        markedMissingBarcodes: markedMissingSet,
+        sessionSettings: {
+          skipCheckedOutItems: this.sessionData.skipCheckedOutItems,
+          skipInTransitItems: this.sessionData.skipInTransitItems,
+          skipBranchMismatchItems: this.sessionData.skipBranchMismatchItems
         }
-
-        // Skip items that have already been marked as missing
-        if (markedMissingSet.has(item.barcode)) {
-          return false
-        }
-
-        // Skip items that are checked out if the session is configured to do so
-        if (this.sessionData.skipCheckedOutItems && (item.checked_out || item.checked_out_date)) {
-          return false
-        }
-
-        // Skip items that are in transit if the session is configured to do so
-        if (this.sessionData.skipInTransitItems && item.in_transit) {
-          return false
-        }
-
-        // Skip items that have branch mismatch if the session is configured to do so
-        if (this.sessionData.skipBranchMismatchItems && item.homebranch !== item.holdingbranch) {
-          return false
-        }
-
-        return true
       }).length
 
       return count
