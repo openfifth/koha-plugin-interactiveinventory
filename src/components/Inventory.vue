@@ -999,6 +999,9 @@ export default {
           combinedData.holding_library_id !== this.sessionData.selectedLibraryId
         ) {
           fieldsToAmend['holdingbranch'] = this.sessionData.selectedLibraryId
+          // Update combinedData so display and status checks reflect the new value immediately
+          combinedData.holdingbranch = this.sessionData.selectedLibraryId
+          combinedData.holding_library_id = this.sessionData.selectedLibraryId
         }
 
         // Check various status flags
