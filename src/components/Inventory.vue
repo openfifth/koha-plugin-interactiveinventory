@@ -876,35 +876,29 @@ export default {
       try {
         EventBus.emit('message', { type: 'status', text: 'Searching for item...' })
 
-        // Fetch item with embedded data in a single API call
-        // - biblio: for bibliographic information
-        // - transfer: for in-transit status (active transfers)
-        // - first_hold: for waiting holds information
+        // Fetch item using plugin endpoint that returns all needed data
+        // including biblio, checkout, transfer, hold, and return claim info
         let response = await fetch(
-          `/api/v1/items?external_id=${encodeURIComponent(this.barcode)}`,
+          `/api/v1/contrib/interactiveinventory/item/scan/${encodeURIComponent(this.barcode)}`,
           {
             headers: {
-              Accept: 'application/json',
-              'x-koha-embed': 'biblio,checkout,transfer,first_hold,return_claim'
+              Accept: 'application/json'
             }
           }
         )
 
         if (!response.ok) {
-          throw new Error(`Failed to fetch items: ${response.statusText}`)
+          if (response.status === 404) {
+            throw new Error('Item not found: ' + this.barcode)
+          }
+          throw new Error(`Failed to fetch item: ${response.statusText}`)
         }
 
-        const items = await response.json()
-
-        if (!items || items.length === 0) {
-          throw new Error('Item not found: ' + this.barcode)
-        }
-
-        // Item data now includes embedded biblio data
-        const combinedData = items[0]
+        // Plugin endpoint returns comprehensive item data
+        const combinedData = await response.json()
 
         if (!combinedData.biblio) {
-          throw new Error('Item found but missing embedded biblio data: ' + this.barcode)
+          throw new Error('Item found but missing biblio data: ' + this.barcode)
         }
 
         // Check if the item is checked out and the user has chosen to skip checked out items
@@ -925,8 +919,10 @@ export default {
         }
 
         // Check if the item has a waiting hold and the user has chosen to skip such items
-        // first_hold embed contains the first hold if there is one, with status='W' indicating waiting
-        const hasWaitingHold = combinedData.first_hold && combinedData.first_hold.status === 'W'
+        // Plugin endpoint returns 'waiting' boolean and first_hold.status ('W' = waiting)
+        const hasWaitingHold =
+          combinedData.waiting ||
+          (combinedData.first_hold && combinedData.first_hold.status === 'W')
         if (this.sessionData.ignoreWaitingHolds && hasWaitingHold) {
           EventBus.emit('message', {
             type: 'warning',
@@ -944,10 +940,8 @@ export default {
         }
 
         // Check if the item is in transit and the user has chosen to skip in-transit items
-        // transfer embed contains active transfer info if item is in transit
-        const isInTransit = combinedData.transfer && !combinedData.transfer.datearrived
-        // Also add the in_transit flag to combinedData for use elsewhere
-        combinedData.in_transit = isInTransit
+        // Plugin endpoint returns 'in_transit' boolean directly
+        const isInTransit = !!combinedData.in_transit
         if (this.sessionData.skipInTransitItems && isInTransit) {
           EventBus.emit('message', {
             type: 'warning',
