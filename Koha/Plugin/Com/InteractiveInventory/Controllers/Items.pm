@@ -6,6 +6,7 @@ use Mojo::JSON qw(decode_json);
 use Try::Tiny;
 use C4::Context;
 use C4::Circulation qw( AddReturn CanBookBeRenewed AddRenewal );
+use C4::Reserves qw( ModReserveAffect );
 use C4::ShelfBrowser qw( GetNearbyItems );
 use Koha::DateUtils qw( dt_from_string );
 use Koha::Items;
@@ -13,6 +14,7 @@ use Koha::Libraries;
 use Koha::Holds;
 use Koha::Checkouts;
 use Koha::Item::Transfers;
+use Koha::Patrons;
 
 =head1 API
 
@@ -206,7 +208,42 @@ sub checkInItem {
                 # Add specific message handling for common scenarios
                 if ($messages->{ResFound}) {
                     $response->{hold_found} = 1;
-                    $response->{hold_message} = "Item has holds - please process accordingly";
+                    my $hold_info = $messages->{ResFound};
+                    
+                    # Actually trap the hold by setting it to Waiting or In Transit status
+                    # ModReserveAffect($itemnumber, $borrowernumber, $transferToBranch, $reserve_id)
+                    my $hold_needs_transfer = 0;
+                    if ($hold_info->{reserve_id} && $hold_info->{borrowernumber}) {
+                        my $transfer_branch = undef;
+                        # If hold pickup is different from current branch, a transfer is needed
+                        if ($hold_info->{branchcode} && $hold_info->{branchcode} ne $branch) {
+                            $transfer_branch = $hold_info->{branchcode};
+                            $hold_needs_transfer = 1;
+                        }
+                        ModReserveAffect($item->itemnumber, $hold_info->{borrowernumber}, $transfer_branch, $hold_info->{reserve_id});
+                    }
+                    
+                    # Look up patron name from borrowernumber (ResFound only has reserves fields)
+                    if ($hold_info->{borrowernumber}) {
+                        my $patron = Koha::Patrons->find($hold_info->{borrowernumber});
+                        if ($patron) {
+                            my $patron_name = join(' ', grep { $_ } ($patron->firstname, $patron->surname));
+                            $response->{hold_patron_name} = $patron_name if $patron_name;
+                        }
+                    }
+                    if ($hold_info->{branchcode}) {
+                        $response->{hold_pickup_branch} = $hold_info->{branchcode};
+                    }
+                    
+                    # Flag if hold requires transfer to pickup branch
+                    if ($hold_needs_transfer) {
+                        $response->{hold_needs_transfer} = 1;
+                        $response->{needs_transfer} = 1;
+                        $response->{transfer_to} = $hold_info->{branchcode};
+                        $response->{hold_message} = "Item has been trapped for a hold. Transfer to pickup branch.";
+                    } else {
+                        $response->{hold_message} = "Item has been trapped for a hold. Do not reshelve.";
+                    }
                 }
                 if ($messages->{WasReturned}) {
                     $response->{was_returned} = 1;
