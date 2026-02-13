@@ -40,6 +40,9 @@
               <div class="stat-box">
                 <div class="stat-number">{{ totalExpectedItems }}</div>
                 <div class="stat-label">Expected Items</div>
+                <div v-if="rawExpectedItemsCount > totalExpectedItems" class="stat-note">
+                  ({{ rawExpectedItemsCount - totalExpectedItems }} filtered out)
+                </div>
               </div>
               <div class="stat-box">
                 <div class="stat-number">
@@ -452,6 +455,38 @@ export default {
   },
   computed: {
     totalExpectedItems() {
+      // Apply skip filters to get the count of items we actually expect to process
+      // This should match the filtering logic in calculateMissingItems/filterMissingItems
+      const locationData = this.sessionData?.response_data?.location_data || []
+      if (!locationData.length) return 0
+
+      // Apply the same skip filters that filterMissingItems uses
+      const filtered = locationData.filter((item) => {
+        // Skip checked out items if setting is enabled
+        if (this.sessionData.skipCheckedOutItems && (item.checked_out || item.checked_out_date)) {
+          return false
+        }
+        // Skip in transit items if setting is enabled
+        if (this.sessionData.skipInTransitItems && item.in_transit) {
+          return false
+        }
+        // Skip branch mismatch items if setting is enabled
+        const homeBranch = item.homebranch || item.home_library_id
+        const holdingBranch = item.holdingbranch || item.holding_library_id
+        if (
+          this.sessionData.skipBranchMismatchItems &&
+          homeBranch &&
+          holdingBranch &&
+          homeBranch !== holdingBranch
+        ) {
+          return false
+        }
+        return true
+      })
+      return filtered.length
+    },
+    rawExpectedItemsCount() {
+      // Raw count without filters for reference
       return this.sessionData?.response_data?.location_data?.length || 0
     },
     filteredItems() {
@@ -1493,6 +1528,13 @@ export default {
 .stat-label {
   font-size: 0.9rem;
   color: #7f8c8d;
+}
+
+.stat-note {
+  font-size: 0.75rem;
+  color: #95a5a6;
+  font-style: italic;
+  margin-top: 2px;
 }
 
 .missing-items-controls {
