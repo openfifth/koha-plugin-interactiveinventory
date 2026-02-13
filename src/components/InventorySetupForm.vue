@@ -7,9 +7,9 @@
         <label for="inventoryDate">Set inventory date to:</label>
         <input type="date" id="inventoryDate" v-model="inventoryDate" />
       </div>
-      <div>
-        <label for="compareBarcodes">Compare expected barcodes list to scanned barcodes:</label>
-        <input type="checkbox" id="compareBarcodes" v-model="compareBarcodes" />
+      <div class="checkbox-row" @click="compareBarcodes = !compareBarcodes">
+        <input type="checkbox" id="compareBarcodes" v-model="compareBarcodes" @click.stop />
+        <label for="compareBarcodes">Compare expected barcodes list to scanned barcodes</label>
         <span class="help-text" v-if="compareBarcodes"
           >(Scanned barcodes will be checked against the expected items list)</span
         >
@@ -17,15 +17,20 @@
           >(All scanned barcodes will be accepted without comparison)</span
         >
       </div>
-      <div>
-        <label for="doNotCheckIn">Do not check in items scanned during inventory:</label>
-        <input type="checkbox" id="doNotCheckIn" v-model="doNotCheckIn" />
+      <div class="checkbox-row" @click="doNotCheckIn = !doNotCheckIn">
+        <input type="checkbox" id="doNotCheckIn" v-model="doNotCheckIn" @click.stop />
+        <label for="doNotCheckIn">Do not check in items scanned during inventory</label>
       </div>
-      <div>
+      <div class="checkbox-row" @click="checkShelvedOutOfOrder = !checkShelvedOutOfOrder">
+        <input
+          type="checkbox"
+          id="checkShelvedOutOfOrder"
+          v-model="checkShelvedOutOfOrder"
+          @click.stop
+        />
         <label for="checkShelvedOutOfOrder"
-          >Check barcodes list for items shelved out of order:</label
+          >Check barcodes list for items shelved out of order</label
         >
-        <input type="checkbox" id="checkShelvedOutOfOrder" v-model="checkShelvedOutOfOrder" />
       </div>
     </div>
     <div class="section-container">
@@ -884,6 +889,31 @@ button {
 
 .form-group {
   margin-bottom: 1rem;
+}
+
+.checkbox-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem;
+  margin: 0.25rem 0;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background-color 0.15s ease-in-out;
+}
+
+.checkbox-row:hover {
+  background-color: #f8f9fa;
+}
+
+.checkbox-row input[type='checkbox'] {
+  cursor: pointer;
+}
+
+.checkbox-row label {
+  cursor: pointer;
+  margin: 0;
 }
 
 .form-control {
