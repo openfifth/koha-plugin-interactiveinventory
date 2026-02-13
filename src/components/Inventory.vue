@@ -1475,24 +1475,30 @@ export default {
     },
 
     checkItemSpecialStatuses(item) {
-      // Check for withdrawn items - handle both string and numeric values
+      const barcode = item.external_id || item.barcode
+      const title = item.biblio?.title || item.title || 'Unknown'
+      const homeBranch = item.homebranch || item.home_library_id
+      const holdingBranch = item.holdingbranch || item.holding_library_id
+
+      // Check for withdrawn items
       if (
         (item.withdrawn === '1' || item.withdrawn === 1) &&
         this.alertSettings.showWithdrawnAlerts
       ) {
         EventBus.emit('message', {
           type: 'warning',
-          text: `${item.title} (${item.barcode || item.external_id}) has been withdrawn from circulation`
+          text: `${title} (${barcode}) has been withdrawn from circulation`
         })
       }
 
-      // Check for holds
-      if (item.on_hold && this.alertSettings.showOnHoldAlerts) {
-        let holdMsg = `${item.title} (${item.barcode}) has a hold placed on it`
+      // Check for holds (using first_hold embed from API)
+      if (item.first_hold && this.alertSettings.showOnHoldAlerts) {
+        const holdStatus = item.first_hold.status
+        let holdMsg = `${title} (${barcode}) has a hold placed on it`
 
-        if (item.waiting) {
+        if (holdStatus === 'W') {
           holdMsg += ' and is waiting for pickup'
-        } else if (item.in_transit) {
+        } else if (holdStatus === 'T') {
           holdMsg += ' and is in transit to fulfill the hold'
         }
 
@@ -1502,19 +1508,26 @@ export default {
         })
       }
 
-      // Check for in transit items
+      // Check for in transit items (using transfer embed from API)
       if (item.in_transit && this.alertSettings.showInTransitAlerts) {
+        const fromBranch = item.transfer?.frombranch || homeBranch
+        const toBranch = item.transfer?.tobranch || holdingBranch
         EventBus.emit('message', {
           type: 'warning',
-          text: `${item.title} (${item.barcode}) is in transit from ${item.homebranch} to ${item.holdingbranch}`
+          text: `${title} (${barcode}) is in transit from ${fromBranch} to ${toBranch}`
         })
       }
 
       // Check for branch mismatch
-      if (item.homebranch !== item.holdingbranch && this.alertSettings.showBranchMismatchAlerts) {
+      if (
+        homeBranch &&
+        holdingBranch &&
+        homeBranch !== holdingBranch &&
+        this.alertSettings.showBranchMismatchAlerts
+      ) {
         EventBus.emit('message', {
           type: 'info',
-          text: `${item.title} (${item.barcode}) belongs to ${item.homebranch} but is currently at ${item.holdingbranch}`
+          text: `${title} (${barcode}) belongs to ${homeBranch} but is currently at ${holdingBranch}`
         })
       }
 
@@ -1522,7 +1535,7 @@ export default {
       if (item.return_claim && this.alertSettings.showReturnClaimAlerts) {
         EventBus.emit('message', {
           type: 'warning',
-          text: `${item.title} (${item.barcode}) has an unresolved return claim. Patron claims they returned it, but it's still checked out.`
+          text: `${title} (${barcode}) has an unresolved return claim. Patron claims they returned it, but it's still checked out.`
         })
       }
     },
