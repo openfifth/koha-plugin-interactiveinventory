@@ -634,18 +634,24 @@ sub scanItem {
             copy_number         => $item->copynumber,
             inventory_number    => $item->stocknumber,
             replacement_price   => $item->replacementprice,
+            acquisition_date    => $item->dateaccessioned,
         };
 
         # Get biblio data
         my $biblio = $item->biblio;
         if ($biblio) {
+            my $biblioitem = $biblio->biblioitem;
             $item_data->{biblio} = {
-                biblio_id   => $biblio->biblionumber,
-                title       => $biblio->title,
-                subtitle    => $biblio->subtitle,
-                author      => $biblio->author,
-                copyrightdate => $biblio->copyrightdate,
-                serial      => $biblio->serial,
+                biblio_id        => $biblio->biblionumber,
+                title            => $biblio->title,
+                subtitle         => $biblio->subtitle,
+                author           => $biblio->author,
+                publication_year => $biblio->copyrightdate,
+                serial           => $biblio->serial,
+                # Fields from biblioitems table
+                publisher        => $biblioitem ? $biblioitem->publishercode : undef,
+                isbn             => $biblioitem ? $biblioitem->isbn : undef,
+                pages            => $biblioitem ? $biblioitem->pages : undef,
             };
         }
 
