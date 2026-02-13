@@ -6,6 +6,7 @@ use Mojo::JSON qw(decode_json);
 use Try::Tiny;
 use C4::Context;
 use C4::Circulation qw( AddReturn CanBookBeRenewed AddRenewal );
+use C4::ShelfBrowser qw( GetNearbyItems );
 use Koha::DateUtils qw( dt_from_string );
 use Koha::Items;
 use Koha::Libraries;
@@ -432,6 +433,82 @@ sub renewItem {
             }
         );
     }
+}
+
+=head3 shelfBrowser
+
+Gets nearby items on the shelf using Koha's C4::ShelfBrowser
+
+=cut
+
+sub shelfBrowser {
+    my $c = shift->openapi->valid_input or return;
+
+    my $itemnumber = $c->validation->param('itemnumber');
+    my $num_each_side = $c->validation->param('num_each_side') // 5;
+
+    unless ($itemnumber) {
+        return $c->render(
+            status => 400,
+            openapi => { error => "Missing itemnumber parameter" }
+        );
+    }
+
+    # Verify item exists
+    my $item = Koha::Items->find($itemnumber);
+    unless ($item) {
+        return $c->render(
+            status => 404,
+            openapi => { error => "Item not found" }
+        );
+    }
+
+    try {
+        # Use Koha's built-in shelf browser functionality
+        # This respects system preferences: ShelfBrowserUsesHomeBranch, 
+        # ShelfBrowserUsesLocation, ShelfBrowserUsesCcode
+        my $nearby = GetNearbyItems($itemnumber, $num_each_side);
+
+        # Format the response
+        my @items = map {
+            {
+                itemnumber     => $_->{itemnumber},
+                biblionumber   => $_->{biblionumber},
+                itemcallnumber => $_->{itemcallnumber},
+                cn_sort        => $_->{cn_sort},
+                title          => $_->{title},
+                subtitle       => $_->{subtitle},
+                medium         => $_->{medium},
+                part_number    => $_->{part_number},
+                part_name      => $_->{part_name},
+            }
+        } @{ $nearby->{items} || [] };
+
+        return $c->render(
+            status => 200,
+            openapi => {
+                items => \@items,
+                prev_item => $nearby->{prev_item} ? {
+                    itemnumber   => $nearby->{prev_item}->{itemnumber},
+                    biblionumber => $nearby->{prev_item}->{biblionumber},
+                } : undef,
+                next_item => $nearby->{next_item} ? {
+                    itemnumber   => $nearby->{next_item}->{itemnumber},
+                    biblionumber => $nearby->{next_item}->{biblionumber},
+                } : undef,
+                starting_homebranch => $nearby->{starting_homebranch},
+                starting_location   => $nearby->{starting_location},
+                starting_ccode      => $nearby->{starting_ccode},
+            }
+        );
+    } catch {
+        return $c->render(
+            status => 500,
+            openapi => {
+                error => "Error fetching nearby items: $_"
+            }
+        );
+    };
 }
 
 1;

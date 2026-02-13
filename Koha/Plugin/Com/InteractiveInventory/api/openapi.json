@@ -3,15 +3,9 @@
     "post": {
       "x-mojo-to": "Com::InteractiveInventory::Controllers::Items#modifyItemField",
       "operationId": "modifyItemField",
-      "tags": [
-        "inventory"
-      ],
-      "produces": [
-        "application/json"
-      ],
-      "consumes": [
-        "application/json"
-      ],
+      "tags": ["inventory"],
+      "produces": ["application/json"],
+      "consumes": ["application/json"],
       "parameters": [
         {
           "name": "body",
@@ -20,10 +14,7 @@
           "description": "Single item field modification data",
           "schema": {
             "type": "object",
-            "required": [
-              "barcode",
-              "fields"
-            ],
+            "required": ["barcode", "fields"],
             "properties": {
               "barcode": {
                 "type": "string",
@@ -71,15 +62,9 @@
     "post": {
       "x-mojo-to": "Com::InteractiveInventory::Controllers::Items#modifyItemFields",
       "operationId": "modifyItemFields",
-      "tags": [
-        "inventory"
-      ],
-      "produces": [
-        "application/json"
-      ],
-      "consumes": [
-        "application/json"
-      ],
+      "tags": ["inventory"],
+      "produces": ["application/json"],
+      "consumes": ["application/json"],
       "parameters": [
         {
           "name": "body",
@@ -88,18 +73,13 @@
           "description": "Multiple items field modification data",
           "schema": {
             "type": "object",
-            "required": [
-              "items"
-            ],
+            "required": ["items"],
             "properties": {
               "items": {
                 "type": "array",
                 "items": {
                   "type": "object",
-                  "required": [
-                    "barcode",
-                    "fields"
-                  ],
+                  "required": ["barcode", "fields"],
                   "properties": {
                     "barcode": {
                       "type": "string",
@@ -158,15 +138,9 @@
     "post": {
       "x-mojo-to": "Com::InteractiveInventory::Controllers::Items#checkInItem",
       "operationId": "checkInItem",
-      "tags": [
-        "inventory"
-      ],
-      "produces": [
-        "application/json"
-      ],
-      "consumes": [
-        "application/json"
-      ],
+      "tags": ["inventory"],
+      "produces": ["application/json"],
+      "consumes": ["application/json"],
       "parameters": [
         {
           "name": "body",
@@ -175,10 +149,7 @@
           "description": "Item check-in data",
           "schema": {
             "type": "object",
-            "required": [
-              "barcode",
-              "date"
-            ],
+            "required": ["barcode", "date"],
             "properties": {
               "barcode": {
                 "type": "string",
@@ -220,15 +191,9 @@
     "post": {
       "x-mojo-to": "Com::InteractiveInventory::Controllers::Items#resolveTransit",
       "operationId": "resolveTransit",
-      "tags": [
-        "inventory"
-      ],
-      "produces": [
-        "application/json"
-      ],
-      "consumes": [
-        "application/json"
-      ],
+      "tags": ["inventory"],
+      "produces": ["application/json"],
+      "consumes": ["application/json"],
       "parameters": [
         {
           "name": "body",
@@ -237,9 +202,7 @@
           "description": "Transit resolution data",
           "schema": {
             "type": "object",
-            "required": [
-              "barcode"
-            ],
+            "required": ["barcode"],
             "properties": {
               "barcode": {
                 "type": "string",
@@ -292,15 +255,9 @@
     "post": {
       "x-mojo-to": "Com::InteractiveInventory::Controllers::Items#renewItem",
       "operationId": "renewItem",
-      "tags": [
-        "inventory"
-      ],
-      "produces": [
-        "application/json"
-      ],
-      "consumes": [
-        "application/json"
-      ],
+      "tags": ["inventory"],
+      "produces": ["application/json"],
+      "consumes": ["application/json"],
       "parameters": [
         {
           "name": "body",
@@ -309,9 +266,7 @@
           "description": "Item renewal data",
           "schema": {
             "type": "object",
-            "required": [
-              "barcode"
-            ],
+            "required": ["barcode"],
             "properties": {
               "barcode": {
                 "type": "string",
@@ -358,6 +313,148 @@
         },
         "500": {
           "description": "Error renewing item",
+          "schema": {
+            "type": "object",
+            "properties": {
+              "error": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "/item/shelfbrowser/{itemnumber}": {
+    "get": {
+      "x-mojo-to": "Com::InteractiveInventory::Controllers::Items#shelfBrowser",
+      "operationId": "shelfBrowser",
+      "tags": ["inventory"],
+      "produces": ["application/json"],
+      "parameters": [
+        {
+          "name": "itemnumber",
+          "in": "path",
+          "required": true,
+          "type": "integer",
+          "description": "The itemnumber of the item to browse around"
+        },
+        {
+          "name": "num_each_side",
+          "in": "query",
+          "required": false,
+          "type": "integer",
+          "default": 5,
+          "description": "Number of items to return on each side of the current item"
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "Nearby items retrieved successfully",
+          "schema": {
+            "type": "object",
+            "properties": {
+              "items": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "itemnumber": {
+                      "type": "integer"
+                    },
+                    "biblionumber": {
+                      "type": "integer"
+                    },
+                    "itemcallnumber": {
+                      "type": "string"
+                    },
+                    "cn_sort": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "subtitle": {
+                      "type": "string"
+                    },
+                    "medium": {
+                      "type": "string"
+                    },
+                    "part_number": {
+                      "type": "string"
+                    },
+                    "part_name": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "prev_item": {
+                "type": "object",
+                "properties": {
+                  "itemnumber": {
+                    "type": "integer"
+                  },
+                  "biblionumber": {
+                    "type": "integer"
+                  }
+                }
+              },
+              "next_item": {
+                "type": "object",
+                "properties": {
+                  "itemnumber": {
+                    "type": "integer"
+                  },
+                  "biblionumber": {
+                    "type": "integer"
+                  }
+                }
+              },
+              "starting_homebranch": {
+                "type": "object",
+                "properties": {
+                  "code": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  }
+                }
+              },
+              "starting_location": {
+                "type": "object",
+                "properties": {
+                  "code": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  }
+                }
+              },
+              "starting_ccode": {
+                "type": "object",
+                "properties": {
+                  "code": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "400": {
+          "description": "Missing itemnumber parameter"
+        },
+        "404": {
+          "description": "Item not found"
+        },
+        "500": {
+          "description": "Error fetching nearby items",
           "schema": {
             "type": "object",
             "properties": {
