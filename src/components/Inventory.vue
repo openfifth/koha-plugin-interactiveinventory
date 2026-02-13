@@ -1590,20 +1590,24 @@ export default {
       }
 
       // Check for holds (using first_hold embed from API)
-      if (item.first_hold && this.alertSettings.showOnHoldAlerts) {
-        const holdStatus = item.first_hold.status
-        let holdMsg = `${title} (${barcode}) has a hold placed on it`
+      if (item.first_hold) {
+        item.on_hold = true // Set flag for InventoryItem badge display
 
-        if (holdStatus === 'W') {
-          holdMsg += ' and is waiting for pickup'
-        } else if (holdStatus === 'T') {
-          holdMsg += ' and is in transit to fulfill the hold'
+        if (this.alertSettings.showOnHoldAlerts) {
+          const holdStatus = item.first_hold.status
+          let holdMsg = `${title} (${barcode}) has a hold placed on it`
+
+          if (holdStatus === 'W') {
+            holdMsg += ' and is waiting for pickup'
+          } else if (holdStatus === 'T') {
+            holdMsg += ' and is in transit to fulfill the hold'
+          }
+
+          EventBus.emit('message', {
+            type: 'warning',
+            text: holdMsg
+          })
         }
-
-        EventBus.emit('message', {
-          type: 'warning',
-          text: holdMsg
-        })
       }
 
       // Check for in transit items (using transfer embed from API)
