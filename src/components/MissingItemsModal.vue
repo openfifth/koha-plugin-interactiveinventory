@@ -577,7 +577,7 @@ export default {
           const markedMissingSet = new Set(markedMissingItems || [])
 
           // Filter out items that are checked out, in transit, etc. based on session settings
-          this.missingItems = filterMissingItems({
+          const filteredItems = filterMissingItems({
             locationData: itemsToCheck,
             rightPlaceList: [],
             scannedBarcodes: scannedBarcodesSet,
@@ -588,6 +588,11 @@ export default {
               skipBranchMismatchItems: this.sessionData.skipBranchMismatchItems
             }
           })
+          // Normalize call number property name for consistent sorting
+          this.missingItems = filteredItems.map((item) => ({
+            ...item,
+            itemcallnumber: item.itemcallnumber || item.call_number || item.callnumber || 'N/A'
+          }))
 
           // Reset pagination when loading new data
           this.currentPage = 1
@@ -598,7 +603,7 @@ export default {
         .catch((error) => {
           console.error('Error getting marked missing items:', error)
           // Continue with empty markedMissingSet
-          this.missingItems = filterMissingItems({
+          const filteredItems = filterMissingItems({
             locationData: itemsToCheck,
             rightPlaceList: [],
             scannedBarcodes: scannedBarcodesSet,
@@ -609,6 +614,11 @@ export default {
               skipBranchMismatchItems: this.sessionData.skipBranchMismatchItems
             }
           })
+          // Normalize call number property name for consistent sorting
+          this.missingItems = filteredItems.map((item) => ({
+            ...item,
+            itemcallnumber: item.itemcallnumber || item.call_number || item.callnumber || 'N/A'
+          }))
 
           // Reset pagination when loading new data
           this.currentPage = 1
@@ -653,6 +663,12 @@ export default {
           if (locationItem) {
             return {
               ...locationItem,
+              // Normalize call number property name for consistent sorting
+              itemcallnumber:
+                locationItem.itemcallnumber ||
+                locationItem.call_number ||
+                locationItem.callnumber ||
+                'N/A',
               status: 'scanned'
             }
           } else {
@@ -710,6 +726,9 @@ export default {
                   if (item) {
                     return {
                       ...item,
+                      // Normalize call number property name for consistent sorting
+                      itemcallnumber:
+                        item.itemcallnumber || item.call_number || item.callnumber || 'N/A',
                       status: 'missing'
                     }
                   }
