@@ -501,13 +501,13 @@ export default {
 }
 
 .on-hold {
-  border-left: 4px solid #27ae60;
-  background-color: rgba(39, 174, 96, 0.1);
+  border-left: 4px solid #17a2b8;
+  background-color: rgba(23, 162, 184, 0.1);
 }
 
 .on-hold-badge {
   display: inline-block;
-  background-color: #27ae60;
+  background-color: #17a2b8;
   color: white;
   padding: 2px 6px;
   border-radius: 4px;
