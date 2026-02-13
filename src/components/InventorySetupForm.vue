@@ -128,42 +128,50 @@
     <div class="section-container">
       <fieldset id="optionalfilters">
         <legend>Optional filters for inventory list or comparing barcodes</legend>
-        <ul class="no-numbering">
-          <li>
-            <label for="skipCheckedOutItems">Skip/filter checked out items: </label>
-            <input type="checkbox" id="skipCheckedOutItems" v-model="skipCheckedOutItems" />
-            <span class="help-text"
-              >(Items that are currently checked out will not appear in the inventory list)</span
-            >
-          </li>
-          <li>
-            <label for="skipInTransitItems">Skip/filter in-transit items: </label>
-            <input type="checkbox" id="skipInTransitItems" v-model="skipInTransitItems" />
-            <span class="help-text"
-              >(Items that are currently in transit will not appear in the inventory list)</span
-            >
-          </li>
-          <li>
-            <label for="skipBranchMismatchItems">Skip/filter branch mismatch items: </label>
-            <input type="checkbox" id="skipBranchMismatchItems" v-model="skipBranchMismatchItems" />
-            <span class="help-text"
-              >(Items where holdingbranch differs from homebranch will not appear in the inventory
-              list)</span
-            >
-          </li>
-          <li>
-            <label for="ignoreWaitingHolds">Skip items on hold awaiting pickup: </label>
-            <input type="checkbox" id="ignoreWaitingHolds" v-model="ignoreWaitingHolds" />
-            <span class="help-text"
-              >(Items with waiting holds will not appear in the inventory list)</span
-            >
-          </li>
-          <li>
-            <label for="datelastseen">Last inventory date:</label>
-            <input type="date" id="datelastseen" v-model="dateLastSeen" class="flatpickr" />
-            (Skip records marked as seen on or after this date.)
-          </li>
-        </ul>
+        <div class="checkbox-row" @click="skipCheckedOutItems = !skipCheckedOutItems">
+          <input
+            type="checkbox"
+            id="skipCheckedOutItems"
+            v-model="skipCheckedOutItems"
+            @click.stop
+          />
+          <label for="skipCheckedOutItems">Skip/filter checked out items</label>
+          <span class="help-text"
+            >(Items that are currently checked out will not appear in the inventory list)</span
+          >
+        </div>
+        <div class="checkbox-row" @click="skipInTransitItems = !skipInTransitItems">
+          <input type="checkbox" id="skipInTransitItems" v-model="skipInTransitItems" @click.stop />
+          <label for="skipInTransitItems">Skip/filter in-transit items</label>
+          <span class="help-text"
+            >(Items that are currently in transit will not appear in the inventory list)</span
+          >
+        </div>
+        <div class="checkbox-row" @click="skipBranchMismatchItems = !skipBranchMismatchItems">
+          <input
+            type="checkbox"
+            id="skipBranchMismatchItems"
+            v-model="skipBranchMismatchItems"
+            @click.stop
+          />
+          <label for="skipBranchMismatchItems">Skip/filter branch mismatch items</label>
+          <span class="help-text"
+            >(Items where holdingbranch differs from homebranch will not appear in the inventory
+            list)</span
+          >
+        </div>
+        <div class="checkbox-row" @click="ignoreWaitingHolds = !ignoreWaitingHolds">
+          <input type="checkbox" id="ignoreWaitingHolds" v-model="ignoreWaitingHolds" @click.stop />
+          <label for="ignoreWaitingHolds">Skip items on hold awaiting pickup</label>
+          <span class="help-text"
+            >(Items with waiting holds will not appear in the inventory list)</span
+          >
+        </div>
+        <div class="form-row">
+          <label for="datelastseen">Last inventory date:</label>
+          <input type="date" id="datelastseen" v-model="dateLastSeen" class="flatpickr" />
+          <span class="help-text">(Skip records marked as seen on or after this date.)</span>
+        </div>
         <div class="form-group">
           <span class="hint"
             >Scanned items are expected to match one of the selected "not for loan" criteria if any
@@ -177,12 +185,14 @@
                 v-for="status in statusList"
                 :key="statusKey + '-' + status.authorised_value_id"
                 class="status-row"
+                @click="toggleStatus(statusKey, status.authorised_value_id)"
               >
                 <input
                   type="checkbox"
                   :id="statusKey + '-' + status.authorised_value_id"
                   :value="status.authorised_value_id"
                   v-model="selectedStatuses[statusKey]"
+                  @click.stop
                 />
                 <label :for="statusKey + '-' + status.authorised_value_id">{{
                   status.description
@@ -219,39 +229,47 @@
     <div class="section-container">
       <h2>Status Alerts</h2>
       <div class="alert-options">
-        <div class="alert-option">
-          <label for="showWithdrawnAlerts">
-            <input type="checkbox" id="showWithdrawnAlerts" v-model="showWithdrawnAlerts" />
-            Show alerts for withdrawn items
-          </label>
+        <div class="checkbox-row" @click="showWithdrawnAlerts = !showWithdrawnAlerts">
+          <input
+            type="checkbox"
+            id="showWithdrawnAlerts"
+            v-model="showWithdrawnAlerts"
+            @click.stop
+          />
+          <label for="showWithdrawnAlerts">Show alerts for withdrawn items</label>
         </div>
-        <div class="alert-option">
-          <label for="showOnHoldAlerts">
-            <input type="checkbox" id="showOnHoldAlerts" v-model="showOnHoldAlerts" />
-            Show alerts for items on hold
-          </label>
+        <div class="checkbox-row" @click="showOnHoldAlerts = !showOnHoldAlerts">
+          <input type="checkbox" id="showOnHoldAlerts" v-model="showOnHoldAlerts" @click.stop />
+          <label for="showOnHoldAlerts">Show alerts for items on hold</label>
         </div>
-        <div class="alert-option">
-          <label for="showInTransitAlerts">
-            <input type="checkbox" id="showInTransitAlerts" v-model="showInTransitAlerts" />
-            Show alerts for in-transit items
-          </label>
+        <div class="checkbox-row" @click="showInTransitAlerts = !showInTransitAlerts">
+          <input
+            type="checkbox"
+            id="showInTransitAlerts"
+            v-model="showInTransitAlerts"
+            @click.stop
+          />
+          <label for="showInTransitAlerts">Show alerts for in-transit items</label>
         </div>
-        <div class="alert-option">
-          <label for="showBranchMismatchAlerts">
-            <input
-              type="checkbox"
-              id="showBranchMismatchAlerts"
-              v-model="showBranchMismatchAlerts"
-            />
-            Show alerts for items belonging to different branches
-          </label>
+        <div class="checkbox-row" @click="showBranchMismatchAlerts = !showBranchMismatchAlerts">
+          <input
+            type="checkbox"
+            id="showBranchMismatchAlerts"
+            v-model="showBranchMismatchAlerts"
+            @click.stop
+          />
+          <label for="showBranchMismatchAlerts"
+            >Show alerts for items belonging to different branches</label
+          >
         </div>
-        <div class="alert-option">
-          <label for="showReturnClaimAlerts">
-            <input type="checkbox" id="showReturnClaimAlerts" v-model="showReturnClaimAlerts" />
-            Show alerts for unresolved return claims
-          </label>
+        <div class="checkbox-row" @click="showReturnClaimAlerts = !showReturnClaimAlerts">
+          <input
+            type="checkbox"
+            id="showReturnClaimAlerts"
+            v-model="showReturnClaimAlerts"
+            @click.stop
+          />
+          <label for="showReturnClaimAlerts">Show alerts for unresolved return claims</label>
         </div>
       </div>
       <p class="help-text">
@@ -261,53 +279,69 @@
     <div class="section-container">
       <h2>Status Resolution</h2>
       <div class="resolution-options">
-        <div class="resolution-option">
-          <label for="enableManualResolution">
-            <input type="checkbox" id="enableManualResolution" v-model="enableManualResolution" />
-            Enable manual resolution for item issues
-          </label>
+        <div class="checkbox-row" @click="enableManualResolution = !enableManualResolution">
+          <input
+            type="checkbox"
+            id="enableManualResolution"
+            v-model="enableManualResolution"
+            @click.stop
+          />
+          <label for="enableManualResolution">Enable manual resolution for item issues</label>
           <p class="help-text">
             When enabled, a resolution dialog will appear when scanning items with issues (checked
             out, lost, etc.).
           </p>
         </div>
 
-        <div class="resolution-option">
-          <label for="resolveLostItems">
-            <input type="checkbox" id="resolveLostItems" v-model="resolveLostItems" />
-            Automatically mark lost items as found
-          </label>
+        <div class="checkbox-row" @click="resolveLostItems = !resolveLostItems">
+          <input type="checkbox" id="resolveLostItems" v-model="resolveLostItems" @click.stop />
+          <label for="resolveLostItems">Automatically mark lost items as found</label>
           <p class="help-text">
             When a lost item is scanned, it will be automatically marked as found. If disabled, a
             resolution dialog will appear.
           </p>
         </div>
 
-        <div class="resolution-option">
-          <label for="resolveReturnClaims">
-            <input type="checkbox" id="resolveReturnClaims" v-model="resolveReturnClaims" />
-            Automatically resolve return claims when item is scanned
-          </label>
+        <div class="checkbox-row" @click="resolveReturnClaims = !resolveReturnClaims">
+          <input
+            type="checkbox"
+            id="resolveReturnClaims"
+            v-model="resolveReturnClaims"
+            @click.stop
+          />
+          <label for="resolveReturnClaims"
+            >Automatically resolve return claims when item is scanned</label
+          >
           <p class="help-text">
             When an item with a return claim is scanned, the claim will be automatically resolved.
           </p>
         </div>
 
-        <div class="resolution-option">
-          <label for="resolveInTransitItems">
-            <input type="checkbox" id="resolveInTransitItems" v-model="resolveInTransitItems" />
-            Automatically resolve in-transit status to current branch
-          </label>
+        <div class="checkbox-row" @click="resolveInTransitItems = !resolveInTransitItems">
+          <input
+            type="checkbox"
+            id="resolveInTransitItems"
+            v-model="resolveInTransitItems"
+            @click.stop
+          />
+          <label for="resolveInTransitItems"
+            >Automatically resolve in-transit status to current branch</label
+          >
           <p class="help-text">
             When an item in transit is scanned, the transit will be completed to the current branch.
           </p>
         </div>
 
-        <div class="resolution-option">
-          <label for="resolveWithdrawnItems">
-            <input type="checkbox" id="resolveWithdrawnItems" v-model="resolveWithdrawnItems" />
-            Automatically restore withdrawn items to circulation
-          </label>
+        <div class="checkbox-row" @click="resolveWithdrawnItems = !resolveWithdrawnItems">
+          <input
+            type="checkbox"
+            id="resolveWithdrawnItems"
+            v-model="resolveWithdrawnItems"
+            @click.stop
+          />
+          <label for="resolveWithdrawnItems"
+            >Automatically restore withdrawn items to circulation</label
+          >
           <p class="help-text">
             When a withdrawn item is scanned, it will be automatically restored to circulation.
           </p>
@@ -318,29 +352,23 @@
     <div class="section-container">
       <h2>Preview Settings</h2>
       <div class="preview-options">
-        <div class="preview-option">
-          <label for="enableShelfPreview">
-            <input type="checkbox" id="enableShelfPreview" v-model="enableShelfPreview" />
-            Enable shelf preview functionality
-          </label>
+        <div class="checkbox-row" @click="enableShelfPreview = !enableShelfPreview">
+          <input type="checkbox" id="enableShelfPreview" v-model="enableShelfPreview" @click.stop />
+          <label for="enableShelfPreview">Enable shelf preview functionality</label>
           <p class="help-text">
             Allows visualization of upcoming items on the shelf based on call number sequence.
           </p>
         </div>
-        <div class="preview-option">
-          <label for="showItemIssues">
-            <input type="checkbox" id="showItemIssues" v-model="showItemIssues" />
-            Show item issues in preview
-          </label>
+        <div class="checkbox-row" @click="showItemIssues = !showItemIssues">
+          <input type="checkbox" id="showItemIssues" v-model="showItemIssues" @click.stop />
+          <label for="showItemIssues">Show item issues in preview</label>
           <p class="help-text">
             Highlights items with special statuses (checked out, on hold, etc.) in the preview.
           </p>
         </div>
-        <div class="preview-option">
-          <label for="autoOpenPreview">
-            <input type="checkbox" id="autoOpenPreview" v-model="autoOpenPreview" />
-            Auto-open preview on first scan
-          </label>
+        <div class="checkbox-row" @click="autoOpenPreview = !autoOpenPreview">
+          <input type="checkbox" id="autoOpenPreview" v-model="autoOpenPreview" @click.stop />
+          <label for="autoOpenPreview">Auto-open preview on first scan</label>
           <p class="help-text">
             Automatically opens the shelf preview when the first item is scanned.
           </p>
@@ -820,6 +848,15 @@ export default {
       } else {
         this.selectedItypes.push(itemTypeId)
       }
+    },
+
+    toggleStatus(statusKey, statusValue) {
+      const index = this.selectedStatuses[statusKey].indexOf(statusValue)
+      if (index > -1) {
+        this.selectedStatuses[statusKey].splice(index, 1)
+      } else {
+        this.selectedStatuses[statusKey].push(statusValue)
+      }
     }
   }
 }
@@ -855,11 +892,21 @@ button {
 .status-row {
   display: flex;
   align-items: center;
-  margin-bottom: 8px;
+  gap: 0.5rem;
+  padding: 0.5rem;
+  margin: 0.25rem 0;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background-color 0.15s ease-in-out;
+}
+
+.status-row:hover {
+  background-color: #f8f9fa;
 }
 
 .status-row label {
   font-weight: normal;
+  cursor: pointer;
   /* Ensure labels are not bold */
 }
 
