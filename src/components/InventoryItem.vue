@@ -109,8 +109,7 @@
         </p>
         <p v-if="item.wrongPlace" class="item-warning"><strong>Warning:</strong></p>
         <p v-if="item.wrongPlace" class="item-warning">
-          This item may be in the wrong place. It is not in the list of expected items to be
-          scanned.
+          This item is not in the expected barcodes list{{ item.wrongPlaceReason || '' }}.
         </p>
         <p v-if="item.checked_out_date" class="item-warning"><strong>Warning:</strong></p>
         <p v-if="item.checked_out_date" class="item-warning">
