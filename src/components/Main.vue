@@ -1,9 +1,9 @@
 <template>
   <div class="notifications-container">
-    <div 
-      v-for="(message, index) in messages" 
+    <div
+      v-for="(message, index) in messages"
       :key="message.id"
-      :class="['message', message.type, { 'newest': index === messages.length - 1 }]"
+      :class="['message', message.type, { newest: index === messages.length - 1 }]"
       :style="{ top: `${(messages.length - 1 - index) * 60}px` }"
     >
       {{ message.text }}
@@ -29,10 +29,10 @@ export default {
     }
   },
   created() {
-    EventBus.on('message', this.displayMessage);
+    EventBus.on('message', this.displayMessage)
 
     // Extend session expiry if the app is being used
-    this.extendSessionIfActive();
+    this.extendSessionIfActive()
   },
   methods: {
     displayMessage(message) {
@@ -41,45 +41,45 @@ export default {
         ...message,
         id: ++this.messageIdCounter,
         timestamp: Date.now()
-      };
-      
+      }
+
       // Add message to the queue
-      this.messages.push(messageWithId);
-      
+      this.messages.push(messageWithId)
+
       // Remove message after 2.5 seconds
       setTimeout(() => {
-        this.removeMessage(messageWithId.id);
-      }, 2500);
-      
+        this.removeMessage(messageWithId.id)
+      }, 2500)
+
       // Limit to maximum 5 messages to prevent screen overflow
       if (this.messages.length > 5) {
-        this.messages.shift(); // Remove oldest message
+        this.messages.shift() // Remove oldest message
       }
     },
-    
+
     removeMessage(messageId) {
-      const index = this.messages.findIndex(msg => msg.id === messageId);
+      const index = this.messages.findIndex((msg) => msg.id === messageId)
       if (index > -1) {
-        this.messages.splice(index, 1);
+        this.messages.splice(index, 1)
       }
     },
-    
+
     async extendSessionIfActive() {
       if (isSessionActive()) {
         try {
           // If session exists, extend its expiry time
-          const currentSession = await getSession();
+          const currentSession = await getSession()
           if (currentSession) {
-            await saveSession(currentSession);
+            await saveSession(currentSession)
           }
         } catch (error) {
-          console.error('Error extending session:', error);
+          console.error('Error extending session:', error)
         }
       }
     }
   },
-  beforeDestroy() {
-    EventBus.off('message', this.displayMessage);
+  beforeUnmount() {
+    EventBus.off('message', this.displayMessage)
   }
 }
 </script>
@@ -104,7 +104,7 @@ export default {
   max-width: 400px;
   overflow: hidden;
   text-overflow: ellipsis;
-  
+
   /* Smooth transitions for positioning and fade */
   transition: all 0.3s ease-in-out;
   animation: slideInFade 0.3s ease-out;
@@ -148,7 +148,6 @@ export default {
   border-left: 4px solid #1976d2;
 }
 
-
 @keyframes slideInFade {
   0% {
     opacity: 0;
@@ -161,7 +160,8 @@ export default {
 }
 
 @keyframes fadeOut {
-  0%, 75% {
+  0%,
+  75% {
     opacity: 1;
     transform: scale(1);
   }
@@ -180,7 +180,7 @@ export default {
     width: 90%;
     max-width: 320px;
   }
-  
+
   .message {
     padding: 8px 16px;
     font-size: 12px;
@@ -190,7 +190,7 @@ export default {
     margin: 0 auto;
     text-align: center;
   }
-  
+
   .message.newest {
     font-size: 13px;
     font-weight: 600;
@@ -205,12 +205,12 @@ export default {
     width: 95%;
     max-width: 280px;
   }
-  
+
   .message {
     padding: 6px 12px;
     font-size: 11px;
   }
-  
+
   .message.newest {
     font-size: 12px;
     padding: 7px 14px;
