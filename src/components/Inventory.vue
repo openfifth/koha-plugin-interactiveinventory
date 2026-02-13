@@ -983,6 +983,13 @@ export default {
           fieldsToAmend['datelastseen'] = new Date().toISOString().slice(0, 19).replace('T', ' ')
         }
 
+        if (
+          this.sessionData.selectedLibraryId &&
+          combinedData.holding_library_id !== this.sessionData.selectedLibraryId
+        ) {
+          fieldsToAmend['holdingbranch'] = this.sessionData.selectedLibraryId
+        }
+
         // Check various status flags
         this.checkItemSpecialStatuses(combinedData)
 
