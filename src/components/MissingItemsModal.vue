@@ -64,7 +64,7 @@
                 <select v-model="sortBy" @change="applyFilters" class="filter-select">
                   <option value="title">Sort by Title</option>
                   <option value="author">Sort by Author</option>
-                  <option value="callNumber">Sort by Call Number</option>
+                  <option value="itemcallnumber">Sort by Call Number</option>
                   <option value="barcode">Sort by Barcode</option>
                 </select>
 
@@ -201,7 +201,7 @@
                 >
                   <option value="title">Sort by Title</option>
                   <option value="author">Sort by Author</option>
-                  <option value="callNumber">Sort by Call Number</option>
+                  <option value="itemcallnumber">Sort by Call Number</option>
                   <option value="barcode">Sort by Barcode</option>
                 </select>
 
