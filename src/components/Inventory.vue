@@ -59,6 +59,18 @@
                     : 'Accept all scanned barcodes'
                 }}
               </div>
+              <div class="filter-item">
+                <strong>Auto Check-in:</strong> {{ sessionData.doNotCheckIn ? 'Off' : 'On' }}
+              </div>
+              <div v-if="sessionData.checkShelvedOutOfOrder" class="filter-item">
+                <strong>Call Number Order:</strong> Checking
+              </div>
+              <div v-if="manualResolutionEnabled" class="filter-item">
+                <strong>Manual Resolution:</strong> On
+              </div>
+              <div v-if="getAutoResolutionsText()" class="filter-item">
+                <strong>Auto-resolve:</strong> {{ getAutoResolutionsText() }}
+              </div>
             </div>
           </div>
         </div>
@@ -521,6 +533,16 @@ export default {
     getActiveFiltersCount() {
       return this._getActiveFiltersCount(this.sessionData)
     },
+
+    getAutoResolutionsText() {
+      const items = []
+      if (this.resolutionSettings.resolveLostItems) items.push('lost')
+      if (this.resolutionSettings.resolveReturnClaims) items.push('return claims')
+      if (this.resolutionSettings.resolveInTransitItems) items.push('in-transit')
+      if (this.resolutionSettings.resolveWithdrawnItems) items.push('withdrawn')
+      return items.length > 0 ? items.join(', ') : ''
+    },
+
     getTransitInfo(item) {
       return this._getTransitInfo(item)
     },
