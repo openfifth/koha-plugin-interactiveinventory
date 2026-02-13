@@ -114,7 +114,12 @@
         <p v-if="item.checked_out_date" class="item-warning"><strong>Warning:</strong></p>
         <p v-if="item.checked_out_date" class="item-warning">
           This item was checked out on: {{ item.checked_out_date }}
-          <span v-if="sessionData.doNotCheckIn"> and has not been checked in. </span>
+          <span v-if="item.resolutionAction === 'checked in'"> and has been checked in. </span>
+          <span v-else-if="item.resolutionAction === 'renewed'"> and has been renewed. </span>
+          <span v-else-if="item.resolutionAction === 'skipped'">
+            and was left as checked out.
+          </span>
+          <span v-else-if="sessionData.doNotCheckIn"> and has not been checked in. </span>
           <span v-else> and has been checked in automatically. </span>
         </p>
         <p v-if="item.hold_found" class="item-warning"><strong>Hold Found:</strong></p>
