@@ -1177,9 +1177,39 @@ export default {
           )
           if (!isInRightPlaceList) {
             combinedData.wrongPlace = true // Flag the item as in the wrong place
+
+            // Determine specific reason why item is unexpected
+            const reasons = []
+            const homeBranch = combinedData.homebranch || combinedData.home_library_id
+            if (
+              this.sessionData.selectedLibraryId &&
+              homeBranch !== this.sessionData.selectedLibraryId
+            ) {
+              reasons.push(
+                `home library is ${homeBranch || 'unknown'}, not ${this.sessionData.selectedLibraryId}`
+              )
+            }
+            const itemLocation = combinedData.location || combinedData.permanent_location
+            if (
+              this.sessionData.shelvingLocation &&
+              itemLocation !== this.sessionData.shelvingLocation
+            ) {
+              reasons.push(
+                `shelving location is ${itemLocation || 'unset'}, not ${this.sessionData.shelvingLocation}`
+              )
+            }
+            if (this.sessionData.ccode && combinedData.collection_code !== this.sessionData.ccode) {
+              reasons.push(
+                `collection code is ${combinedData.collection_code || 'unset'}, not ${this.sessionData.ccode}`
+              )
+            }
+
+            const reasonText = reasons.length > 0 ? ` (${reasons.join('; ')})` : ''
+            combinedData.wrongPlaceReason = reasonText
+
             EventBus.emit('message', {
               type: 'warning',
-              text: `Item ${combinedData.external_id} is not in the expected barcodes list`
+              text: `Item ${combinedData.external_id} is not in the expected barcodes list${reasonText}`
             })
           } else {
             EventBus.emit('message', {
