@@ -98,8 +98,12 @@ export default {
       itemsPerPage: 6,
       fetchError: null,
       renderKey: 0,
-      currentItem: null,
-      allItems: []
+      // Shelf browser response data
+      startingLocation: null,
+      startingHomebranch: null,
+      startingCcode: null,
+      prevItem: null,
+      nextItem: null
     }
   },
   computed: {
@@ -114,15 +118,16 @@ export default {
   },
   watch: {
     show(newVal) {
-      if (newVal) {
+      if (newVal && this.lastScannedItem) {
         this.initializeData()
       }
     },
     lastScannedItem: {
       handler(newVal) {
         if (newVal && this.show) {
-          // Force clear the current items before fetching new ones
+          // Reset and fetch new items
           this.upcomingItems = []
+          this.currentPage = 1
           this.initializeData()
         }
       },
@@ -145,71 +150,64 @@ export default {
     getCurrentLocation() {
       if (!this.lastScannedItem) return 'N/A'
 
+      // Use starting_location from API response if available
+      if (this.startingLocation && this.startingLocation.description) {
+        return this.startingLocation.description
+      }
+
       const location = this.lastScannedItem.location || ''
       return this.getAuthorizedValueDesc(location)
     },
 
     async fetchUpcomingItems() {
-      // If we don't have a current item, show empty state
-      if (!this.currentItem) {
+      // If we don't have a lastScannedItem with itemnumber, show empty state
+      if (!this.lastScannedItem || !this.lastScannedItem.item_id) {
         this.upcomingItems = []
         return
       }
 
-      // 1. First filter: Only include items with the same location and library
-      const sameLocationAndLibrary = this.allItems.filter(
-        (item) =>
-          item.location === this.currentItem.location &&
-          item.library === this.currentItem.library &&
-          item.barcode !== this.currentItem.barcode
-      )
+      this.loading = true
+      this.fetchError = null
 
-      // 2. Compare call numbers to find items that should be on the same shelf
-      const normalizedCurrentCnSort = this.stripCnSort(this.currentItem.cn_sort || '')
+      try {
+        // Use Koha's shelf browser API endpoint
+        const response = await apiService.get(
+          `/api/v1/contrib/interactiveinventory/item/shelfbrowser/${this.lastScannedItem.item_id}`,
+          { num_each_side: 10 }
+        )
 
-      // Find items with matching call number class
-      const sameShelfItems = sameLocationAndLibrary.filter((item) => {
-        // Skip items without call numbers
-        if (!item.cn_sort) return false
+        // Store location info for display
+        this.startingLocation = response.starting_location
+        this.startingHomebranch = response.starting_homebranch
+        this.startingCcode = response.starting_ccode
 
-        // Check if this item matches the current item's call number classification
-        return this.compareCallNumbers(this.currentItem.cn_sort, item.cn_sort)
-      })
+        // Map the response items to our display format
+        this.upcomingItems = (response.items || []).map((item) => ({
+          itemnumber: item.itemnumber,
+          biblionumber: item.biblionumber,
+          itemcallnumber: item.itemcallnumber,
+          cn_sort: item.cn_sort,
+          title: item.title || 'Unknown Title',
+          subtitle: item.subtitle,
+          author: '', // Not provided by shelf browser API
+          barcode: '', // Not provided by shelf browser API
+          // Issue flags - would need additional API call to get these
+          checked_out: false,
+          missing: false,
+          in_transit: false,
+          on_hold: false
+        }))
 
-      // If no matching items on the same shelf, show empty state
-      if (sameShelfItems.length === 0) {
+        // Store prev/next for pagination
+        this.prevItem = response.prev_item
+        this.nextItem = response.next_item
+      } catch (error) {
+        console.error('Error fetching shelf browser data:', error)
+        this.fetchError = error.message
         this.upcomingItems = []
-        return
+      } finally {
+        this.loading = false
       }
-
-      // 3. Add the current item temporarily to sort everything together
-      const allShelfItems = [
-        ...sameShelfItems,
-        {
-          ...this.currentItem,
-          isCurrentItem: true // Mark as current item
-        }
-      ]
-
-      // 4. Sort all items by call number
-      allShelfItems.sort((a, b) => (a.cn_sort || '').localeCompare(b.cn_sort || ''))
-
-      // 5. Find the index of the current item after sorting
-      const currentItemIndex = allShelfItems.findIndex((item) => item.isCurrentItem)
-
-      // 6. Extract items before and after the current item
-      const itemsAfter =
-        currentItemIndex < allShelfItems.length - 1
-          ? allShelfItems.slice(currentItemIndex + 1).slice(0, 15)
-          : []
-
-      const itemsBefore =
-        currentItemIndex > 0
-          ? allShelfItems.slice(Math.max(0, currentItemIndex - 5), currentItemIndex)
-          : []
-
-      // 7. Combine the lists with after items first (they're what the user will see next)
-      this.upcomingItems = [...itemsAfter, ...itemsBefore]
     },
 
     nextPage() {
@@ -276,147 +274,18 @@ export default {
       return apiService.fetchAuthorizedValues(category)
     },
 
-    // Simplify the stripCnSort method to only handle Dewey and LoC formats
-    stripCnSort(cnSort) {
-      // Convert to lowercase for case-insensitive comparison
-      if (!cnSort || cnSort.trim() === '') return ''
-
-      const lowerCnSort = cnSort.toLowerCase().trim()
-
-      // Case 1: Dewey decimal format (like "641.5" or "641.59" or "641")
-      // Extract the main class (first 3 digits before any decimal)
-      const deweyMatch = lowerCnSort.match(/^(\d{1,3})(?:\.\d+)?/)
-      if (deweyMatch) {
-        return deweyMatch[1] // Just the main class numbers
-      }
-
-      // Case 2: Library of Congress format (like "QA76.73.J38" or "PR6058.A69 B4")
-      // Extract the main class and number part (e.g., "QA76")
-      const locMatch = lowerCnSort.match(/^([a-z]+)(\d+)/)
-      if (locMatch) {
-        return locMatch[1] + locMatch[2] // e.g., "qa76"
-      }
-
-      // For everything else, return as is
-      return lowerCnSort
-    },
-
-    // Simplify the compareCallNumbers method
-    compareCallNumbers(cn1, cn2) {
-      // Handle edge cases - if either call number is empty
-      if (!cn1 || !cn2) {
-        return false
-      }
-
-      // Get normalized versions
-      const normalized1 = this.stripCnSort(cn1)
-      const normalized2 = this.stripCnSort(cn2)
-
-      // Compare normalized versions
-      const match = normalized1 === normalized2
-
-      return match
-    },
-
-    // Helper methods to consistently extract biblio data
-    getBiblioTitle(item) {
-      if (!item.biblio) return 'Unknown Title'
-
-      if (item.biblio._custom && item.biblio._custom.value) {
-        return item.biblio._custom.value.title || 'Unknown Title'
-      }
-
-      return item.biblio.title || 'Unknown Title'
-    },
-
-    getBiblioAuthor(item) {
-      if (!item.biblio) return 'Unknown Author'
-
-      if (item.biblio._custom && item.biblio._custom.value) {
-        return item.biblio._custom.value.author || 'Unknown Author'
-      }
-
-      return item.biblio.author || 'Unknown Author'
-    },
-
-    // Update the location code mapping function to use props first, then localStorage
-    mapLocationCodeToName(locationCode) {
-      if (!locationCode) return ''
-
-      // First try to use props
-      if (
-        this.authorizedValueCategories &&
-        this.authorizedValueCategories.LOC &&
-        this.authorizedValueCategories.LOC[locationCode]
-      ) {
-        return this.authorizedValueCategories.LOC[locationCode]
-      }
-
-      // Fallback to localStorage if not found in props
-      try {
-        // Get authorized values map from localStorage
-        const authorizedValuesLOC = JSON.parse(localStorage.getItem('authorizedValues_LOC') || '{}')
-
-        // If we have a mapping for this code, use it
-        if (authorizedValuesLOC[locationCode]) {
-          return authorizedValuesLOC[locationCode]
-        }
-
-        // No mapping found, return the original code
-        return locationCode
-      } catch (error) {
-        console.error('Error accessing location mappings:', error)
-        return locationCode
-      }
-    },
-
-    // Update initializeData to use the mapping from localStorage
+    // Initialize data and fetch nearby items from API
     initializeData() {
       if (!this.lastScannedItem) {
-        this.currentItem = null
-        this.allItems = []
+        this.upcomingItems = []
         return
       }
 
-      // Map location code to full name using authorized values
-      const locationCode = this.lastScannedItem.location || ''
-      const locationName = this.mapLocationCodeToName(locationCode)
+      // Reset pagination
+      this.currentPage = 1
 
-      // Initialize current item with location name instead of code
-      this.currentItem = {
-        barcode: this.lastScannedItem.external_id || '',
-        call_number: this.lastScannedItem.callnumber || '',
-        cn_sort: this.lastScannedItem.call_number_sort || '',
-        location: locationName, // Use location name from mapping
-        library: this.lastScannedItem.holding_library_id || '',
-        title: this.getBiblioTitle(this.lastScannedItem),
-        author: this.getBiblioAuthor(this.lastScannedItem)
-      }
-
-      // Process location_data
-      if (
-        this.sessionData?.response_data?.location_data &&
-        Array.isArray(this.sessionData.response_data.location_data)
-      ) {
-        this.allItems = this.sessionData.response_data.location_data.map((item) => ({
-          barcode: item.barcode || item.external_id || '',
-          call_number: item.itemcallnumber || item.callnumber || '',
-          cn_sort: item.cn_sort || item.call_number_sort || '',
-          location: item.location || '', // This is already the location name
-          library: item.homebranch || item.holding_library_id || '',
-          title: item.title || 'Unknown Title',
-          author: item.author || 'Unknown Author',
-          checked_out: item.onloan || false,
-          missing: item.itemlost === 'Missing' || item.itemlost === '1' || false,
-          in_transit: false,
-          on_hold: false
-        }))
-
-        // Now fetch upcoming items
-        this.fetchUpcomingItems()
-      } else {
-        this.allItems = []
-      }
+      // Fetch nearby items using Koha's shelf browser API
+      this.fetchUpcomingItems()
     }
   },
 
