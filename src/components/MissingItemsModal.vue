@@ -1316,6 +1316,9 @@ export default {
             this.processedItems[itemIndex].status = 'scanned'
           }
 
+          // Emit event to add item to scanned items list in parent
+          this.$emit('item-marked-found', item)
+
           // Show success message
           EventBus.emit('message', {
             type: 'success',
