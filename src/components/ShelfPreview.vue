@@ -170,10 +170,23 @@ export default {
       this.fetchError = null
 
       try {
-        // Use Koha's shelf browser API endpoint
+        // Use Koha's shelf browser API endpoint with inventory session filters
+        const params = { num_each_side: 10 }
+
+        // Pass session filters to constrain shelf browser to current inventory scope
+        if (this.sessionData?.selectedLibraryId) {
+          params.homebranch = this.sessionData.selectedLibraryId
+        }
+        if (this.sessionData?.shelvingLocation) {
+          params.location = this.sessionData.shelvingLocation
+        }
+        if (this.sessionData?.ccode) {
+          params.ccode = this.sessionData.ccode
+        }
+
         const response = await apiService.get(
           `/api/v1/contrib/interactiveinventory/item/shelfbrowser/${this.lastScannedItem.item_id}`,
-          { num_each_side: 10 }
+          params
         )
 
         // Store location info for display
