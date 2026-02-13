@@ -255,6 +255,7 @@
       :scannedItems="items"
       @close="toggleMissingItemsModal"
       @missing-items-updated="handleMissingItemsUpdated"
+      @item-marked-found="handleItemMarkedFound"
     ></MissingItemsModal>
 
     <!-- Shelf Preview Component -->
@@ -2038,6 +2039,32 @@ export default {
 
     async handleMissingItemsUpdated() {
       await this._handleMissingItemsUpdated()
+    },
+
+    handleItemMarkedFound(item) {
+      // Convert modal item format to scanned item format
+      const scannedItem = {
+        external_id: item.barcode,
+        biblio_id: item.biblionumber,
+        item_id: item.itemnumber,
+        callnumber: item.itemcallnumber,
+        call_number_sort: item.cn_sort,
+        homebranch: item.homebranch,
+        holdingbranch: item.holdingbranch,
+        location: item.location,
+        itype: item.itype,
+        ccode: item.ccode,
+        biblio: {
+          title: item.title,
+          author: item.author
+        },
+        // Mark as manually found from dashboard
+        manuallyMarkedFound: true,
+        isOnExpectedList: true
+      }
+
+      // Add to items list and save
+      this.processItem(scannedItem)
     }
   }
 }
