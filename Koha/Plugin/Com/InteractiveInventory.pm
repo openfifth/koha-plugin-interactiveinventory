@@ -44,6 +44,15 @@ sub tool {
     my ( $self, $args ) = @_;
     my $cgi = $self->{cgi};
 
+    # Route based on action parameter to handle custom methods
+    # This allows users with only 'plugins.tool' permission to access all tool functionality
+    my $action = $cgi->param('action') || '';
+
+    if ( $action eq 'start_session' ) {
+        return $self->start_session($args);
+    }
+
+    # Default: render the main tool template
     # Get template using get_template() method
     my $template = $self->get_template({ file => 'InteractiveInventory.tt' });
 

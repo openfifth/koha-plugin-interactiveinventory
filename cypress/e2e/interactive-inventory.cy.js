@@ -276,7 +276,7 @@ describe('Interactive Inventory Plugin', () => {
     it('should pass all form values to the session start request', () => {
       cy.visit(pluginUrl)
 
-      cy.intercept('GET', '**/run.pl?*method=start_session*').as('startSession')
+      cy.intercept('GET', '**/run.pl?*method=tool*action=start_session*').as('startSession')
 
       cy.get('#inventoryDate').clear().type('2025-06-15')
       cy.get('#compareBarcodes').check()

@@ -117,7 +117,7 @@ export function useSessionManagement() {
     EventBus.emit('message', { type: 'status', text: 'Starting inventory session...' })
 
     fetch(
-      `/cgi-bin/koha/plugins/run.pl?class=Koha::Plugin::Com::InteractiveInventory&method=start_session&session_data=${encodeURIComponent(JSON.stringify(sessionData))}`,
+      `/cgi-bin/koha/plugins/run.pl?class=Koha::Plugin::Com::InteractiveInventory&method=tool&action=start_session&session_data=${encodeURIComponent(JSON.stringify(sessionData))}`,
       {
         method: 'GET',
         headers: {
