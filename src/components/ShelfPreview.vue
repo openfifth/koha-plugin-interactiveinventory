@@ -1,18 +1,18 @@
 <template>
   <div class="shelf-preview-container" v-if="show" :key="renderKey">
     <div class="shelf-preview-header">
-      <h3>Upcoming Items Preview</h3>
+      <h3>Shelf Browser</h3>
       <button class="close-button" @click="$emit('close')">&times;</button>
     </div>
 
     <div v-if="loading" class="loading-state">
       <div class="spinner"></div>
-      <p>Loading upcoming items...</p>
+      <p>Loading shelf...</p>
     </div>
 
     <div v-else-if="upcomingItems.length === 0" class="empty-state">
       <p v-if="lastScannedItem">No items found on the same shelf as the current item.</p>
-      <p v-else>Scan an item to see upcoming items on the shelf.</p>
+      <p v-else>Scan an item to browse the shelf.</p>
       <p v-if="fetchError" class="error-message">{{ fetchError }}</p>
     </div>
 
@@ -30,14 +30,18 @@
 
       <div class="items-grid">
         <div
-          v-for="(item, index) in visibleItems"
+          v-for="item in visibleItems"
           :key="item.biblionumber + '-' + item.itemnumber"
           class="item-card"
-          :class="{ 'next-expected': index === 0 }"
+          :class="{
+            'current-item': isCurrentItem(item),
+            'next-expected': isNextItem(item)
+          }"
         >
           <div class="item-card-header">
-            <span class="call-number">{{ item.itemcallnumber }}</span>
-            <span v-if="index === 0" class="next-label">NEXT</span>
+            <span class="call-number">{{ item.itemcallnumber || 'No call number' }}</span>
+            <span v-if="isCurrentItem(item)" class="current-label">SCANNED</span>
+            <span v-else-if="isNextItem(item)" class="next-label">NEXT</span>
           </div>
           <div class="item-card-body">
             <h4 class="item-title">{{ item.title }}</h4>
@@ -57,11 +61,11 @@
       </div>
 
       <div class="pagination-controls">
-        <button @click="prevPage" :disabled="currentPage === 1" class="nav-button">Previous</button>
-        <span class="pagination-info">{{ currentPage }} of {{ totalPages }}</span>
-        <button @click="nextPage" :disabled="currentPage === totalPages" class="nav-button">
-          Next
+        <button @click="goBack" :disabled="!canGoBack" class="nav-button">← Back</button>
+        <button @click="centerOnScanned" class="nav-button center-btn" title="Go to scanned item">
+          ● Scanned Item
         </button>
+        <button @click="goForward" :disabled="!canGoForward" class="nav-button">Forward →</button>
       </div>
     </div>
   </div>
@@ -94,8 +98,8 @@ export default {
     return {
       loading: false,
       upcomingItems: [],
-      currentPage: 1,
-      itemsPerPage: 6,
+      currentIndex: 0, // Index of first visible item
+      itemsPerPage: 5,
       fetchError: null,
       renderKey: 0,
       // Shelf browser response data
@@ -103,17 +107,32 @@ export default {
       startingHomebranch: null,
       startingCcode: null,
       prevItem: null,
-      nextItem: null
+      nextItem: null,
+      windowWidth: window.innerWidth
     }
   },
   computed: {
-    visibleItems() {
-      const start = (this.currentPage - 1) * this.itemsPerPage
-      const end = start + this.itemsPerPage
-      return this.upcomingItems.slice(start, end)
+    responsiveItemsPerPage() {
+      if (this.windowWidth < 480) return 2
+      if (this.windowWidth < 768) return 3
+      if (this.windowWidth < 1024) return 4
+      return 5
     },
-    totalPages() {
-      return Math.ceil(this.upcomingItems.length / this.itemsPerPage) || 1
+    visibleItems() {
+      return this.upcomingItems.slice(
+        this.currentIndex,
+        this.currentIndex + this.responsiveItemsPerPage
+      )
+    },
+    canGoBack() {
+      return this.currentIndex > 0
+    },
+    canGoForward() {
+      return this.currentIndex + this.responsiveItemsPerPage < this.upcomingItems.length
+    },
+    scannedItemIndex() {
+      if (!this.lastScannedItem) return -1
+      return this.upcomingItems.findIndex((i) => i.itemnumber === this.lastScannedItem.item_id)
     }
   },
   watch: {
@@ -127,7 +146,7 @@ export default {
         if (newVal && this.show) {
           // Reset and fetch new items
           this.upcomingItems = []
-          this.currentPage = 1
+          this.currentIndex = 0
           this.initializeData()
         }
       },
@@ -170,10 +189,8 @@ export default {
       this.fetchError = null
 
       try {
-        // Use Koha's shelf browser API endpoint with inventory session filters
+        // Use shelf browser API with inventory session filters
         const params = { num_each_side: 10 }
-
-        // Pass session filters to constrain shelf browser to current inventory scope
         if (this.sessionData?.selectedLibraryId) {
           params.homebranch = this.sessionData.selectedLibraryId
         }
@@ -200,6 +217,7 @@ export default {
           biblionumber: item.biblionumber,
           itemcallnumber: item.itemcallnumber,
           cn_sort: item.cn_sort,
+          location: item.location,
           title: item.title || 'Unknown Title',
           subtitle: item.subtitle,
           author: '', // Not provided by shelf browser API
@@ -223,16 +241,30 @@ export default {
       }
     },
 
-    nextPage() {
-      if (this.currentPage < this.totalPages) {
-        this.currentPage++
+    goForward() {
+      if (this.canGoForward) {
+        this.currentIndex += this.responsiveItemsPerPage
       }
     },
 
-    prevPage() {
-      if (this.currentPage > 1) {
-        this.currentPage--
+    goBack() {
+      if (this.canGoBack) {
+        this.currentIndex = Math.max(0, this.currentIndex - this.responsiveItemsPerPage)
       }
+    },
+
+    centerOnScanned() {
+      if (this.scannedItemIndex === -1) return
+      // Center the scanned item in the view
+      const halfPage = Math.floor(this.responsiveItemsPerPage / 2)
+      this.currentIndex = Math.max(0, this.scannedItemIndex - halfPage)
+      // Don't go past the end
+      const maxIndex = Math.max(0, this.upcomingItems.length - this.responsiveItemsPerPage)
+      this.currentIndex = Math.min(this.currentIndex, maxIndex)
+    },
+
+    handleResize() {
+      this.windowWidth = window.innerWidth
     },
 
     getAuthorizedValueDesc(code) {
@@ -288,17 +320,37 @@ export default {
     },
 
     // Initialize data and fetch nearby items from API
-    initializeData() {
+    async initializeData() {
       if (!this.lastScannedItem) {
         this.upcomingItems = []
         return
       }
 
-      // Reset pagination
-      this.currentPage = 1
+      // Reset to start
+      this.currentIndex = 0
 
-      // Fetch nearby items using Koha's shelf browser API
-      this.fetchUpcomingItems()
+      // Fetch nearby items and then center on scanned item
+      await this.fetchUpcomingItems()
+
+      // Center view on the scanned item
+      this.$nextTick(() => {
+        this.centerOnScanned()
+      })
+    },
+
+    // Check if this item is the currently scanned item
+    isCurrentItem(item) {
+      return this.lastScannedItem && item.itemnumber === this.lastScannedItem.item_id
+    },
+
+    // Check if this item is the next one after the scanned item
+    isNextItem(item) {
+      if (!this.lastScannedItem) return false
+      const currentIndex = this.upcomingItems.findIndex(
+        (i) => i.itemnumber === this.lastScannedItem.item_id
+      )
+      if (currentIndex === -1 || currentIndex >= this.upcomingItems.length - 1) return false
+      return item.itemnumber === this.upcomingItems[currentIndex + 1].itemnumber
     }
   },
 
@@ -307,10 +359,17 @@ export default {
   },
 
   mounted() {
+    // Add resize listener for responsive items per page
+    window.addEventListener('resize', this.handleResize)
+
     // Initialize on mount if the component is shown and we have a lastScannedItem
     if (this.show && this.lastScannedItem) {
       this.initializeData()
     }
+  },
+
+  beforeUnmount() {
+    window.removeEventListener('resize', this.handleResize)
   }
 }
 </script>
@@ -420,7 +479,7 @@ export default {
 
 .items-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  grid-template-columns: repeat(5, 1fr);
   gap: 15px;
   margin-bottom: 20px;
 }
@@ -438,6 +497,12 @@ export default {
 .item-card:hover {
   transform: translateY(-3px);
   box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
+}
+
+.item-card.current-item {
+  border-color: #2196f3;
+  box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.3);
+  background: #e3f2fd;
 }
 
 .item-card.next-expected {
@@ -458,6 +523,15 @@ export default {
   font-weight: 600;
   font-size: 0.9rem;
   color: #333;
+}
+
+.current-label {
+  background: #2196f3;
+  color: white;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-weight: 700;
 }
 
 .next-label {
@@ -570,9 +644,20 @@ export default {
   cursor: not-allowed;
 }
 
-.pagination-info {
-  font-size: 0.9rem;
-  color: #666;
+.nav-button.center-btn {
+  background: #e3f2fd;
+  border-color: #2196f3;
+  color: #1976d2;
+}
+
+.nav-button.center-btn:hover {
+  background: #bbdefb;
+}
+
+@media (max-width: 1024px) {
+  .items-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
 }
 
 @media (max-width: 768px) {
@@ -582,12 +667,33 @@ export default {
   }
 
   .items-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(3, 1fr);
   }
 
   .current-location-info {
     flex-direction: column;
     gap: 10px;
+  }
+
+  .pagination-controls {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .nav-button {
+    padding: 6px 12px;
+    font-size: 0.85rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .items-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .nav-button.center-btn {
+    order: -1;
+    width: 100%;
   }
 }
 </style>
