@@ -210,14 +210,9 @@
         <div class="modal-checkboxes">
           <input type="checkbox" id="exportToCSV" v-model="exportToCSV" /> Export to CSV
         </div>
-        <div class="modal-checkboxes">
-          <input
-            type="checkbox"
-            id="exportMissingOnly"
-            v-model="exportMissingOnly"
-            v-if="exportToCSV"
-          />
-          Export missing items only (items not scanned)
+        <div v-if="exportToCSV" class="modal-checkboxes">
+          <input type="checkbox" id="exportMissingOnly" v-model="exportMissingOnly" />
+          <label for="exportMissingOnly">Export missing items only (items not scanned)</label>
         </div>
         <div class="modal-checkboxes">
           <input type="checkbox" v-model="markMissingItems" id="mark-missing-items" /> Mark
