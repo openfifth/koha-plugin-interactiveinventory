@@ -125,11 +125,11 @@
           <span v-else> and has been checked in automatically. </span>
         </p>
         <p v-if="item.hold_found" class="item-warning"><strong>Hold Found:</strong></p>
-        <p v-if="item.hold_found" class="item-warning">
-          This item has been trapped for a hold. Do not reshelve.
+        <p v-if="item.hold_found" class="item-warning" v-html="holdFoundMessage"></p>
+        <p v-if="item.needs_transfer && !item.hold_needs_transfer" class="item-warning">
+          <strong>Transfer Required:</strong>
         </p>
-        <p v-if="item.needs_transfer" class="item-warning"><strong>Transfer Required:</strong></p>
-        <p v-if="item.needs_transfer" class="item-warning">
+        <p v-if="item.needs_transfer && !item.hold_needs_transfer" class="item-warning">
           This item needs to be transferred to {{ item.transfer_to }}. Please initiate the transfer
           process to move this item to its correct location.
         </p>
@@ -303,6 +303,19 @@ export default {
       const lostStatusValue = this.item.lost_status
       const reason = this.authorizedValues[lostStatusValue]
       return reason || 'Unknown'
+    },
+    holdFoundMessage() {
+      if (!this.item.hold_found) return ''
+      let msg = 'This item has been trapped for a hold'
+      if (this.item.hold_patron_name) {
+        msg += ` for <strong>${this.item.hold_patron_name}</strong>`
+      }
+      if (this.item.hold_needs_transfer) {
+        msg += `. Transfer to <strong>${this.item.hold_pickup_branch}</strong> for pickup.`
+      } else {
+        msg += '. Do not reshelve.'
+      }
+      return msg
     }
   },
   methods: {

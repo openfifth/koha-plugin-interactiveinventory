@@ -1286,6 +1286,9 @@ export default {
           if (checkInResult && checkInResult.hold_found) {
             combinedData.hold_found = true
             combinedData.hold_message = checkInResult.hold_message
+            combinedData.hold_patron_name = checkInResult.hold_patron_name
+            combinedData.hold_pickup_branch = checkInResult.hold_pickup_branch
+            combinedData.hold_needs_transfer = checkInResult.hold_needs_transfer
           }
           if (checkInResult && checkInResult.needs_transfer) {
             combinedData.needs_transfer = true
@@ -1387,7 +1390,16 @@ export default {
         let message = 'Item checked in successfully'
         let messageType = 'status'
         if (data.hold_found) {
-          message = `Item ${barcode} checked in - hold found. Do not reshelve.`
+          let holdMsg = `Item ${barcode} checked in - hold found`
+          if (data.hold_patron_name) {
+            holdMsg += ` for ${data.hold_patron_name}`
+          }
+          if (data.hold_needs_transfer) {
+            holdMsg += `. Transfer to ${data.hold_pickup_branch} for pickup.`
+          } else {
+            holdMsg += `. Do not reshelve.`
+          }
+          message = holdMsg
           messageType = 'warning'
         } else if (data.needs_transfer) {
           message = `Item ${barcode} checked in - needs transfer to ${data.transfer_to}.`
@@ -1900,6 +1912,9 @@ export default {
               if (result.result && result.result.hold_found) {
                 updatedItem.hold_found = true
                 updatedItem.hold_message = result.result.hold_message
+                updatedItem.hold_patron_name = result.result.hold_patron_name
+                updatedItem.hold_pickup_branch = result.result.hold_pickup_branch
+                updatedItem.hold_needs_transfer = result.result.hold_needs_transfer
               }
               if (result.result && result.result.needs_transfer) {
                 updatedItem.needs_transfer = true
