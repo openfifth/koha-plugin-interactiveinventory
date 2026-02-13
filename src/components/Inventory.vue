@@ -863,7 +863,7 @@ export default {
           {
             headers: {
               Accept: 'application/json',
-              'x-koha-embed': 'biblio,transfer,first_hold,return_claim'
+              'x-koha-embed': 'biblio,checkout,transfer,first_hold,return_claim'
             }
           }
         )
@@ -1011,6 +1011,23 @@ export default {
                 }
               } catch (error) {
                 console.error('Error fetching patron details:', error)
+              }
+            }
+
+            // Check renewability if checkout data is available
+            if (combinedData.checkout && combinedData.checkout.checkout_id) {
+              try {
+                const renewalResponse = await fetch(
+                  `/api/v1/checkouts/${combinedData.checkout.checkout_id}/allows_renewal`,
+                  { headers: { Accept: 'application/json' } }
+                )
+                if (renewalResponse.ok) {
+                  const renewalData = await renewalResponse.json()
+                  combinedData.canRenew = renewalData.allows_renewal
+                  combinedData.renewError = renewalData.error || null
+                }
+              } catch (error) {
+                console.error('Error checking renewability:', error)
               }
             }
 

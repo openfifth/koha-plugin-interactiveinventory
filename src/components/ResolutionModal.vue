@@ -21,7 +21,10 @@
 
               <div v-if="type === 'checkedout'" class="issue-details">
                 <p><strong>Checked out to:</strong> {{ patronName || 'Unknown Patron' }}</p>
-                <p><strong>Due date:</strong> {{ formatDate(item.due_date) }}</p>
+                <p>
+                  <strong>Due date:</strong>
+                  {{ formatDate(item.checkout?.due_date || item.due_date) }}
+                </p>
               </div>
 
               <div v-if="type === 'lost'" class="issue-details">
@@ -64,10 +67,21 @@
                 </p>
               </div>
 
-              <div class="option">
-                <input type="radio" id="option-renew" v-model="selectedAction" value="renew" />
+              <div class="option" :class="{ disabled: item.canRenew === false }">
+                <input
+                  type="radio"
+                  id="option-renew"
+                  v-model="selectedAction"
+                  value="renew"
+                  :disabled="item.canRenew === false"
+                />
                 <label for="option-renew">Renew the checkout</label>
-                <p class="description">Extend the due date for the current patron.</p>
+                <p class="description" v-if="item.canRenew !== false">
+                  Extend the due date for the current patron.
+                </p>
+                <p class="description not-renewable" v-else>
+                  Not renewable: {{ item.renewError || 'This item cannot be renewed.' }}
+                </p>
               </div>
 
               <div class="option">
@@ -896,6 +910,18 @@ export default {
 
 .option:hover {
   background-color: #f9f9f9;
+}
+
+.option.disabled {
+  opacity: 0.5;
+}
+
+.option.disabled label {
+  cursor: not-allowed;
+}
+
+.not-renewable {
+  color: #c0392b;
 }
 
 .option input[type='radio'] {
