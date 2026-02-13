@@ -346,6 +346,27 @@
           "type": "integer",
           "default": 5,
           "description": "Number of items to return on each side of the current item"
+        },
+        {
+          "name": "homebranch",
+          "in": "query",
+          "required": false,
+          "type": "string",
+          "description": "Filter by home library branch code"
+        },
+        {
+          "name": "location",
+          "in": "query",
+          "required": false,
+          "type": "string",
+          "description": "Filter by shelving location code"
+        },
+        {
+          "name": "ccode",
+          "in": "query",
+          "required": false,
+          "type": "string",
+          "description": "Filter by collection code"
         }
       ],
       "responses": {
