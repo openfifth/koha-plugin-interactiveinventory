@@ -149,6 +149,9 @@
           <li>
             <label for="ignoreWaitingHolds">Skip items on hold awaiting pickup: </label>
             <input type="checkbox" id="ignoreWaitingHolds" v-model="ignoreWaitingHolds" />
+            <span class="help-text"
+              >(Items with waiting holds will not appear in the inventory list)</span
+            >
           </li>
           <li>
             <label for="datelastseen">Last inventory date:</label>

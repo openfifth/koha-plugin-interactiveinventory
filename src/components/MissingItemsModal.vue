@@ -458,10 +458,10 @@ export default {
       if (!this.missingItems.length) return []
 
       // Apply search filter if there's a query
-      let filtered = this.missingItems
+      let filtered = [...this.missingItems]
       if (this.searchQuery) {
         const query = this.searchQuery.toLowerCase()
-        filtered = this.missingItems.filter((item) => {
+        filtered = filtered.filter((item) => {
           return (
             (item.title && item.title.toLowerCase().includes(query)) ||
             (item.author && item.author.toLowerCase().includes(query)) ||
@@ -501,9 +501,9 @@ export default {
       if (!this.processedItems.length) return []
 
       // Apply type filter first
-      let filtered = this.processedItems
+      let filtered = [...this.processedItems]
       if (this.processedFilterType !== 'all') {
-        filtered = this.processedItems.filter((item) => item.status === this.processedFilterType)
+        filtered = filtered.filter((item) => item.status === this.processedFilterType)
       }
 
       // Apply search filter if there's a query
