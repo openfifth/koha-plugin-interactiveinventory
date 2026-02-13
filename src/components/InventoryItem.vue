@@ -1,26 +1,56 @@
 <template>
-  <div :class="['item', { 
-       'highlight': hasIssue, 
-       'checked-out': item.checked_out_date,
-       'in-transit': item.in_transit && alertSettings.showInTransitAlerts,
-       'branch-mismatch': item.homebranch !== item.holdingbranch && alertSettings.showBranchMismatchAlerts,
-       'withdrawn': (item.withdrawn === '1' || item.withdrawn === 1) && alertSettings.showWithdrawnAlerts,
-       'on-hold': item.on_hold && alertSettings.showOnHoldAlerts,
-       'return-claim': item.return_claim && alertSettings.showReturnClaimAlerts
-     }]" @click="toggleExpand">
+  <div
+    :class="[
+      'item',
+      {
+        highlight: hasIssue,
+        'checked-out': item.checked_out_date,
+        'in-transit': item.in_transit && alertSettings.showInTransitAlerts,
+        'branch-mismatch':
+          item.homebranch !== item.holdingbranch && alertSettings.showBranchMismatchAlerts,
+        withdrawn:
+          (item.withdrawn === '1' || item.withdrawn === 1) && alertSettings.showWithdrawnAlerts,
+        'on-hold': item.on_hold && alertSettings.showOnHoldAlerts,
+        'return-claim': item.return_claim && alertSettings.showReturnClaimAlerts
+      }
+    ]"
+    @click="toggleExpand"
+  >
     <p class="item-title">
       <span :class="issueIconClass" aria-hidden="true">{{ issueIcon }}</span>
       <span class="sr-only">{{ issueIconText }}</span>
       <span class="badge-spacer"></span>
       <span v-if="item.checked_out_date" class="checked-out-badge">CHECKED OUT</span>
-      <span v-if="item.in_transit && alertSettings.showInTransitAlerts" class="in-transit-badge">IN TRANSIT</span>
-      <span v-if="item.homebranch !== item.holdingbranch && alertSettings.showBranchMismatchAlerts" class="branch-mismatch-badge">BRANCH MISMATCH</span>
-      <span v-if="(item.withdrawn === '1' || item.withdrawn === 1) && alertSettings.showWithdrawnAlerts" class="withdrawn-badge">WITHDRAWN</span>
-      <span v-if="item.on_hold && alertSettings.showOnHoldAlerts" class="on-hold-badge">ON HOLD</span>
-      <span v-if="item.return_claim && alertSettings.showReturnClaimAlerts" class="return-claim-badge">RETURN CLAIM</span>
+      <span v-if="item.in_transit && alertSettings.showInTransitAlerts" class="in-transit-badge"
+        >IN TRANSIT</span
+      >
+      <span
+        v-if="item.homebranch !== item.holdingbranch && alertSettings.showBranchMismatchAlerts"
+        class="branch-mismatch-badge"
+        >BRANCH MISMATCH</span
+      >
+      <span
+        v-if="(item.withdrawn === '1' || item.withdrawn === 1) && alertSettings.showWithdrawnAlerts"
+        class="withdrawn-badge"
+        >WITHDRAWN</span
+      >
+      <span v-if="item.on_hold && alertSettings.showOnHoldAlerts" class="on-hold-badge"
+        >ON HOLD</span
+      >
+      <span
+        v-if="item.return_claim && alertSettings.showReturnClaimAlerts"
+        class="return-claim-badge"
+        >RETURN CLAIM</span
+      >
       <span v-if="item.pendingResolution" class="resolution-badge">PENDING RESOLUTION</span>
-      <span v-if="item.resolutionAction && !item.pendingResolution" class="resolution-badge-resolved">✓ RESOLVED</span>
-      <span v-if="item.resolutionAction && item.pendingResolution" class="resolution-badge-skipped">SKIPPED</span>
+      <span
+        v-if="item.resolutionAction && !item.pendingResolution"
+        class="resolution-badge-resolved"
+        >✓ RESOLVED</span
+      >
+      <span v-if="item.resolutionAction && item.pendingResolution" class="resolution-badge-skipped"
+        >SKIPPED</span
+      >
       <span v-if="item.needs_transfer" class="transfer-badge">NEEDS TRANSFER</span>
       {{ item.biblio.title }} - {{ item.external_id }}
     </p>
@@ -40,93 +70,136 @@
         <p>{{ item.biblio.pages || 'N/A' }}</p>
         <p><strong>Location:</strong></p>
         <p>{{ item.location }}</p>
+        <p><strong>Home Library:</strong></p>
+        <p>{{ item.homebranch || item.home_library_id || 'N/A' }}</p>
+        <p><strong>Holding Library:</strong></p>
+        <p>{{ item.holdingbranch || item.holding_library_id || 'N/A' }}</p>
         <p><strong>Acquisition Date:</strong></p>
         <p>{{ item.acquisition_date }}</p>
         <p><strong>Last Seen Date:</strong></p>
         <p>{{ item.last_seen_date }}</p>
         <p><strong>URL:</strong></p>
-        <p><a :href="constructedUrl" target="_blank" @click.stop>{{ constructedUrl }}</a></p>
-        
+        <p>
+          <a :href="constructedUrl" target="_blank" @click.stop>{{ constructedUrl }}</a>
+        </p>
+
         <!-- Resolution information -->
-        <p v-if="item.pendingResolution || item.resolutionAction" class="item-warning"><strong>Resolution Status:</strong></p>
+        <p v-if="item.pendingResolution || item.resolutionAction" class="item-warning">
+          <strong>Resolution Status:</strong>
+        </p>
         <p v-if="item.pendingResolution || item.resolutionAction" class="item-warning">
           <span v-if="item.pendingResolution">
             This item has a pending {{ item.resolutionType }} issue that needs to be resolved.
             <span v-if="item.resolutionAction === 'skipped'"> (Skipped during resolution)</span>
           </span>
           <span v-else-if="item.resolutionAction">
-            This item had a {{ item.resolutionType }} issue that was resolved - action taken: {{ item.resolutionAction }}.
+            This item had a {{ item.resolutionType }} issue that was resolved - action taken:
+            {{ item.resolutionAction }}.
           </span>
         </p>
-        
+
         <p v-if="item.wasLost" class="item-warning"><strong>Warning:</strong></p>
-        <p v-if="item.wasLost" class="item-warning">This item was previously marked as lost. Reason: {{ lostReason }}
+        <p v-if="item.wasLost" class="item-warning">
+          This item was previously marked as lost. Reason: {{ lostReason }}
         </p>
         <p v-if="item.wasWithdrawn" class="item-warning"><strong>Warning:</strong></p>
-        <p v-if="item.wasWithdrawn" class="item-warning">This item was previously withdrawn from circulation.
+        <p v-if="item.wasWithdrawn" class="item-warning">
+          This item was previously withdrawn from circulation.
         </p>
         <p v-if="item.wrongPlace" class="item-warning"><strong>Warning:</strong></p>
-        <p v-if="item.wrongPlace" class="item-warning">This item may be in the wrong place. It is not in the list of
-          expected items to be scanned.</p>
+        <p v-if="item.wrongPlace" class="item-warning">
+          This item may be in the wrong place. It is not in the list of expected items to be
+          scanned.
+        </p>
         <p v-if="item.checked_out_date" class="item-warning"><strong>Warning:</strong></p>
         <p v-if="item.checked_out_date" class="item-warning">
           This item was checked out on: {{ item.checked_out_date }}
-          <span v-if="sessionData.doNotCheckIn">
-            and has not been checked in.
-          </span>
-          <span v-else>
-            and has been checked in automatically.
-          </span>
+          <span v-if="sessionData.doNotCheckIn"> and has not been checked in. </span>
+          <span v-else> and has been checked in automatically. </span>
         </p>
         <p v-if="item.needs_transfer" class="item-warning"><strong>Transfer Required:</strong></p>
         <p v-if="item.needs_transfer" class="item-warning">
-          This item needs to be transferred to {{ item.transfer_to }}. Please initiate the transfer process to move this item to its correct location.
+          This item needs to be transferred to {{ item.transfer_to }}. Please initiate the transfer
+          process to move this item to its correct location.
         </p>
-        <p v-if="item.in_transit && alertSettings.showInTransitAlerts" class="item-warning"><strong>Warning:</strong></p>
+        <p v-if="item.in_transit && alertSettings.showInTransitAlerts" class="item-warning">
+          <strong>Warning:</strong>
+        </p>
         <p v-if="item.in_transit && alertSettings.showInTransitAlerts" class="item-warning">
           <span v-if="item.transitInfo">
-            This item is in transit {{ getTransitDescription(item.transitInfo) }} 
-            from {{ item.transitInfo.from || item.homebranch }} to {{ item.transitInfo.to || item.holdingbranch }}.
+            This item is in transit {{ getTransitDescription(item.transitInfo) }} from
+            {{ item.transitInfo.from || item.homebranch }} to
+            {{ item.transitInfo.to || item.holdingbranch }}.
           </span>
           <span v-else>
-            This item is currently in transit from {{ item.homebranch }} to {{ item.holdingbranch }}.
+            This item is currently in transit from {{ item.homebranch }} to
+            {{ item.holdingbranch }}.
           </span>
         </p>
-        <p v-if="item.homebranch !== item.holdingbranch && alertSettings.showBranchMismatchAlerts" class="item-warning"><strong>Warning:</strong></p>
-        <p v-if="item.homebranch !== item.holdingbranch && alertSettings.showBranchMismatchAlerts" class="item-warning">
-          This item belongs to branch {{ item.homebranch }} but is currently held at branch {{ item.holdingbranch }}.
+        <p
+          v-if="item.homebranch !== item.holdingbranch && alertSettings.showBranchMismatchAlerts"
+          class="item-warning"
+        >
+          <strong>Warning:</strong>
         </p>
-        <p v-if="(item.withdrawn === '1' || item.withdrawn === 1) && alertSettings.showWithdrawnAlerts" class="item-warning"><strong>Warning:</strong></p>
-        <p v-if="(item.withdrawn === '1' || item.withdrawn === 1) && alertSettings.showWithdrawnAlerts" class="item-warning">
+        <p
+          v-if="item.homebranch !== item.holdingbranch && alertSettings.showBranchMismatchAlerts"
+          class="item-warning"
+        >
+          This item belongs to branch {{ item.homebranch }} but is currently held at branch
+          {{ item.holdingbranch }}.
+        </p>
+        <p
+          v-if="
+            (item.withdrawn === '1' || item.withdrawn === 1) && alertSettings.showWithdrawnAlerts
+          "
+          class="item-warning"
+        >
+          <strong>Warning:</strong>
+        </p>
+        <p
+          v-if="
+            (item.withdrawn === '1' || item.withdrawn === 1) && alertSettings.showWithdrawnAlerts
+          "
+          class="item-warning"
+        >
           This item has been withdrawn from circulation.
         </p>
-        <p v-if="item.on_hold && alertSettings.showOnHoldAlerts" class="item-warning"><strong>Warning:</strong></p>
         <p v-if="item.on_hold && alertSettings.showOnHoldAlerts" class="item-warning">
-          This item is currently on hold{{ item.waiting ? ' and waiting for pickup' : '' }}. 
+          <strong>Warning:</strong>
+        </p>
+        <p v-if="item.on_hold && alertSettings.showOnHoldAlerts" class="item-warning">
+          This item is currently on hold{{ item.waiting ? ' and waiting for pickup' : '' }}.
           <span v-if="item.waiting">It should not be reshelved.</span>
           <span v-if="item.hold_transit">It is in transit to fulfill a hold.</span>
         </p>
-        <p v-if="item.return_claim && alertSettings.showReturnClaimAlerts" class="item-warning"><strong>Warning:</strong></p>
         <p v-if="item.return_claim && alertSettings.showReturnClaimAlerts" class="item-warning">
-          This item has an unresolved return claim. The patron claims they returned it, but it is still checked out in the system.
+          <strong>Warning:</strong>
+        </p>
+        <p v-if="item.return_claim && alertSettings.showReturnClaimAlerts" class="item-warning">
+          This item has an unresolved return claim. The patron claims they returned it, but it is
+          still checked out in the system.
         </p>
         <p v-if="item.outOfOrder" class="item-warning"><strong>Warning:</strong></p>
-        <p v-if="item.outOfOrder" class="item-warning">This item has been scanned out of order. It should have been
-          scanned before <a :href="highestCallNumberUrl" target="_blank" @click.stop>{{ currentItemWithHighestCallNumber
-          }}</a>.
+        <p v-if="item.outOfOrder" class="item-warning">
+          This item has been scanned out of order. It should have been scanned before
+          <a :href="highestCallNumberUrl" target="_blank" @click.stop>{{
+            currentItemWithHighestCallNumber
+          }}</a
+          >.
         </p>
         <p v-if="item.invalidStatus" class="item-warning"><strong>Warning:</strong></p>
-        <p v-if="item.invalidStatus" class="item-warning">This item has an invalid not for loan status. Please check it
-          is correct using the link above.</p>
+        <p v-if="item.invalidStatus" class="item-warning">
+          This item has an invalid not for loan status. Please check it is correct using the link
+          above.
+        </p>
       </div>
     </div>
   </div>
 </template>
 
-
-
 <script>
-import { EventBus } from './eventBus';
+import { EventBus } from './eventBus'
 
 export default {
   props: {
@@ -158,98 +231,111 @@ export default {
   data() {
     return {
       authorizedValues: {}
-    };
+    }
   },
   created() {
-    this.fetchAndSetAuthorizedValues('LOST');
+    this.fetchAndSetAuthorizedValues('LOST')
   },
   computed: {
     highestCallNumberUrl() {
-      const biblioId = this.currentBiblioWithHighestCallNumber;
-      return (biblioId && biblioId !== '') ? `/cgi-bin/koha/catalogue/detail.pl?biblionumber=${biblioId}` : '';
+      const biblioId = this.currentBiblioWithHighestCallNumber
+      return biblioId && biblioId !== ''
+        ? `/cgi-bin/koha/catalogue/detail.pl?biblionumber=${biblioId}`
+        : ''
     },
     hasIssue() {
       if (this.item.resolutionAction && !this.item.pendingResolution) {
-        return false;
+        return false
       }
-      
-      return this.item.wasLost || this.item.wasWithdrawn || this.item.wrongPlace || this.item.checked_out_date || 
-             this.item.outOfOrder || this.item.invalidStatus || 
-             (this.item.in_transit && this.alertSettings.showInTransitAlerts) || 
-             (this.item.homebranch !== this.item.holdingbranch && this.alertSettings.showBranchMismatchAlerts) ||
-             ((this.item.withdrawn === '1' || this.item.withdrawn === 1) && this.alertSettings.showWithdrawnAlerts) || 
-             (this.item.on_hold && this.alertSettings.showOnHoldAlerts) ||
-             (this.item.return_claim && this.alertSettings.showReturnClaimAlerts) ||
-             this.item.pendingResolution;
+
+      return (
+        this.item.wasLost ||
+        this.item.wasWithdrawn ||
+        this.item.wrongPlace ||
+        this.item.checked_out_date ||
+        this.item.outOfOrder ||
+        this.item.invalidStatus ||
+        (this.item.in_transit && this.alertSettings.showInTransitAlerts) ||
+        (this.item.homebranch !== this.item.holdingbranch &&
+          this.alertSettings.showBranchMismatchAlerts) ||
+        ((this.item.withdrawn === '1' || this.item.withdrawn === 1) &&
+          this.alertSettings.showWithdrawnAlerts) ||
+        (this.item.on_hold && this.alertSettings.showOnHoldAlerts) ||
+        (this.item.return_claim && this.alertSettings.showReturnClaimAlerts) ||
+        this.item.pendingResolution
+      )
     },
     issueIcon() {
-      return this.hasIssue ? '✖' : '✔';
+      return this.hasIssue ? '✖' : '✔'
     },
     issueIconClass() {
-      return this.hasIssue ? 'text-danger' : 'text-success';
+      return this.hasIssue ? 'text-danger' : 'text-success'
     },
     issueIconText() {
-      return this.hasIssue ? 'Item has issues' : 'Item has no issues';
+      return this.hasIssue ? 'Item has issues' : 'Item has no issues'
     },
     resolutionBadgeText() {
-      return this.item.resolutionAction ? 
-        (this.item.pendingResolution ? 'SKIPPED' : 'RESOLVED') : '';
+      return this.item.resolutionAction
+        ? this.item.pendingResolution
+          ? 'SKIPPED'
+          : 'RESOLVED'
+        : ''
     },
     resolutionBadgeClass() {
-      return this.item.pendingResolution ? 'resolution-badge-skipped' : 'resolution-badge-resolved';
+      return this.item.pendingResolution ? 'resolution-badge-skipped' : 'resolution-badge-resolved'
     },
     constructedUrl() {
-      const biblionumber = this.item.biblio_id;
-      return `${window.location.origin}/cgi-bin/koha/catalogue/detail.pl?biblionumber=${biblionumber}`;
+      const biblionumber = this.item.biblio_id
+      return `${window.location.origin}/cgi-bin/koha/catalogue/detail.pl?biblionumber=${biblionumber}`
     },
     lostReason() {
-      const lostStatusValue = this.item.lost_status;
-      const reason = this.authorizedValues[lostStatusValue];
-      return reason || 'Unknown';
+      const lostStatusValue = this.item.lost_status
+      const reason = this.authorizedValues[lostStatusValue]
+      return reason || 'Unknown'
     }
   },
   methods: {
     getTransitDescription(transitInfo) {
-      if (!transitInfo || !transitInfo.inTransit) return '';
-      
+      if (!transitInfo || !transitInfo.inTransit) return ''
+
       switch (transitInfo.type) {
         case 'hold':
-          return 'to fulfill a hold';
+          return 'to fulfill a hold'
         case 'return':
-          return 'returning to its home/holding branch';
+          return 'returning to its home/holding branch'
         case 'manual':
-          return 'via manual transfer';
+          return 'via manual transfer'
         case 'stockrotation':
-          return 'for stock rotation';
+          return 'for stock rotation'
         case 'collection':
-          return 'for rotating collection';
+          return 'for rotating collection'
         case 'recall':
-          return 'to fulfill a recall';
+          return 'to fulfill a recall'
         case 'cancelled':
-          return 'for cancelled hold/recall';
+          return 'for cancelled hold/recall'
         default:
-          return `(${transitInfo.reason || 'unknown reason'})`;
+          return `(${transitInfo.reason || 'unknown reason'})`
       }
     },
 
     toggleExpand() {
-      this.$emit('toggleExpand', `${this.index}-${this.item.id}`);
+      this.$emit('toggleExpand', `${this.index}-${this.item.id}`)
     },
     async fetchAndSetAuthorizedValues(field) {
       try {
         const values = await this.fetchAuthorizedValues(field, {
           onValuesUpdate: (updatedValues) => {
-            this.authorizedValues = { ...updatedValues };
+            this.authorizedValues = { ...updatedValues }
           },
           forceLoad: false
-        });
+        })
 
-        this.authorizedValues = values;
+        this.authorizedValues = values
       } catch (error) {
-        EventBus.emit('message', { type: 'error', text: 'Error setting authorized values' });
+        EventBus.emit('message', { type: 'error', text: 'Error setting authorized values' })
       }
-    },
-  },
+    }
+  }
 }
 </script>
 
