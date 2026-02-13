@@ -33,7 +33,14 @@ export function filterMissingItems({
     if (sessionSettings.skipCheckedOutItems && (item.checked_out || item.checked_out_date))
       return false
     if (sessionSettings.skipInTransitItems && item.in_transit) return false
-    if (sessionSettings.skipBranchMismatchItems && item.homebranch !== item.holdingbranch)
+    const homeBranch = item.homebranch || item.home_library_id
+    const holdingBranch = item.holdingbranch || item.holding_library_id
+    if (
+      sessionSettings.skipBranchMismatchItems &&
+      homeBranch &&
+      holdingBranch &&
+      homeBranch !== holdingBranch
+    )
       return false
     return true
   })
