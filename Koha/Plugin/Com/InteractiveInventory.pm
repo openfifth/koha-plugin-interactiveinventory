@@ -88,9 +88,10 @@ sub get_item_data {
 sub lookup_item_by_barcode {
     my ($barcode) = @_;
     my $item = Koha::Items->find( { barcode => $barcode } );
-    my $item_data = $item->{_result}->{_column_data};
 
-    return $item_data;
+    return unless $item;
+
+    return $item->unblessed;
 }
 
 sub start_session {
