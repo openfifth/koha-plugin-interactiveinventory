@@ -382,7 +382,16 @@ export default {
           let message = `Item ${barcode} has been checked in successfully`
           let messageType = 'success'
           if (data.hold_found) {
-            message = `Item ${barcode} checked in - hold found. Do not reshelve.`
+            let holdMsg = `Item ${barcode} checked in - hold found`
+            if (data.hold_patron_name) {
+              holdMsg += ` for ${data.hold_patron_name}`
+            }
+            if (data.hold_needs_transfer) {
+              holdMsg += `. Transfer to ${data.hold_pickup_branch} for pickup.`
+            } else {
+              holdMsg += `. Do not reshelve.`
+            }
+            message = holdMsg
             messageType = 'warning'
           } else if (data.needs_transfer) {
             message = `Item ${barcode} checked in - needs transfer to ${data.transfer_to}.`
