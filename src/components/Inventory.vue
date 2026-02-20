@@ -255,6 +255,7 @@
       :scannedItems="items"
       @close="toggleMissingItemsModal"
       @missing-items-updated="handleMissingItemsUpdated"
+      @item-marked-missing="handleItemMarkedMissing"
       @item-marked-found="handleItemMarkedFound"
     ></MissingItemsModal>
 
@@ -2041,7 +2042,31 @@ export default {
       await this._handleMissingItemsUpdated()
     },
 
+    handleItemMarkedMissing(barcode) {
+      let updated = false
+      this.items.forEach((item, index) => {
+        if (item.external_id === barcode) {
+          this.items[index] = { ...item, markedMissing: true }
+          updated = true
+        }
+      })
+      if (updated) saveItems(this.items)
+    },
+
     handleItemMarkedFound(item) {
+      // Check if the item already exists in the scanned list (e.g. was scanned then toggled to missing)
+      let alreadyExists = false
+      this.items.forEach((existing, index) => {
+        if (existing.external_id === item.barcode) {
+          this.items[index] = { ...existing, markedMissing: false }
+          alreadyExists = true
+        }
+      })
+      if (alreadyExists) {
+        saveItems(this.items)
+        return
+      }
+
       // Convert modal item format to scanned item format
       const scannedItem = {
         external_id: item.barcode,

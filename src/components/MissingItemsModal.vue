@@ -759,18 +759,31 @@ export default {
           this.markedMissingItems = markedMissingBarcodes || []
 
           if (this.markedMissingItems.length > 0) {
-            if (lookupData.length > 0) {
-              // Continue unique key counter from where scanned items left off
+            const markedMissingSet = new Set(this.markedMissingItems)
+
+            // Track which barcodes were found in scanned items
+            const foundInScanned = new Set()
+
+            // Update all scanned items that have since been marked missing
+            this.processedItems.forEach((processedItem) => {
+              if (markedMissingSet.has(processedItem.barcode)) {
+                processedItem.status = 'missing'
+                foundInScanned.add(processedItem.barcode)
+              }
+            })
+
+            // Remove barcodes found in scanned items from the set
+            foundInScanned.forEach((barcode) => markedMissingSet.delete(barcode))
+
+            // Add remaining marked-missing items that were never scanned
+            if (markedMissingSet.size > 0 && lookupData.length > 0) {
               let missingIdCounter = this.processedItems.length
-              // Find the items that have been marked as missing using the lookup data
-              const missingProcessed = this.markedMissingItems
+              const missingProcessed = Array.from(markedMissingSet)
                 .map((barcode) => {
-                  // Look up the item in our location data map
                   const item = locationDataMap.get(barcode)
                   if (item) {
                     return {
                       ...item,
-                      // Normalize call number property name for consistent sorting
                       itemcallnumber:
                         item.itemcallnumber || item.call_number || item.callnumber || 'N/A',
                       status: 'missing',
@@ -781,7 +794,6 @@ export default {
                 })
                 .filter((item) => item !== null)
 
-              // Add to processed items list
               this.processedItems = [...this.processedItems, ...missingProcessed]
             }
           }
@@ -1337,7 +1349,7 @@ export default {
       }
     },
 
-    toggleSelectedStatus() {
+    async toggleSelectedStatus() {
       if (this.selectedProcessedItems.length === 0) {
         EventBus.emit('showSnackbar', {
           message: 'No items selected to update.',
@@ -1346,64 +1358,94 @@ export default {
         return
       }
 
-      // Set loading state
       this.loading = true
 
-      const promises = []
-      let markingAsMissing = false // Flag to track if any items are being marked as missing
+      // Classify items into two batches
+      const toMissing = []
+      const toFound = []
 
-      // For each selected item, toggle its status (missing <-> found)
       this.selectedProcessedItems.forEach((barcode) => {
         const item = this.processedItems.find((i) => i.barcode === barcode)
         if (!item) return
 
         if (item.status === 'missing') {
-          // If currently missing, mark as found
-          promises.push(this.markProcessedItemAsFound(item))
+          toFound.push(item)
         } else {
-          // If currently found/scanned, mark as missing
-          // Skip checked out items
           if (item.checked_out || item.checked_out_date) {
             EventBus.emit('message', {
               type: 'warning',
               text: `Item "${item.title || item.barcode}" is checked out and cannot be marked as missing.`
             })
           } else {
-            markingAsMissing = true
-            promises.push(this.markProcessedItemAsMissing(item))
+            toMissing.push(item)
           }
         }
       })
 
-      // Wait for all operations to complete
-      Promise.all(promises)
-        .then(() => {
-          // Refresh data - but only recalculate missing items if we're marking something as missing
-          this.loadProcessedItems()
-          if (markingAsMissing) {
-            this.calculateMissingItems()
-            this.$emit('missing-items-updated')
-          }
+      const totalItems = toMissing.length + toFound.length
+      if (totalItems === 0) {
+        this.loading = false
+        return
+      }
 
-          // Clear selection
-          this.selectedProcessedItems = []
-          this.selectAllProcessed = false
+      try {
+        // Run all API calls in parallel — these target different items so no conflict
+        const apiPromises = [
+          ...toMissing.map((item) =>
+            apiService.post('/api/v1/contrib/interactiveinventory/item/field', {
+              barcode: item.barcode,
+              fields: { itemlost: 4 }
+            })
+          ),
+          ...toFound.map((item) =>
+            apiService.post('/api/v1/contrib/interactiveinventory/item/field', {
+              barcode: item.barcode,
+              fields: { itemlost: 0 }
+            })
+          )
+        ]
+        await Promise.all(apiPromises)
 
-          // Show success message
-          EventBus.emit('showSnackbar', {
-            message: `Updated status for ${promises.length} items.`,
-            type: 'success'
-          })
+        // Single session storage read-modify-write to avoid race condition
+        const currentMarkedMissing = await getMarkedMissingItems()
+        const markedMissingSet = new Set(currentMarkedMissing)
+        toMissing.forEach((item) => markedMissingSet.add(item.barcode))
+        toFound.forEach((item) => markedMissingSet.delete(item.barcode))
+        await saveMarkedMissingItems(Array.from(markedMissingSet))
+
+        // Update local state and notify parent
+        toMissing.forEach((item) => {
+          const idx = this.processedItems.findIndex((i) => i.barcode === item.barcode)
+          if (idx !== -1) this.processedItems[idx].status = 'missing'
+          this.$emit('item-marked-missing', item.barcode)
         })
-        .catch((error) => {
-          EventBus.emit('showSnackbar', {
-            message: `Error updating items: ${error.message}`,
-            type: 'error'
-          })
+        toFound.forEach((item) => {
+          const idx = this.processedItems.findIndex((i) => i.barcode === item.barcode)
+          if (idx !== -1) this.processedItems[idx].status = 'scanned'
+          this.$emit('item-marked-found', item)
         })
-        .finally(() => {
-          this.loading = false
+
+        // Refresh
+        this.loadProcessedItems()
+        this.calculateMissingItems()
+        this.$emit('missing-items-updated')
+
+        // Clear selection
+        this.selectedProcessedItems = []
+        this.selectAllProcessed = false
+
+        EventBus.emit('showSnackbar', {
+          message: `Updated status for ${totalItems} items.`,
+          type: 'success'
         })
+      } catch (error) {
+        EventBus.emit('showSnackbar', {
+          message: `Error updating items: ${error.message}`,
+          type: 'error'
+        })
+      } finally {
+        this.loading = false
+      }
     }
   }
 }

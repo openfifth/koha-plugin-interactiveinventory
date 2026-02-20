@@ -11,7 +11,8 @@
         withdrawn:
           (item.withdrawn === '1' || item.withdrawn === 1) && alertSettings.showWithdrawnAlerts,
         'on-hold': item.on_hold && alertSettings.showOnHoldAlerts,
-        'return-claim': item.return_claim && alertSettings.showReturnClaimAlerts
+        'return-claim': item.return_claim && alertSettings.showReturnClaimAlerts,
+        'marked-missing': item.markedMissing
       }
     ]"
     @click="toggleExpand"
@@ -51,6 +52,7 @@
       <span v-if="item.resolutionAction && item.pendingResolution" class="resolution-badge-skipped"
         >SKIPPED</span
       >
+      <span v-if="item.markedMissing" class="marked-missing-badge">MARKED MISSING</span>
       <span v-if="item.hold_found" class="hold-found-badge">HOLD FOUND</span>
       <span v-if="item.needs_transfer" class="transfer-badge">NEEDS TRANSFER</span>
       {{ item.biblio.title }} - {{ item.external_id }}
@@ -599,6 +601,22 @@ export default {
 .transfer-badge {
   display: inline-block;
   background-color: #f39c12;
+  color: white;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.8em;
+  margin-right: 8px;
+  font-weight: bold;
+}
+
+.marked-missing {
+  border-left: 4px solid #c0392b;
+  background-color: rgba(192, 57, 43, 0.1);
+}
+
+.marked-missing-badge {
+  display: inline-block;
+  background-color: #c0392b;
   color: white;
   padding: 2px 6px;
   border-radius: 4px;
