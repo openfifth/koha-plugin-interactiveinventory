@@ -6,7 +6,8 @@ use Mojo::JSON qw(decode_json);
 use Try::Tiny;
 use C4::Context;
 use C4::Circulation qw( AddReturn CanBookBeRenewed AddRenewal );
-use C4::Reserves qw( ModReserveAffect );
+use C4::Items qw( ModItemTransfer );
+use C4::Reserves qw( CheckReserves ModReserveAffect );
 use C4::ShelfBrowser qw( GetNearbyItems );
 use Koha::DateUtils qw( dt_from_string );
 use Koha::Items;
@@ -767,6 +768,112 @@ sub scanItem {
         return $c->render(
             status => 500,
             openapi => { error => "Error fetching item data: $_" }
+        );
+    };
+}
+
+=head3 trapHold
+
+Checks for and traps holds on a non-checked-out item, following the same
+flow as Koha core's checkin process (CheckReserves + ModReserveAffect).
+Creates branch transfers when the pickup branch differs from current branch.
+
+=cut
+
+sub trapHold {
+    my $c = shift->openapi->valid_input or return;
+
+    my $body = $c->validation->param('body');
+
+    my $barcode    = $body->{barcode};
+    my $branchCode = $body->{branchCode};
+
+    unless ($barcode && $branchCode) {
+        return $c->render(
+            status => 400,
+            openapi => { error => "Missing barcode or branchCode" }
+        );
+    }
+
+    my $item = Koha::Items->find({ barcode => $barcode });
+    unless ($item) {
+        return $c->render(
+            status => 404,
+            openapi => { error => "Item not found" }
+        );
+    }
+
+    try {
+        # Use Koha core's CheckReserves to find trappable holds
+        # This handles item-level, biblio-level, and group holds correctly
+        my ($status, $reserve) = CheckReserves($item);
+
+        unless ($reserve) {
+            return $c->render(
+                status => 200,
+                openapi => {
+                    status  => "no_hold",
+                    message => "No trappable holds found for this item"
+                }
+            );
+        }
+
+        # Already waiting or in transfer — nothing to do
+        if ($status && ($status eq 'Waiting' || $status eq 'Transferred')) {
+            return $c->render(
+                status => 200,
+                openapi => {
+                    status  => "already_trapped",
+                    message => "Hold is already $status"
+                }
+            );
+        }
+
+        my $pickup_branch = $reserve->{branchcode};
+        my $needs_transfer = ($pickup_branch ne $branchCode) ? 1 : 0;
+
+        # Get patron info for the response
+        my $patron = Koha::Patrons->find($reserve->{borrowernumber});
+        my $patron_name = $patron
+            ? $patron->firstname . ' ' . $patron->surname
+            : 'Unknown';
+
+        # Trap the hold using ModReserveAffect per Koha core pattern
+        # $transferToDo=1 sets found='T', $transferToDo=0 sets found='W' (waiting)
+        ModReserveAffect(
+            $item->itemnumber,
+            $reserve->{borrowernumber},
+            $needs_transfer,
+            $reserve->{reserve_id},
+        );
+
+        # If transfer needed, create the branch transfer record
+        # ModReserveAffect's set_transfer only sets hold status, not the actual transfer
+        if ($needs_transfer) {
+            ModItemTransfer(
+                $item->itemnumber,
+                $branchCode,
+                $pickup_branch,
+                'Reserve',
+            );
+        }
+
+        return $c->render(
+            status => 200,
+            openapi => {
+                status           => "success",
+                message          => "Hold trapped successfully",
+                hold_patron_name => $patron_name,
+                hold_patron_id   => $reserve->{borrowernumber},
+                pickup_branch    => $pickup_branch,
+                needs_transfer   => $needs_transfer,
+                reserve_id       => $reserve->{reserve_id},
+            }
+        );
+    } catch {
+        return $c->render(
+            status => 500,
+            openapi => { error => "Error trapping hold: $_" }
         );
     };
 }

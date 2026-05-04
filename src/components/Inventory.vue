@@ -1297,6 +1297,59 @@ export default {
           }
         }
 
+        // Trap pending holds for non-checked-out items
+        // Checked-out items get hold trapping via the check-in flow (AddReturn)
+        if (
+          !combinedData.checked_out_date &&
+          combinedData.first_hold &&
+          !combinedData.waiting &&
+          combinedData.first_hold.status !== 'W' &&
+          combinedData.first_hold.status !== 'T'
+        ) {
+          try {
+            const trapResponse = await fetch(
+              '/api/v1/contrib/interactiveinventory/item/trap_hold',
+              {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  Accept: 'application/json'
+                },
+                body: JSON.stringify({
+                  barcode: combinedData.external_id,
+                  branchCode: this.sessionData.selectedLibraryId
+                })
+              }
+            )
+
+            if (trapResponse.ok) {
+              const trapResult = await trapResponse.json()
+              if (trapResult.status === 'success') {
+                combinedData.hold_found = true
+                combinedData.hold_patron_name = trapResult.hold_patron_name
+                combinedData.hold_pickup_branch = trapResult.pickup_branch
+                combinedData.hold_needs_transfer = !!trapResult.needs_transfer
+
+                let holdMsg = `Hold trapped for ${combinedData.external_id}`
+                if (trapResult.hold_patron_name) {
+                  holdMsg += ` (patron: ${trapResult.hold_patron_name})`
+                }
+                if (trapResult.needs_transfer) {
+                  holdMsg += `. Transfer to ${trapResult.pickup_branch} initiated.`
+                } else {
+                  holdMsg += `. Item is now waiting for pickup. Do not reshelve.`
+                }
+                EventBus.emit('message', {
+                  type: 'warning',
+                  text: holdMsg
+                })
+              }
+            }
+          } catch (error) {
+            console.error('Error trapping hold:', error)
+          }
+        }
+
         if (combinedData.checked_out_date && !this.sessionData.doNotCheckIn) {
           const checkInResult = await this.checkInItem(combinedData.external_id)
           // Add resolution flags for display since item was automatically checked in
@@ -1646,8 +1699,8 @@ export default {
 
       // Check for in transit items (using transfer embed from API)
       if (item.in_transit && this.alertSettings.showInTransitAlerts) {
-        const fromBranch = item.transfer?.frombranch || homeBranch
-        const toBranch = item.transfer?.tobranch || holdingBranch
+        const fromBranch = item.transfer?.from_library || item.transfer?.frombranch || homeBranch
+        const toBranch = item.transfer?.to_library || item.transfer?.tobranch || holdingBranch
         EventBus.emit('message', {
           type: 'warning',
           text: `${title} (${barcode}) is in transit from ${fromBranch} to ${toBranch}`

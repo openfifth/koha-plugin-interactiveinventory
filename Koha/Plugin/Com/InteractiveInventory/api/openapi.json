@@ -360,6 +360,71 @@
       }
     }
   },
+  "/item/trap_hold": {
+    "post": {
+      "x-mojo-to": "Com::InteractiveInventory::Controllers::Items#trapHold",
+      "operationId": "trapHold",
+      "tags": ["inventory"],
+      "produces": ["application/json"],
+      "consumes": ["application/json"],
+      "parameters": [
+        {
+          "name": "body",
+          "in": "body",
+          "required": true,
+          "description": "Hold trap data",
+          "schema": {
+            "type": "object",
+            "required": ["barcode", "branchCode"],
+            "properties": {
+              "barcode": {
+                "type": "string",
+                "description": "The barcode of the item"
+              },
+              "branchCode": {
+                "type": "string",
+                "description": "The current branch code where inventory is running"
+              }
+            }
+          }
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "Hold trap result",
+          "schema": {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              },
+              "hold_patron_name": {
+                "type": "string"
+              },
+              "pickup_branch": {
+                "type": "string"
+              },
+              "needs_transfer": {
+                "type": "boolean"
+              }
+            }
+          }
+        },
+        "400": {
+          "description": "Missing barcode or branchCode"
+        },
+        "404": {
+          "description": "Item not found"
+        },
+        "500": {
+          "description": "Error trapping hold"
+        }
+      }
+    }
+  },
   "/item/shelfbrowser/{itemnumber}": {
     "get": {
       "x-mojo-to": "Com::InteractiveInventory::Controllers::Items#shelfBrowser",
