@@ -308,8 +308,9 @@ sub _get_items_for_inventory {
             'me.enumchron',
         ],
         '+columns' => {
-            title  => 'biblio.title',
-            author => 'biblio.author',
+            title         => 'biblio.title',
+            author        => 'biblio.author',
+            frameworkcode => 'biblio.frameworkcode',
         },
         order_by => { -asc => [ 'me.cn_sort', 'me.itemcallnumber' ] },
     };
