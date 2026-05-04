@@ -343,7 +343,7 @@ sub _build_inventory_conditions {
     if ($params->{ignoreissued}) {
         my $subq = Koha::Checkouts->search(
             {}, { columns => ['itemnumber'] }
-        )->get_column('itemnumber')->as_query;
+        )->_resultset->get_column('itemnumber')->as_query;
         push @conditions, { 'me.itemnumber' => { -not_in => $subq } };
     }
 
@@ -352,7 +352,7 @@ sub _build_inventory_conditions {
         my $subq = Koha::Holds->search(
             { found => 'W', itemnumber => { '!=' => undef } },
             { columns => ['itemnumber'] }
-        )->get_column('itemnumber')->as_query;
+        )->_resultset->get_column('itemnumber')->as_query;
         push @conditions, { 'me.itemnumber' => { -not_in => $subq } };
     }
 
