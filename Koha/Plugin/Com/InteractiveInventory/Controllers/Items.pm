@@ -346,6 +346,23 @@ sub resolveTransit {
     }
     
     try {
+        # Validate destination matches current branch per Koha core pattern
+        # (see C4::Circulation AddReturn: $transfer->tobranch eq $branch)
+        my $branchCode = $transit_data->{branchCode} || '';
+        if ($branchCode && $transfer->tobranch ne $branchCode) {
+            return $c->render(
+                status => 200,
+                openapi => {
+                    status  => "wrong_branch",
+                    message => "Transfer destination is " . $transfer->tobranch
+                              . ", not current branch " . $branchCode
+                              . ". Transit was not resolved.",
+                    from_branch => $transfer->frombranch,
+                    to_branch   => $transfer->tobranch,
+                }
+            );
+        }
+
         # Use Koha's proper transfer API to receive the item
         # This sets datearrived, updates date_last_seen, and maintains audit trail
         $transfer->receive;

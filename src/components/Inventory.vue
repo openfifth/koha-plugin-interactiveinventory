@@ -1201,7 +1201,11 @@ export default {
 
         // Check if item is in transit and should be resolved
         const transitInfo = this.getTransitInfo(combinedData)
-        if (transitInfo.inTransit && this.resolutionSettings.resolveInTransitItems) {
+        if (
+          transitInfo.inTransit &&
+          this.resolutionSettings.resolveInTransitItems &&
+          transitInfo.to === this.sessionData.selectedLibraryId
+        ) {
           const transitResolved = await this.resolveTransit(combinedData.external_id)
           if (transitResolved) {
             combinedData.in_transit = false
