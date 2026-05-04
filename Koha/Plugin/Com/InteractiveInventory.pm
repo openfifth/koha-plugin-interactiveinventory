@@ -14,6 +14,7 @@ use C4::Auth   qw( get_template_and_user );
 use C4::Output qw( output_html_with_http_headers );
 use C4::Items  qw( GetItemsForInventory );
 use Koha::Items;
+use Koha::Checkouts;
 use Koha::ItemTypes;
 
 our $VERSION = '1.4.2';
@@ -193,6 +194,9 @@ sub start_session {
         # Ensure rightPlaceList is an array reference, even if empty
         $rightPlaceList = [] unless defined $rightPlaceList;
 
+        # Enrich items with holdingbranch/in_transit/checked_out and apply skip filters
+        $rightPlaceList = _enrich_and_filter_items($rightPlaceList, $skipInTransitItems, $skipBranchMismatchItems);
+
         # Build parameters for location data query
         my $location_params = {
             %$common_params,  # Include common parameters
@@ -206,20 +210,13 @@ sub start_session {
             itemtypes           => \@selectedItypes,
         };
         
-        # Add transit filtering if enabled
-        if ($skipInTransitItems) {
-            $location_params->{ignore_transit} = 1;
-        }
-        
-        # Add branch mismatch filtering if enabled
-        if ($skipBranchMismatchItems) {
-            $location_params->{homebranch_match_holdingbranch} = 1;
-        }
-
         my ($location_data, $iTotalRecords) = GetItemsForInventory($location_params);
 
         # Ensure location_data is an array reference, even if empty
         $location_data = [] unless defined $location_data;
+
+        # Enrich items with holdingbranch/in_transit/checked_out and apply skip filters
+        $location_data = _enrich_and_filter_items($location_data, $skipInTransitItems, $skipBranchMismatchItems);
 
         # Modify the keys in location_data to conform to the required format
         foreach my $item (@$location_data) {
@@ -263,6 +260,54 @@ sub start_session {
             success => 0
         });
     }
+}
+
+sub _enrich_and_filter_items {
+    my ($items, $skipInTransitItems, $skipBranchMismatchItems) = @_;
+
+    return [] unless $items && @$items;
+
+    # Batch-enrich all items in a single query instead of N individual lookups.
+    # Gets holdingbranch, in_transit, and checked_out for all items at once.
+    my @itemnumbers = map { $_->{itemnumber} } @$items;
+    if (@itemnumbers) {
+        my $dbh = C4::Context->dbh;
+        my $placeholders = join(',', ('?') x scalar @itemnumbers);
+        my $sql = qq{
+            SELECT i.itemnumber, i.holdingbranch,
+                   CASE WHEN bt.branchtransfer_id IS NOT NULL THEN 1 ELSE 0 END AS in_transit,
+                   CASE WHEN iss.issue_id IS NOT NULL THEN 1 ELSE 0 END AS checked_out
+            FROM items i
+            LEFT JOIN branchtransfers bt ON i.itemnumber = bt.itemnumber
+                AND bt.datearrived IS NULL
+                AND bt.datecancelled IS NULL
+                AND bt.datesent IS NOT NULL
+            LEFT JOIN issues iss ON i.itemnumber = iss.itemnumber
+            WHERE i.itemnumber IN ($placeholders)
+        };
+        my $enrichment = $dbh->selectall_hashref($sql, 'itemnumber', undef, @itemnumbers);
+
+        foreach my $item_hash (@$items) {
+            my $extra = $enrichment->{ $item_hash->{itemnumber} } || {};
+            $item_hash->{holdingbranch} = $extra->{holdingbranch} if defined $extra->{holdingbranch};
+            $item_hash->{in_transit}    = $extra->{in_transit}    || 0;
+            $item_hash->{checked_out}   = $extra->{checked_out}   || 0;
+        }
+    }
+
+    # Apply server-side filtering for skip settings
+    if ($skipInTransitItems) {
+        $items = [ grep { !$_->{in_transit} } @$items ];
+    }
+
+    if ($skipBranchMismatchItems) {
+        $items = [ grep {
+            !defined $_->{holdingbranch} || !defined $_->{homebranch}
+            || $_->{holdingbranch} eq $_->{homebranch}
+        } @$items ];
+    }
+
+    return $items;
 }
 
 =head3
