@@ -588,13 +588,7 @@ export default {
       }
 
       // Get the location data from session response
-      const locationData = this.sessionData.response_data.location_data || []
-
-      // If location data is empty, try to use right_place_list as a fallback
-      let itemsToCheck = locationData
-      if (itemsToCheck.length === 0 && this.sessionData.response_data.right_place_list) {
-        itemsToCheck = this.sessionData.response_data.right_place_list
-      }
+      const itemsToCheck = this.sessionData.response_data.location_data || []
 
       if (itemsToCheck.length === 0) {
         // No data to process
@@ -670,13 +664,7 @@ export default {
       this.processedItems = []
 
       // Get the location data from session response to use for item lookup
-      const locationData = this.sessionData?.response_data?.location_data || []
-
-      // If location data is empty, try to use right_place_list as a fallback
-      let lookupData = locationData
-      if (lookupData.length === 0 && this.sessionData?.response_data?.right_place_list) {
-        lookupData = this.sessionData.response_data.right_place_list
-      }
+      const lookupData = this.sessionData?.response_data?.location_data || []
 
       // Create a map for quick barcode lookup
       const locationDataMap = new Map()

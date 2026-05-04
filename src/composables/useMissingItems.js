@@ -11,12 +11,7 @@ export function useMissingItems() {
       return 0
     }
 
-    const locationData = sessionData.response_data.location_data || []
-
-    let itemsToCheck = locationData
-    if (itemsToCheck.length === 0 && sessionData.response_data.right_place_list) {
-      itemsToCheck = sessionData.response_data.right_place_list
-    }
+    const itemsToCheck = sessionData.response_data.location_data || []
 
     if (itemsToCheck.length === 0) {
       return 0

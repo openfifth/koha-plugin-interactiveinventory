@@ -189,7 +189,7 @@ export function useSessionManagement() {
           const rightPlaceList = sessionData.response_data.right_place_list || []
           if (rightPlaceList.length > 0) {
             EventBus.emit('message', {
-              text: `Expected barcodes list contains ${rightPlaceList.length} items. Items not on this list will be flagged.`,
+              text: `Expected barcodes list contains ${rightPlaceList.length} barcodes. Items not on this list will be flagged.`,
               type: 'status'
             })
 
