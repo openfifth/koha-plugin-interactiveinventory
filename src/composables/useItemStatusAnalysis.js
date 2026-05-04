@@ -112,7 +112,7 @@ export function getProblematicStatuses(statusAnalysis) {
   }
 
   if (statusAnalysis.withdrawn.isWithdrawn) {
-    issues.push({ type: 'withdrawn', severity: 'medium', message: 'Item is withdrawn' })
+    issues.push({ type: 'withdrawn', severity: 'high', message: 'Item is withdrawn' })
   }
 
   if (statusAnalysis.damaged.isDamaged) {
