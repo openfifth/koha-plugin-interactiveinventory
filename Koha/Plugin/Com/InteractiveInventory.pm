@@ -327,9 +327,6 @@ sub _get_items_for_inventory {
     my @itemnumbers = map { $_->{itemnumber} } @items;
     _enrich_transit_and_checkout( \@items, \@itemnumbers ) if @itemnumbers;
 
-    @items = grep { !$_->{in_transit} } @items
-        if $params->{skip_in_transit};
-
     return ( \@items, $total_count );
 }
 
@@ -450,6 +447,13 @@ sub _build_inventory_conditions {
             \['me.holdingbranch = me.homebranch'],
             { 'me.holdingbranch' => undef },
         ];
+    }
+
+    if ( $params->{skip_in_transit} ) {
+        push @conditions,
+            \[
+            'NOT EXISTS (SELECT 1 FROM branchtransfers WHERE branchtransfers.itemnumber = me.itemnumber AND datearrived IS NULL AND datecancelled IS NULL AND datesent IS NOT NULL)'
+            ];
     }
 
     return ( \@conditions, \@joins );
