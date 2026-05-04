@@ -1133,6 +1133,15 @@ export default {
           this.biblioWithHighestCallNumber = combinedData.biblio_id || null
         }
 
+        if (
+          this.sessionData.selectedStatuses &&
+          Object.values(this.sessionData.selectedStatuses).some(
+            (statusArray) => statusArray.length > 0
+          )
+        ) {
+          this.checkItemStatuses(combinedData, this.sessionData.selectedStatuses)
+        }
+
         // Check for issues that might need manual resolution
         if (this.manualResolutionEnabled) {
           // Handle checked out items
@@ -1406,15 +1415,6 @@ export default {
           combinedData.resolutionType = 'lost'
           combinedData.resolutionAction = 'marked found'
           combinedData.pendingResolution = false
-        }
-
-        if (
-          this.sessionData.selectedStatuses &&
-          Object.values(this.sessionData.selectedStatuses).some(
-            (statusArray) => statusArray.length > 0
-          )
-        ) {
-          this.checkItemStatuses(combinedData, this.sessionData.selectedStatuses)
         }
 
         combinedData.wasScanned = true
