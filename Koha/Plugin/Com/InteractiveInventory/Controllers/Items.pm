@@ -720,12 +720,16 @@ sub scanItem {
             $item_data->{in_transit} = 1;
         }
 
-        # Get first hold (waiting or pending)
-        my $holds = Koha::Holds->search(
+        # Get first hold — check item-level first, then biblio-level
+        my $first_hold = Koha::Holds->search(
             { itemnumber => $item->itemnumber },
             { order_by => { -asc => 'priority' }, rows => 1 }
-        );
-        my $first_hold = $holds->next;
+        )->next;
+        # Biblio-level holds have itemnumber=NULL
+        $first_hold //= Koha::Holds->search(
+            { biblionumber => $item->biblionumber, itemnumber => undef },
+            { order_by => { -asc => 'priority' }, rows => 1 }
+        )->next;
         if ($first_hold) {
             $item_data->{first_hold} = {
                 hold_id         => $first_hold->reserve_id,

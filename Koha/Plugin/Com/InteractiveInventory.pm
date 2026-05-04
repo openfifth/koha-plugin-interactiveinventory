@@ -446,7 +446,17 @@ sub _enrich_transit_and_checkout {
 
 sub install {
     my ( $self, $args ) = @_;
+    _ensure_authorized_values();
+    return 1;
+}
 
+sub upgrade {
+    my ( $self, $args ) = @_;
+    _ensure_authorized_values();
+    return 1;
+}
+
+sub _ensure_authorized_values {
     # Ensure the FOUND:INVENTORY authorized value exists in RETURN_CLAIM_RESOLUTION.
     # Without this value, resolving return claims with "FOUND:INVENTORY" will cause
     # the Return Claims tab on patron accounts to fail to load.
@@ -461,8 +471,6 @@ sub install {
             undef, 'RETURN_CLAIM_RESOLUTION', 'FOUND:INVENTORY', 'Found during inventory'
         );
     }
-
-    return 1;
 }
 
 =head3 static_routes
