@@ -10,8 +10,8 @@ use DBI;
 use CGI;
 use JSON;
 use URI::Escape;
-use C4::Auth   qw( get_template_and_user );
-use C4::Output qw( output_html_with_http_headers );
+use C4::Auth        qw( get_template_and_user );
+use C4::Output      qw( output_html_with_http_headers );
 use C4::ClassSource qw( GetClassSort );
 use Koha::AuthorisedValues;
 use Koha::Items;
@@ -58,7 +58,7 @@ sub tool {
 
     # Default: render the main tool template
     # Get template using get_template() method
-    my $template = $self->get_template({ file => 'InteractiveInventory.tt' });
+    my $template = $self->get_template( { file => 'InteractiveInventory.tt' } );
 
     my @class_sources = Koha::ClassSources->search( { used => 1 } )->as_list;
     my $pref_class    = C4::Context->preference("DefaultClassificationSource");
@@ -89,8 +89,8 @@ sub get_item_data {
         return;
     }
 
-   # Process the barcode (e.g., look up item data in the database)
-   # For demonstration, let's assume we have a function `lookup_item_by_barcode`
+    # Process the barcode (e.g., look up item data in the database)
+    # For demonstration, let's assume we have a function `lookup_item_by_barcode`
     my $item_data = lookup_item_by_barcode($barcode);
 
     # Return the item data as a JSON response
@@ -115,28 +115,26 @@ sub start_session {
 
     eval {
         my $session_data_encoded = $cgi->param('session_data');
-        
-        unless (defined $session_data_encoded) {
+
+        unless ( defined $session_data_encoded ) {
             die "Missing session_data parameter";
         }
-        
+
         my $session_data_json = uri_unescape($session_data_encoded);
-        
+
         # Validate JSON before parsing
         my $session_data;
-        eval {
-            $session_data = decode_json($session_data_json);
-        };
+        eval { $session_data = decode_json($session_data_json); };
         if ($@) {
             die "Invalid JSON in session_data: $@";
         }
-        
+
         # Validate required session data
-        unless ($session_data && ref($session_data) eq 'HASH') {
+        unless ( $session_data && ref($session_data) eq 'HASH' ) {
             die "Session data must be a valid object";
         }
-        
-        my @itemtypes = Koha::ItemTypes->search->as_list;
+
+        my @itemtypes      = Koha::ItemTypes->search->as_list;
         my @itemtype_codes = map { $_->itemtype } @itemtypes;
 
         # Quote each item type manually
@@ -145,40 +143,41 @@ sub start_session {
         # Extract and validate session parameters with defaults
         my $minLocation = $session_data->{'minLocation'} || '';
         my $maxLocation = $session_data->{'maxLocation'} || '';
-        $maxLocation = $minLocation.'Z' unless ($maxLocation || !$minLocation);
-        my $locationLoop = $session_data->{'locationLoop'} || '';
-        my $branchLoop = $session_data->{'branchLoop'} || '';
-        my $dateLastSeen = $session_data->{'dateLastSeen'} || '';
-        my $ccode = $session_data->{'ccode'} || '';
-        my $classSource = $session_data->{'classSource'} || '';
-        my $selectedStatuses = $session_data->{'selectedStatuses'} || {};
-        my $ignoreIssued = $session_data->{'ignoreIssued'} || 0;
-        my $ignoreWaitingHolds = $session_data->{'ignoreWaitingHolds'} || 0;
-        my $skipCheckedOutItems = $session_data->{'skipCheckedOutItems'} || 0;
-        my $skipInTransitItems = $session_data->{'skipInTransitItems'} || 0;
+        $maxLocation = $minLocation . 'Z' unless ( $maxLocation || !$minLocation );
+        my $locationLoop            = $session_data->{'locationLoop'}            || '';
+        my $branchLoop              = $session_data->{'branchLoop'}              || '';
+        my $dateLastSeen            = $session_data->{'dateLastSeen'}            || '';
+        my $ccode                   = $session_data->{'ccode'}                   || '';
+        my $classSource             = $session_data->{'classSource'}             || '';
+        my $selectedStatuses        = $session_data->{'selectedStatuses'}        || {};
+        my $ignoreIssued            = $session_data->{'ignoreIssued'}            || 0;
+        my $ignoreWaitingHolds      = $session_data->{'ignoreWaitingHolds'}      || 0;
+        my $skipCheckedOutItems     = $session_data->{'skipCheckedOutItems'}     || 0;
+        my $skipInTransitItems      = $session_data->{'skipInTransitItems'}      || 0;
         my $skipBranchMismatchItems = $session_data->{'skipBranchMismatchItems'} || 0;
-        my $compareBarcodes = $session_data->{'compareBarcodes'} || 0;
-        
+        my $compareBarcodes         = $session_data->{'compareBarcodes'}         || 0;
+
         if ($skipCheckedOutItems) {
             $ignoreIssued = 1;
         }
-        
+
         # Ensure selectedItypes is an array
         my @selectedItypes;
-        if (defined $session_data->{'selectedItypes'} && ref($session_data->{'selectedItypes'}) eq 'ARRAY') {
+        if ( defined $session_data->{'selectedItypes'} && ref( $session_data->{'selectedItypes'} ) eq 'ARRAY' ) {
             @selectedItypes = map { "'$_'" } @{ $session_data->{'selectedItypes'} };
         }
-        
+
         my $selectedbranchcode = $session_data->{'selectedLibraryId'} || '';
-        my $shelvingLocation = $session_data->{'shelvingLocation'} || '';
+        my $shelvingLocation   = $session_data->{'shelvingLocation'}  || '';
+        my $branchField        = $session_data->{'branchField'}       || 'homebranch';
 
         # Build common parameters for both queries
         my $common_params = {
-            minlocation  => $minLocation,
-            maxlocation  => $maxLocation,
-            branch       => 'homebranch',
-            branchcode   => $selectedbranchcode,
-            ccode        => $ccode,
+            minlocation => $minLocation,
+            maxlocation => $maxLocation,
+            branch      => $branchField,
+            branchcode  => $selectedbranchcode,
+            ccode       => $ccode,
         };
 
         # If shelving location is set, use it as the location parameter
@@ -189,88 +188,137 @@ sub start_session {
         }
 
         # Only generate right_place_list if compareBarcodes is enabled
+        # Uses barcode-only query — returns arrayref of barcode strings
         my $rightPlaceList = [];
         if ($compareBarcodes) {
-            ($rightPlaceList) = _get_items_for_inventory({
-                %$common_params,
-                skip_in_transit     => $skipInTransitItems,
-                skip_branch_mismatch => $skipBranchMismatchItems,
-            });
+            $rightPlaceList = _get_right_place_barcodes(
+                {
+                    %$common_params,
+                    skip_branch_mismatch => $skipBranchMismatchItems,
+                }
+            );
         }
 
-        my ($location_data, $iTotalRecords) = _get_items_for_inventory({
-            %$common_params,
-            class_source         => $classSource,
-            ignoreissued         => $ignoreIssued,
-            datelastseen         => $dateLastSeen,
-            branchcode           => $selectedbranchcode,
-            statushash           => $selectedStatuses,
-            ignore_waiting_holds => $ignoreWaitingHolds,
-            itemtypes            => \@selectedItypes,
-            skip_in_transit      => $skipInTransitItems,
-            skip_branch_mismatch => $skipBranchMismatchItems,
-        });
+        my ( $location_data, $iTotalRecords ) = _get_items_for_inventory(
+            {
+                %$common_params,
+                class_source         => $classSource,
+                ignoreissued         => $ignoreIssued,
+                datelastseen         => $dateLastSeen,
+                branchcode           => $selectedbranchcode,
+                statushash           => $selectedStatuses,
+                ignore_waiting_holds => $ignoreWaitingHolds,
+                itemtypes            => \@selectedItypes,
+                skip_in_transit      => $skipInTransitItems,
+                skip_branch_mismatch => $skipBranchMismatchItems,
+            }
+        );
 
         my $response = {
-            location_data => $location_data,
-            total_records => $iTotalRecords,
+            location_data    => $location_data,
+            total_records    => $iTotalRecords,
             right_place_list => $rightPlaceList,
         };
 
         # Return the JSON response
         print encode_json($response);
     };
-    
+
     # Handle any errors that occurred during processing
     if ($@) {
         warn "Error in start_session: $@";
-        print encode_json({ 
-            error => "Error processing request: $@",
-            success => 0
-        });
+        print encode_json(
+            {
+                error   => "Error processing request: $@",
+                success => 0
+            }
+        );
     }
 }
-
-=head3 _get_items_for_inventory
-
-DBIC-based replacement for C4::Items::GetItemsForInventory.
-Returns ($items_arrayref, $total_count).
-
-=cut
 
 sub _get_items_for_inventory {
     my ($params) = @_;
 
-    my ($conditions, $joins) = _build_inventory_conditions($params);
+    my ( $conditions, $joins ) = _build_inventory_conditions($params);
+    my $search_cond = @$conditions ? { -and => $conditions } : {};
 
-    my $search_cond  = @$conditions ? { -and => $conditions } : {};
-    my $search_attrs = {
-        prefetch => ['biblio'],
-        order_by => { -asc => ['me.cn_sort', 'me.itemcallnumber'] },
+    my $count_attrs = {};
+    $count_attrs->{join} = $joins if @$joins;
+    my $total_count = Koha::Items->search( $search_cond, $count_attrs )->count;
+
+    my $data_attrs = {
+        join    => [ 'biblio', @$joins ],
+        columns => [
+            'me.itemnumber',
+            'me.barcode',
+            'me.itemcallnumber',
+            'me.biblionumber',
+            'me.datelastseen',
+            'me.homebranch',
+            'me.holdingbranch',
+            'me.location',
+            'me.notforloan',
+            'me.damaged',
+            'me.itemlost',
+            'me.withdrawn',
+            'me.stocknumber',
+            'me.cn_sort',
+            'me.ccode',
+        ],
+        '+columns' => {
+            title  => 'biblio.title',
+            author => 'biblio.author',
+        },
+        order_by => { -asc => [ 'me.cn_sort', 'me.itemcallnumber' ] },
     };
-    $search_attrs->{join} = $joins if @$joins;
 
-    my $items_rs    = Koha::Items->search($search_cond, $search_attrs);
-    my $total_count = $items_rs->count;
-
-    my @items       = _resultset_to_hashrefs($items_rs);
-    my @itemnumbers = map { $_->{itemnumber} } @items;
-
-    _enrich_transit_and_checkout(\@items, \@itemnumbers) if @itemnumbers;
-
-    if ($params->{skip_in_transit}) {
-        @items = grep { !$_->{in_transit} } @items;
+    if ( defined $params->{offset} && $params->{size} ) {
+        $data_attrs->{offset} = $params->{offset};
+        $data_attrs->{rows}   = $params->{size};
     }
 
-    return (\@items, $total_count);
+    my ( $sql, @bind ) = _dbic_to_dbi( Koha::Items->search( $search_cond, $data_attrs ) );
+
+    my @items = @{ C4::Context->dbh->selectall_arrayref( $sql, { Slice => {} }, @bind ) };
+
+    my @itemnumbers = map { $_->{itemnumber} } @items;
+    _enrich_transit_and_checkout( \@items, \@itemnumbers ) if @itemnumbers;
+
+    @items = grep { !$_->{in_transit} } @items
+        if $params->{skip_in_transit};
+
+    return ( \@items, $total_count );
 }
 
-=head3 _build_inventory_conditions
+sub _get_right_place_barcodes {
+    my ($params) = @_;
 
-Translates inventory filter parameters into DBIC search conditions and joins.
-Returns (\@conditions, \@joins).
+    my ( $conditions, $joins ) = _build_inventory_conditions($params);
+    my $search_cond = @$conditions ? { -and => $conditions } : {};
 
-=cut
+    my ( $sql, @bind ) = _dbic_to_dbi(
+        Koha::Items->search(
+            $search_cond,
+            {
+                ( @$joins ? ( join => $joins ) : () ),
+                columns => ['me.barcode'],
+            }
+        )
+    );
+
+    my $barcodes = C4::Context->dbh->selectcol_arrayref( $sql, {}, @bind );
+    return [ grep { defined } @$barcodes ];
+}
+
+sub _dbic_to_dbi {
+    my ($rs) = @_;
+
+    my $query_ref = ${ $rs->_resultset->as_query };
+    my $sql       = $query_ref->[0];
+    my @bind      = map { $_->[1] } @{$query_ref}[ 1 .. $#$query_ref ];
+
+    return ( $sql, @bind );
+}
 
 sub _build_inventory_conditions {
     my ($params) = @_;
@@ -278,160 +326,111 @@ sub _build_inventory_conditions {
     my @conditions;
     my @joins;
 
-    my $class_source = $params->{class_source}
-        // C4::Context->preference('DefaultClassificationSource');
+    my $class_source = $params->{class_source} // C4::Context->preference('DefaultClassificationSource');
+    my $minlocation  = $params->{minlocation};
+    my $maxlocation  = $params->{maxlocation};
+    my $datelastseen = $params->{datelastseen};
+    my $location     = $params->{location};
+    my $ccode        = $params->{ccode};
+    my $branchcode   = $params->{branchcode};
+    my $branch       = $params->{branch};
+    my $statushash   = $params->{statushash};
+    my $itemtypes    = $params->{itemtypes} || [];
 
-    # Call number range
-    if ($params->{minlocation}) {
-        my $min_cnsort = GetClassSort($class_source, undef, $params->{minlocation});
+    if ($minlocation) {
+        my $min_cnsort = GetClassSort( $class_source, undef, $minlocation );
         push @conditions, { 'me.cn_sort' => { '>=' => $min_cnsort } }
             if $min_cnsort;
     }
-    if ($params->{maxlocation}) {
-        my $max_cnsort = GetClassSort($class_source, undef, $params->{maxlocation});
+
+    if ($maxlocation) {
+        my $max_cnsort = GetClassSort( $class_source, undef, $maxlocation );
         push @conditions, { 'me.cn_sort' => { '<=' => $max_cnsort } }
             if $max_cnsort;
     }
 
-    # Date last seen
-    if ($params->{datelastseen}) {
+    if ($datelastseen) {
         push @conditions, {
             -or => [
-                { 'me.datelastseen' => { '<' => $params->{datelastseen} } },
+                { 'me.datelastseen' => { '<' => $datelastseen } },
                 { 'me.datelastseen' => undef },
             ]
         };
     }
 
-    # Shelving location
-    push @conditions, { 'me.location' => $params->{location} }
-        if $params->{location};
+    push @conditions, { 'me.location' => $location } if $location;
+    push @conditions, { 'me.ccode'    => $ccode }    if $ccode;
 
-    # Branch filter
-    if ($params->{branchcode}) {
-        my $field = ($params->{branch} && $params->{branch} eq 'homebranch')
+    if ($branchcode) {
+        my $field =
+            ( $branch && $branch eq 'homebranch' )
             ? 'me.homebranch'
             : 'me.holdingbranch';
-        push @conditions, { $field => $params->{branchcode} };
+        push @conditions, { $field => $branchcode };
     }
 
-    # Collection code
-    push @conditions, { 'me.ccode' => $params->{ccode} }
-        if $params->{ccode};
-
-    # Status hash (e.g. { 'items.notforloan' => [1, 2] })
-    my $statushash = $params->{statushash};
-    if ($statushash && ref $statushash eq 'HASH') {
-        for my $field (keys %$statushash) {
-            next unless ref $statushash->{$field} eq 'ARRAY'
+    if ( $statushash && ref $statushash eq 'HASH' ) {
+        for my $field ( keys %$statushash ) {
+            next
+                unless ref $statushash->{$field} eq 'ARRAY'
                 && @{ $statushash->{$field} };
-            (my $dbic_field = $field) =~ s/^items\./me./;
+            ( my $dbic_field = $field ) =~ s/^items\./me./;
             push @conditions, { $dbic_field => { -in => $statushash->{$field} } };
         }
     }
 
-    # Item types (match biblioitems.itemtype OR items.itype)
-    my $itemtypes = $params->{itemtypes} || [];
     if (@$itemtypes) {
         push @joins, 'biblioitem';
         push @conditions, [
             { 'biblioitem.itemtype' => { -in => $itemtypes } },
-            { 'me.itype'           => { -in => $itemtypes } },
+            { 'me.itype'            => { -in => $itemtypes } },
         ];
     }
 
-    # Exclude checked-out items
-    if ($params->{ignoreissued}) {
-        my $subq = Koha::Checkouts->search(
-            {}, { columns => ['itemnumber'] }
-        )->_resultset->get_column('itemnumber')->as_query;
-        push @conditions, { 'me.itemnumber' => { -not_in => $subq } };
+    if ( $params->{ignoreissued} ) {
+        my $issued_itemnumbers =
+            Koha::Checkouts->search( {}, { columns => ['itemnumber'] } )->_resultset->get_column('itemnumber')
+            ->as_query;
+        push @conditions, { 'me.itemnumber' => { -not_in => $issued_itemnumbers } };
     }
 
-    # Exclude items with waiting holds
-    if ($params->{ignore_waiting_holds}) {
-        my $subq = Koha::Holds->search(
-            { found => 'W', itemnumber => { '!=' => undef } },
+    if ( $params->{ignore_waiting_holds} ) {
+        my $waiting_itemnumbers = Koha::Holds->search(
+            { found   => 'W', itemnumber => { '!=' => undef } },
             { columns => ['itemnumber'] }
         )->_resultset->get_column('itemnumber')->as_query;
-        push @conditions, { 'me.itemnumber' => { -not_in => $subq } };
+        push @conditions, { 'me.itemnumber' => { -not_in => $waiting_itemnumbers } };
     }
 
-    # Skip items where holdingbranch != homebranch
-    if ($params->{skip_branch_mismatch}) {
+    if ( $params->{skip_branch_mismatch} ) {
         push @conditions, -or => [
-            \[ 'me.holdingbranch = me.homebranch' ],
+            \['me.holdingbranch = me.homebranch'],
             { 'me.holdingbranch' => undef },
         ];
     }
 
-    return (\@conditions, \@joins);
+    return ( \@conditions, \@joins );
 }
-
-=head3 _resultset_to_hashrefs
-
-Converts a Koha::Items resultset (with prefetched biblio) into an array
-of hashrefs with the keys the frontend expects.
-
-=cut
-
-sub _resultset_to_hashrefs {
-    my ($items_rs) = @_;
-
-    my @items;
-    while (my $item = $items_rs->next) {
-        my $biblio = $item->biblio;
-        push @items, {
-            itemnumber     => $item->itemnumber,
-            barcode        => $item->barcode,
-            itemcallnumber => $item->itemcallnumber,
-            homebranch     => $item->homebranch,
-            holdingbranch  => $item->holdingbranch,
-            location       => $item->location,
-            cn_sort        => $item->cn_sort,
-            ccode          => $item->ccode,
-            datelastseen   => $item->datelastseen,
-            notforloan     => $item->notforloan,
-            damaged        => $item->damaged,
-            itemlost       => $item->itemlost,
-            withdrawn      => $item->withdrawn,
-            stocknumber    => $item->stocknumber,
-            title          => $biblio ? $biblio->title  : '',
-            author         => $biblio ? $biblio->author : '',
-            biblionumber   => $item->biblionumber,
-        };
-    }
-    return @items;
-}
-
-=head3 _enrich_transit_and_checkout
-
-Batch-enriches item hashrefs with in_transit and checked_out flags.
-Two DBIC queries regardless of item count.
-
-=cut
 
 sub _enrich_transit_and_checkout {
-    my ($items, $itemnumbers) = @_;
+    my ( $items, $itemnumbers ) = @_;
 
-    # Active transfers
     my %transit_map;
-    my $transfers_rs = Koha::Item::Transfers->search({
-        itemnumber    => { -in => $itemnumbers },
-        datearrived   => undef,
-        datecancelled => undef,
-        datesent      => { '!=' => undef },
-    });
-    while (my $t = $transfers_rs->next) {
+    my $transfers_rs = Koha::Item::Transfers->search(
+        {
+            itemnumber    => { -in => $itemnumbers },
+            datearrived   => undef,
+            datecancelled => undef,
+            datesent      => { '!=' => undef },
+        }
+    );
+    while ( my $t = $transfers_rs->next ) {
         $transit_map{ $t->itemnumber } = 1;
     }
 
-    # Active checkouts
     my %checkout_map;
-    my $checkouts_rs = Koha::Checkouts->search(
-        { itemnumber => { -in => $itemnumbers } }
-    );
-    while (my $co = $checkouts_rs->next) {
+    my $checkouts_rs = Koha::Checkouts->search( { itemnumber => { -in => $itemnumbers } } );
+    while ( my $co = $checkouts_rs->next ) {
         $checkout_map{ $co->itemnumber } = 1;
     }
 
@@ -458,20 +457,25 @@ sub upgrade {
 }
 
 sub _ensure_authorized_values {
+
     # Ensure the FOUND:INVENTORY authorized value exists in RETURN_CLAIM_RESOLUTION.
     # Without this value, resolving return claims with "FOUND:INVENTORY" will cause
     # the Return Claims tab on patron accounts to fail to load.
-    my $exists = Koha::AuthorisedValues->search({
-        category         => 'RETURN_CLAIM_RESOLUTION',
-        authorised_value => 'FOUND:INVENTORY',
-    })->count;
-
-    unless ($exists) {
-        Koha::AuthorisedValue->new({
+    my $exists = Koha::AuthorisedValues->search(
+        {
             category         => 'RETURN_CLAIM_RESOLUTION',
             authorised_value => 'FOUND:INVENTORY',
-            lib              => 'Found during inventory',
-        })->store;
+        }
+    )->count;
+
+    unless ($exists) {
+        Koha::AuthorisedValue->new(
+            {
+                category         => 'RETURN_CLAIM_RESOLUTION',
+                authorised_value => 'FOUND:INVENTORY',
+                lib              => 'Found during inventory',
+            }
+        )->store;
     }
 }
 
