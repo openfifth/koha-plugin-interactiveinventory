@@ -15,6 +15,7 @@ use C4::Output qw( output_html_with_http_headers );
 use C4::Items  qw( GetItemsForInventory );
 use Koha::Items;
 use Koha::Checkouts;
+use Koha::Item::Transfers;
 use Koha::ItemTypes;
 
 our $VERSION = '1.4.2';
@@ -267,32 +268,41 @@ sub _enrich_and_filter_items {
 
     return [] unless $items && @$items;
 
-    # Batch-enrich all items in a single query instead of N individual lookups.
-    # Gets holdingbranch, in_transit, and checked_out for all items at once.
     my @itemnumbers = map { $_->{itemnumber} } @$items;
-    if (@itemnumbers) {
-        my $dbh = C4::Context->dbh;
-        my $placeholders = join(',', ('?') x scalar @itemnumbers);
-        my $sql = qq{
-            SELECT i.itemnumber, i.holdingbranch,
-                   CASE WHEN bt.branchtransfer_id IS NOT NULL THEN 1 ELSE 0 END AS in_transit,
-                   CASE WHEN iss.issue_id IS NOT NULL THEN 1 ELSE 0 END AS checked_out
-            FROM items i
-            LEFT JOIN branchtransfers bt ON i.itemnumber = bt.itemnumber
-                AND bt.datearrived IS NULL
-                AND bt.datecancelled IS NULL
-                AND bt.datesent IS NOT NULL
-            LEFT JOIN issues iss ON i.itemnumber = iss.itemnumber
-            WHERE i.itemnumber IN ($placeholders)
-        };
-        my $enrichment = $dbh->selectall_hashref($sql, 'itemnumber', undef, @itemnumbers);
 
-        foreach my $item_hash (@$items) {
-            my $extra = $enrichment->{ $item_hash->{itemnumber} } || {};
-            $item_hash->{holdingbranch} = $extra->{holdingbranch} if defined $extra->{holdingbranch};
-            $item_hash->{in_transit}    = $extra->{in_transit}    || 0;
-            $item_hash->{checked_out}   = $extra->{checked_out}   || 0;
-        }
+    # Batch-fetch using Koha DBIC objects — 3 searches regardless of item count
+    # 1. Items: get holdingbranch for all items
+    my %holding_map;
+    my $items_rs = Koha::Items->search({ itemnumber => { -in => \@itemnumbers } });
+    while ( my $koha_item = $items_rs->next ) {
+        $holding_map{ $koha_item->itemnumber } = $koha_item->holdingbranch;
+    }
+
+    # 2. Active transfers: find items currently in transit
+    my %transit_map;
+    my $transfers_rs = Koha::Item::Transfers->search({
+        itemnumber    => { -in => \@itemnumbers },
+        datearrived   => undef,
+        datecancelled => undef,
+        datesent      => { '!=' => undef },
+    });
+    while ( my $transfer = $transfers_rs->next ) {
+        $transit_map{ $transfer->itemnumber } = 1;
+    }
+
+    # 3. Checkouts: find items currently checked out
+    my %checkout_map;
+    my $checkouts_rs = Koha::Checkouts->search({ itemnumber => { -in => \@itemnumbers } });
+    while ( my $checkout = $checkouts_rs->next ) {
+        $checkout_map{ $checkout->itemnumber } = 1;
+    }
+
+    # Merge enrichment data into item hashes
+    foreach my $item_hash (@$items) {
+        my $id = $item_hash->{itemnumber};
+        $item_hash->{holdingbranch} = $holding_map{$id} if exists $holding_map{$id};
+        $item_hash->{in_transit}    = $transit_map{$id}   ? 1 : 0;
+        $item_hash->{checked_out}   = $checkout_map{$id}  ? 1 : 0;
     }
 
     # Apply server-side filtering for skip settings
