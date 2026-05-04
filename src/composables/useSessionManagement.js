@@ -132,29 +132,41 @@ export function useSessionManagement() {
     }
 
     const PAGE_SIZE = 25000
+    const CONCURRENCY = 3
+
+    const fetchPage = async (encodedParams, offset) => {
+      const url = `${pluginBase}&action=get_inventory_page&inventory_params=${encodedParams}&offset=${offset}&size=${PAGE_SIZE}`
+      const data = await parseResponse(await fetch(url, fetchOpts))
+      return { offset, items: data.items || [] }
+    }
 
     const fetchAllPages = async (inventoryParams, totalRecords) => {
-      const allItems = []
-      let offset = 0
       const encodedParams = encodeURIComponent(JSON.stringify(inventoryParams))
+      const offsets = []
+      for (let o = 0; o < totalRecords; o += PAGE_SIZE) {
+        offsets.push(o)
+      }
 
-      while (offset < totalRecords) {
-        const url = `${pluginBase}&action=get_inventory_page&inventory_params=${encodedParams}&offset=${offset}&size=${PAGE_SIZE}`
-        const data = await parseResponse(await fetch(url, fetchOpts))
-        const items = data.items || []
+      const pages = new Array(offsets.length)
+      let loaded = 0
 
-        allItems.push(...items)
+      for (let i = 0; i < offsets.length; i += CONCURRENCY) {
+        const batch = offsets.slice(i, i + CONCURRENCY)
+        const results = await Promise.all(batch.map((o) => fetchPage(encodedParams, o)))
+
+        for (const result of results) {
+          const pageIndex = offsets.indexOf(result.offset)
+          pages[pageIndex] = result.items
+          loaded += result.items.length
+        }
 
         EventBus.emit('message', {
           type: 'status',
-          text: `Loading items: ${allItems.length} / ${totalRecords}`
+          text: `Loading items: ${loaded} / ${totalRecords}`
         })
-
-        if (items.length < PAGE_SIZE) break
-        offset += PAGE_SIZE
       }
 
-      return allItems
+      return pages.flat()
     }
 
     fetch(
