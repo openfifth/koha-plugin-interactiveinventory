@@ -68,8 +68,9 @@ sub modifyItemFields {
             foreach my $field_name ( keys %$fields ) {
                 my $value = $fields->{$field_name};
                 # Use server-side local time for datelastseen to avoid UTC issues
+                # dt_from_string() respects Koha's timezone config; DBIC handles storage format
                 if ($field_name eq 'datelastseen' && $value eq 'now') {
-                    $value = dt_from_string()->strftime('%Y-%m-%d %H:%M:%S');
+                    $value = dt_from_string();
                 }
                 $item->$field_name($value);
             }
@@ -126,8 +127,9 @@ sub modifyItemField {
         foreach my $field_name ( keys %$fields ) {
             my $value = $fields->{$field_name};
             # Use server-side local time for datelastseen to avoid UTC issues
+            # dt_from_string() respects Koha's timezone config; DBIC handles storage format
             if ($field_name eq 'datelastseen' && $value eq 'now') {
-                $value = dt_from_string()->strftime('%Y-%m-%d %H:%M:%S');
+                $value = dt_from_string();
             }
             $item->$field_name($value);
         }
