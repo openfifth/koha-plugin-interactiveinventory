@@ -28,26 +28,14 @@ describe('filterMissingItems', () => {
     expect(result).toHaveLength(5)
   })
 
-  it('returns empty array when no location data or right place list', () => {
+  it('returns empty array when no location data', () => {
     const result = filterMissingItems({})
     expect(result).toEqual([])
   })
 
-  it('falls back to rightPlaceList when locationData is empty', () => {
-    const result = filterMissingItems({
-      locationData: [],
-      rightPlaceList: baseItems
-    })
-    expect(result).toHaveLength(5)
-  })
-
-  it('prefers locationData over rightPlaceList when both are present', () => {
-    const result = filterMissingItems({
-      locationData: [makeItem('LOC1')],
-      rightPlaceList: [makeItem('RPL1'), makeItem('RPL2')]
-    })
-    expect(result).toHaveLength(1)
-    expect(result[0].barcode).toBe('LOC1')
+  it('returns empty array when locationData is empty', () => {
+    const result = filterMissingItems({ locationData: [] })
+    expect(result).toEqual([])
   })
 
   describe('scanned items filtering', () => {

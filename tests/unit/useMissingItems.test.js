@@ -63,7 +63,7 @@ describe('useMissingItems', () => {
       expect(getMissingItemsCount({}, [])).toBe(0)
     })
 
-    it('returns 0 when no location_data or right_place_list', () => {
+    it('returns 0 when no location_data', () => {
       const { getMissingItemsCount } = useMissingItems()
       const sessionData = { response_data: {} }
       expect(getMissingItemsCount(sessionData, [])).toBe(0)
@@ -79,19 +79,6 @@ describe('useMissingItems', () => {
       const items = [{ external_id: '001' }]
       const count = getMissingItemsCount(sessionData, items)
       expect(count).toBe(2)
-    })
-
-    it('falls back to right_place_list when location_data is empty', () => {
-      const { getMissingItemsCount } = useMissingItems()
-      const sessionData = {
-        response_data: {
-          location_data: [],
-          right_place_list: [{ barcode: '001' }, { barcode: '002' }]
-        }
-      }
-      const items = [{ external_id: '001' }]
-      const count = getMissingItemsCount(sessionData, items)
-      expect(count).toBe(1)
     })
 
     it('excludes marked missing items from count', () => {
