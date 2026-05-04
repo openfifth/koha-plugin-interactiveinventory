@@ -346,7 +346,7 @@ export default {
       compareBarcodes: false,
       doNotCheckIn: false,
       checkShelvedOutOfOrder: false,
-      skipCheckedOutItems: true,
+      skipCheckedOutItems: false,
       skipInTransitItems: false,
       skipBranchMismatchItems: false,
       showWithdrawnAlerts: true,
