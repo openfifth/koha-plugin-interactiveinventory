@@ -13,6 +13,7 @@ use URI::Escape;
 use C4::Auth   qw( get_template_and_user );
 use C4::Output qw( output_html_with_http_headers );
 use C4::ClassSource qw( GetClassSort );
+use Koha::AuthorisedValues;
 use Koha::Items;
 use Koha::Checkouts;
 use Koha::Holds;
@@ -460,16 +461,17 @@ sub _ensure_authorized_values {
     # Ensure the FOUND:INVENTORY authorized value exists in RETURN_CLAIM_RESOLUTION.
     # Without this value, resolving return claims with "FOUND:INVENTORY" will cause
     # the Return Claims tab on patron accounts to fail to load.
-    my $dbh = C4::Context->dbh;
-    my $exists = $dbh->selectrow_array(
-        "SELECT COUNT(*) FROM authorised_values WHERE category = ? AND authorised_value = ?",
-        undef, 'RETURN_CLAIM_RESOLUTION', 'FOUND:INVENTORY'
-    );
+    my $exists = Koha::AuthorisedValues->search({
+        category         => 'RETURN_CLAIM_RESOLUTION',
+        authorised_value => 'FOUND:INVENTORY',
+    })->count;
+
     unless ($exists) {
-        $dbh->do(
-            "INSERT INTO authorised_values (category, authorised_value, lib) VALUES (?, ?, ?)",
-            undef, 'RETURN_CLAIM_RESOLUTION', 'FOUND:INVENTORY', 'Found during inventory'
-        );
+        Koha::AuthorisedValue->new({
+            category         => 'RETURN_CLAIM_RESOLUTION',
+            authorised_value => 'FOUND:INVENTORY',
+            lib              => 'Found during inventory',
+        })->store;
     }
 }
 
