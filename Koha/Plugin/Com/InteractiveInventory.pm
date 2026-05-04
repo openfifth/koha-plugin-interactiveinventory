@@ -230,79 +230,107 @@ sub start_session {
     }
 }
 
+=head3 _get_items_for_inventory
+
+DBIC-based replacement for C4::Items::GetItemsForInventory.
+Returns ($items_arrayref, $total_count).
+
+=cut
+
 sub _get_items_for_inventory {
     my ($params) = @_;
 
-    my $minlocation  = $params->{minlocation}  // '';
-    my $maxlocation  = $params->{maxlocation}  // '';
-    my $class_source = $params->{class_source}
-        // C4::Context->preference('DefaultClassificationSource');
-    my $location             = $params->{location}             // '';
-    my $ignoreissued         = $params->{ignoreissued}         // '';
-    my $datelastseen         = $params->{datelastseen}         // '';
-    my $branchcode           = $params->{branchcode}           // '';
-    my $branch               = $params->{branch}               // '';
-    my $statushash           = $params->{statushash}           // '';
-    my $ignore_waiting_holds = $params->{ignore_waiting_holds} // '';
-    my $itemtypes            = $params->{itemtypes}            || [];
-    my $ccode                = $params->{ccode}                // '';
-    my $skip_in_transit      = $params->{skip_in_transit}      // 0;
-    my $skip_branch_mismatch = $params->{skip_branch_mismatch} // 0;
+    my ($conditions, $joins) = _build_inventory_conditions($params);
 
-    # Build DBIC search conditions
+    my $search_cond  = @$conditions ? { -and => $conditions } : {};
+    my $search_attrs = {
+        prefetch => ['biblio'],
+        order_by => { -asc => ['me.cn_sort', 'me.itemcallnumber'] },
+    };
+    $search_attrs->{join} = $joins if @$joins;
+
+    my $items_rs    = Koha::Items->search($search_cond, $search_attrs);
+    my $total_count = $items_rs->count;
+
+    my @items       = _resultset_to_hashrefs($items_rs);
+    my @itemnumbers = map { $_->{itemnumber} } @items;
+
+    _enrich_transit_and_checkout(\@items, \@itemnumbers) if @itemnumbers;
+
+    if ($params->{skip_in_transit}) {
+        @items = grep { !$_->{in_transit} } @items;
+    }
+
+    return (\@items, $total_count);
+}
+
+=head3 _build_inventory_conditions
+
+Translates inventory filter parameters into DBIC search conditions and joins.
+Returns (\@conditions, \@joins).
+
+=cut
+
+sub _build_inventory_conditions {
+    my ($params) = @_;
+
     my @conditions;
     my @joins;
 
-    # Call number range — use GetClassSort to convert to sort keys
-    if ($minlocation) {
-        my $min_cnsort = GetClassSort($class_source, undef, $minlocation);
+    my $class_source = $params->{class_source}
+        // C4::Context->preference('DefaultClassificationSource');
+
+    # Call number range
+    if ($params->{minlocation}) {
+        my $min_cnsort = GetClassSort($class_source, undef, $params->{minlocation});
         push @conditions, { 'me.cn_sort' => { '>=' => $min_cnsort } }
             if $min_cnsort;
     }
-    if ($maxlocation) {
-        my $max_cnsort = GetClassSort($class_source, undef, $maxlocation);
+    if ($params->{maxlocation}) {
+        my $max_cnsort = GetClassSort($class_source, undef, $params->{maxlocation});
         push @conditions, { 'me.cn_sort' => { '<=' => $max_cnsort } }
             if $max_cnsort;
     }
 
     # Date last seen
-    if ($datelastseen) {
+    if ($params->{datelastseen}) {
         push @conditions, {
             -or => [
-                { 'me.datelastseen' => { '<' => $datelastseen } },
+                { 'me.datelastseen' => { '<' => $params->{datelastseen} } },
                 { 'me.datelastseen' => undef },
             ]
         };
     }
 
     # Shelving location
-    if ($location) {
-        push @conditions, { 'me.location' => $location };
-    }
+    push @conditions, { 'me.location' => $params->{location} }
+        if $params->{location};
 
     # Branch filter
-    if ($branchcode) {
-        my $field = ($branch eq 'homebranch') ? 'me.homebranch' : 'me.holdingbranch';
-        push @conditions, { $field => $branchcode };
+    if ($params->{branchcode}) {
+        my $field = ($params->{branch} && $params->{branch} eq 'homebranch')
+            ? 'me.homebranch'
+            : 'me.holdingbranch';
+        push @conditions, { $field => $params->{branchcode} };
     }
 
     # Collection code
-    if ($ccode) {
-        push @conditions, { 'me.ccode' => $ccode };
-    }
+    push @conditions, { 'me.ccode' => $params->{ccode} }
+        if $params->{ccode};
 
-    # Status hash (e.g. 'items.notforloan' => [1,2])
+    # Status hash (e.g. { 'items.notforloan' => [1, 2] })
+    my $statushash = $params->{statushash};
     if ($statushash && ref $statushash eq 'HASH') {
         for my $field (keys %$statushash) {
             next unless ref $statushash->{$field} eq 'ARRAY'
                 && @{ $statushash->{$field} };
-            my $dbic_field = $field;
-            $dbic_field =~ s/^items\./me./;
+            (my $dbic_field = $field) =~ s/^items\./me./;
             push @conditions, { $dbic_field => { -in => $statushash->{$field} } };
         }
     }
 
-    # Item types (match either biblioitems.itemtype or items.itype)
+    # Item types (match biblioitems.itemtype OR items.itype)
+    my $itemtypes = $params->{itemtypes} || [];
     if (@$itemtypes) {
         push @joins, 'biblioitem';
         push @conditions, [
@@ -312,45 +340,44 @@ sub _get_items_for_inventory {
     }
 
     # Exclude checked-out items
-    if ($ignoreissued) {
-        my $checked_out_subq = Koha::Checkouts->search(
-            {},
-            { columns => ['itemnumber'] }
+    if ($params->{ignoreissued}) {
+        my $subq = Koha::Checkouts->search(
+            {}, { columns => ['itemnumber'] }
         )->get_column('itemnumber')->as_query;
-        push @conditions, { 'me.itemnumber' => { -not_in => $checked_out_subq } };
+        push @conditions, { 'me.itemnumber' => { -not_in => $subq } };
     }
 
     # Exclude items with waiting holds
-    if ($ignore_waiting_holds) {
-        my $waiting_subq = Koha::Holds->search(
+    if ($params->{ignore_waiting_holds}) {
+        my $subq = Koha::Holds->search(
             { found => 'W', itemnumber => { '!=' => undef } },
             { columns => ['itemnumber'] }
         )->get_column('itemnumber')->as_query;
-        push @conditions, { 'me.itemnumber' => { -not_in => $waiting_subq } };
+        push @conditions, { 'me.itemnumber' => { -not_in => $subq } };
     }
 
-    # Skip branch mismatch in SQL (holdingbranch = homebranch)
-    if ($skip_branch_mismatch) {
+    # Skip items where holdingbranch != homebranch
+    if ($params->{skip_branch_mismatch}) {
         push @conditions, -or => [
             \[ 'me.holdingbranch = me.homebranch' ],
             { 'me.holdingbranch' => undef },
         ];
     }
 
-    # Execute search with prefetch for biblio to avoid N+1
-    my $search_cond  = @conditions ? { -and => \@conditions } : {};
-    my $search_attrs = {
-        prefetch => ['biblio'],
-        order_by => { -asc => ['me.cn_sort', 'me.itemcallnumber'] },
-    };
-    $search_attrs->{join} = \@joins if @joins;
+    return (\@conditions, \@joins);
+}
 
-    my $items_rs    = Koha::Items->search($search_cond, $search_attrs);
-    my $total_count = $items_rs->count;
+=head3 _resultset_to_hashrefs
 
-    # Build result hashrefs — keys match what frontend expects
+Converts a Koha::Items resultset (with prefetched biblio) into an array
+of hashrefs with the keys the frontend expects.
+
+=cut
+
+sub _resultset_to_hashrefs {
+    my ($items_rs) = @_;
+
     my @items;
-    my @itemnumbers;
     while (my $item = $items_rs->next) {
         my $biblio = $item->biblio;
         push @items, {
@@ -372,42 +399,45 @@ sub _get_items_for_inventory {
             author         => $biblio ? $biblio->author : '',
             biblionumber   => $item->biblionumber,
         };
-        push @itemnumbers, $item->itemnumber;
+    }
+    return @items;
+}
+
+=head3 _enrich_transit_and_checkout
+
+Batch-enriches item hashrefs with in_transit and checked_out flags.
+Two DBIC queries regardless of item count.
+
+=cut
+
+sub _enrich_transit_and_checkout {
+    my ($items, $itemnumbers) = @_;
+
+    # Active transfers
+    my %transit_map;
+    my $transfers_rs = Koha::Item::Transfers->search({
+        itemnumber    => { -in => $itemnumbers },
+        datearrived   => undef,
+        datecancelled => undef,
+        datesent      => { '!=' => undef },
+    });
+    while (my $t = $transfers_rs->next) {
+        $transit_map{ $t->itemnumber } = 1;
     }
 
-    # Batch-enrich transit and checkout status (2 queries, not N)
-    if (@itemnumbers) {
-        my %transit_map;
-        my $transfers_rs = Koha::Item::Transfers->search({
-            itemnumber    => { -in => \@itemnumbers },
-            datearrived   => undef,
-            datecancelled => undef,
-            datesent      => { '!=' => undef },
-        });
-        while (my $t = $transfers_rs->next) {
-            $transit_map{ $t->itemnumber } = 1;
-        }
-
-        my %checkout_map;
-        my $checkouts_rs = Koha::Checkouts->search(
-            { itemnumber => { -in => \@itemnumbers } }
-        );
-        while (my $co = $checkouts_rs->next) {
-            $checkout_map{ $co->itemnumber } = 1;
-        }
-
-        for my $item_hash (@items) {
-            $item_hash->{in_transit}  = $transit_map{ $item_hash->{itemnumber} }  ? 1 : 0;
-            $item_hash->{checked_out} = $checkout_map{ $item_hash->{itemnumber} } ? 1 : 0;
-        }
+    # Active checkouts
+    my %checkout_map;
+    my $checkouts_rs = Koha::Checkouts->search(
+        { itemnumber => { -in => $itemnumbers } }
+    );
+    while (my $co = $checkouts_rs->next) {
+        $checkout_map{ $co->itemnumber } = 1;
     }
 
-    # Filter in-transit items post-query (can't do conditional LEFT JOIN in DBIC)
-    if ($skip_in_transit) {
-        @items = grep { !$_->{in_transit} } @items;
+    for my $item_hash (@$items) {
+        $item_hash->{in_transit}  = $transit_map{ $item_hash->{itemnumber} }  ? 1 : 0;
+        $item_hash->{checked_out} = $checkout_map{ $item_hash->{itemnumber} } ? 1 : 0;
     }
-
-    return (\@items, $total_count);
 }
 
 =head3
