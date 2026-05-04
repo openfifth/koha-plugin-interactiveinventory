@@ -19,7 +19,7 @@ use Koha::Checkouts;
 use Koha::Holds;
 use Koha::Item::Transfers;
 
-our $VERSION = '1.4.2';
+our $VERSION = '1.5.0';
 
 our $metadata = {
     name            => 'Interactive Inventory',
