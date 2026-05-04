@@ -254,11 +254,10 @@ sub get_inventory_page {
         my $params_json = uri_unescape( $cgi->param('inventory_params') || '{}' );
         my $params      = decode_json($params_json);
         my $offset      = int( $cgi->param('offset') || 0 );
-        my $size        = int( $cgi->param('size')    || 80000  );
+        my $size        = int( $cgi->param('size')   || 80000 );
 
-        my ( $items, undef ) = _get_items_for_inventory(
-            { %$params, offset => $offset, size => $size, skip_count => 1 }
-        );
+        my ( $items, undef ) =
+            _get_items_for_inventory( { %$params, offset => $offset, size => $size, skip_count => 1 } );
 
         print encode_json(
             {
@@ -306,6 +305,7 @@ sub _get_items_for_inventory {
             'me.stocknumber',
             'me.cn_sort',
             'me.ccode',
+            'me.enumchron',
         ],
         '+columns' => {
             title  => 'biblio.title',
