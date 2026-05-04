@@ -39,8 +39,24 @@
               </div>
 
               <div v-if="type === 'intransit'" class="issue-details">
-                <p><strong>From:</strong> {{ getBranchName(item.homebranch) }}</p>
-                <p><strong>To:</strong> {{ getBranchName(item.holdingbranch) }}</p>
+                <p>
+                  <strong>From:</strong>
+                  {{
+                    getBranchName(
+                      (item.transfer && (item.transfer.from_library || item.transfer.frombranch)) ||
+                        item.homebranch
+                    )
+                  }}
+                </p>
+                <p>
+                  <strong>To:</strong>
+                  {{
+                    getBranchName(
+                      (item.transfer && (item.transfer.to_library || item.transfer.tobranch)) ||
+                        item.holdingbranch
+                    )
+                  }}
+                </p>
               </div>
 
               <div v-if="type === 'returnclaim'" class="issue-details">
