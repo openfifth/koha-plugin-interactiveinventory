@@ -48,6 +48,21 @@
         </select>
         <div v-if="librariesLoading" class="loading-indicator">Loading libraries...</div>
       </div>
+      <div v-if="selectedLibraryId" class="form-group branch-field-group">
+        <label>Filter items by:</label>
+        <div class="branch-field-options">
+          <label class="radio-option">
+            <input type="radio" v-model="branchField" value="homebranch" name="branchField" />
+            <span class="label-text">Home library</span>
+            <span class="help-text">(items that belong to this library)</span>
+          </label>
+          <label class="radio-option">
+            <input type="radio" v-model="branchField" value="holdingbranch" name="branchField" />
+            <span class="label-text">Current library</span>
+            <span class="help-text">(items currently located at this library)</span>
+          </label>
+        </div>
+      </div>
       <div class="form-group">
         <label for="shelvingLocation">Shelving Location</label>
         <select
@@ -361,6 +376,7 @@ export default {
       statuses: {},
       libraries: [],
       selectedLibraryId: '',
+      branchField: 'homebranch',
       collectionCodes: {},
       classSources: window.class_sources,
       iTypes: [],
@@ -559,6 +575,7 @@ export default {
         ignoreWaitingHolds: this.ignoreWaitingHolds,
         selectedItypes: this.selectedItypes,
         selectedLibraryId: this.selectedLibraryId,
+        branchField: this.branchField,
         inventoryDate: this.inventoryDate,
         compareBarcodes: this.compareBarcodes,
         doNotCheckIn: this.doNotCheckIn,
@@ -880,6 +897,66 @@ button {
 }
 
 .checkbox-option .help-text {
+  grid-column: 2;
+  justify-self: start;
+  font-size: 0.85rem;
+  color: #495057;
+  background-color: #f1f3f4;
+  border-left: 3px solid #2196f3;
+  padding: 0.375rem 0.5rem;
+  margin-top: 0.375rem;
+  border-radius: 0 4px 4px 0;
+}
+
+.branch-field-group {
+  margin-top: 0.5rem;
+}
+
+.branch-field-options {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.radio-option {
+  display: inline-grid;
+  grid-template-columns: auto auto;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.625rem 0.75rem;
+  margin: 0.375rem 0.375rem 0.375rem 0;
+  cursor: pointer;
+  border: 1px solid #dee2e6;
+  border-radius: 0.375rem;
+  background-color: #f8f9fa;
+  transition: all 0.15s ease-in-out;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.radio-option:hover {
+  background-color: #f8f9fa;
+  border-color: #adb5bd;
+}
+
+.radio-option:has(input:checked) {
+  background-color: #e7f1ff;
+  border-color: #86b7fe;
+}
+
+.radio-option input[type='radio'] {
+  width: 1rem;
+  height: 1rem;
+  margin: 0;
+  cursor: pointer;
+}
+
+.radio-option .label-text {
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.radio-option .help-text {
   grid-column: 2;
   justify-self: start;
   font-size: 0.85rem;

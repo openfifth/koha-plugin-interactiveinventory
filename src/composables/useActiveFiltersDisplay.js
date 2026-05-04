@@ -5,7 +5,8 @@ export function useActiveFiltersDisplay() {
 
   function getLibraryName(sessionData) {
     if (!sessionData?.selectedLibraryId) return 'All Libraries'
-    return sessionData.selectedLibraryId
+    const branchLabel = sessionData.branchField === 'holdingbranch' ? ' (current)' : ' (home)'
+    return sessionData.selectedLibraryId + branchLabel
   }
 
   function getShelvingLocationName(sessionData) {

@@ -30,9 +30,18 @@ describe('useActiveFiltersDisplay', () => {
       expect(getLibraryName(undefined)).toBe('All Libraries')
     })
 
-    it('returns selectedLibraryId when present', () => {
-      expect(getLibraryName({ selectedLibraryId: 'LIB_A' })).toBe('LIB_A')
-      expect(getLibraryName({ selectedLibraryId: 'MAIN' })).toBe('MAIN')
+    it('returns selectedLibraryId with home label by default', () => {
+      expect(getLibraryName({ selectedLibraryId: 'LIB_A' })).toBe('LIB_A (home)')
+      expect(getLibraryName({ selectedLibraryId: 'MAIN' })).toBe('MAIN (home)')
+    })
+
+    it('returns selectedLibraryId with current label when holdingbranch', () => {
+      expect(getLibraryName({ selectedLibraryId: 'LIB_A', branchField: 'holdingbranch' })).toBe(
+        'LIB_A (current)'
+      )
+      expect(getLibraryName({ selectedLibraryId: 'MAIN', branchField: 'holdingbranch' })).toBe(
+        'MAIN (current)'
+      )
     })
   })
 
@@ -296,7 +305,7 @@ describe('useActiveFiltersDisplay', () => {
         selectedItypes: ['BOOK', 'DVD']
       }
 
-      expect(getLibraryName(sessionData)).toBe('MAIN')
+      expect(getLibraryName(sessionData)).toBe('MAIN (home)')
       expect(getShelvingLocationName(sessionData)).toBe('FICTION')
       expect(getCollectionCodeName(sessionData)).toBe('ADULT')
       expect(getSelectedItemTypesText(sessionData)).toBe('2 selected')
@@ -310,7 +319,7 @@ describe('useActiveFiltersDisplay', () => {
         selectedLibraryId: 'MAIN'
       }
 
-      expect(getLibraryName(sessionData)).toBe('MAIN')
+      expect(getLibraryName(sessionData)).toBe('MAIN (home)')
       expect(getShelvingLocationName(sessionData)).toBe('All Locations')
       expect(getCollectionCodeName(sessionData)).toBe('All Collections')
     })
