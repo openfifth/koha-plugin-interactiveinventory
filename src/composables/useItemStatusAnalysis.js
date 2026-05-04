@@ -129,7 +129,7 @@ export function getProblematicStatuses(statusAnalysis) {
 
   if (statusAnalysis.transit.inTransit) {
     const transitMsg = `Item in transit`
-    issues.push({ type: 'transit', severity: 'low', message: transitMsg })
+    issues.push({ type: 'transit', severity: 'high', message: transitMsg })
   }
 
   if (statusAnalysis.branch.hasBranchMismatch && !statusAnalysis.checkout.isCheckedOut) {
