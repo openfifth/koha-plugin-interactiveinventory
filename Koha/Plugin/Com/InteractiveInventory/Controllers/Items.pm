@@ -67,6 +67,10 @@ sub modifyItemFields {
         try {
             foreach my $field_name ( keys %$fields ) {
                 my $value = $fields->{$field_name};
+                # Use server-side local time for datelastseen to avoid UTC issues
+                if ($field_name eq 'datelastseen' && $value eq 'now') {
+                    $value = dt_from_string()->strftime('%Y-%m-%d %H:%M:%S');
+                }
                 $item->$field_name($value);
             }
             $item->store;
@@ -121,6 +125,10 @@ sub modifyItemField {
     try {
         foreach my $field_name ( keys %$fields ) {
             my $value = $fields->{$field_name};
+            # Use server-side local time for datelastseen to avoid UTC issues
+            if ($field_name eq 'datelastseen' && $value eq 'now') {
+                $value = dt_from_string()->strftime('%Y-%m-%d %H:%M:%S');
+            }
             $item->$field_name($value);
         }
         $item->store;

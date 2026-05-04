@@ -993,7 +993,7 @@ export default {
         var fieldsToAmend = {}
 
         if (this.sessionData.inventoryDate > combinedData.last_seen_date) {
-          fieldsToAmend['datelastseen'] = new Date().toISOString().slice(0, 19).replace('T', ' ')
+          fieldsToAmend['datelastseen'] = 'now'
         }
 
         if (

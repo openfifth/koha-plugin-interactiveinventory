@@ -497,7 +497,7 @@ export default {
             barcode: barcode,
             fields: {
               itemlost: '0',
-              datelastseen: new Date().toISOString().slice(0, 19).replace('T', ' ')
+              datelastseen: 'now'
             }
           })
         })
