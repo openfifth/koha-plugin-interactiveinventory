@@ -1440,15 +1440,7 @@ export default {
         // Save updated items to session storage
         saveItems(this.items)
 
-        // Auto-open preview on first scan if enabled
-        if (
-          this.items.length === 1 &&
-          this.sessionData?.previewSettings?.autoOpenPreview &&
-          this.previewEnabled
-        ) {
-          this.showShelfPreview = true
-          this.loadAuthorizedValueCategories()
-        }
+        this.maybeAutoOpenPreviewOnFirstScan()
 
         // Clear the barcode input and focus on it
         this.barcode = ''
@@ -1958,6 +1950,18 @@ export default {
 
     openResolutionModal(item, type, patronName = '') {
       this._openResolutionModal(item, type, patronName, this.items)
+      this.maybeAutoOpenPreviewOnFirstScan()
+    },
+
+    maybeAutoOpenPreviewOnFirstScan() {
+      if (
+        this.items.length === 1 &&
+        this.sessionData?.previewSettings?.autoOpenPreview &&
+        this.previewEnabled
+      ) {
+        this.showShelfPreview = true
+        this.loadAuthorizedValueCategories()
+      }
     },
 
     closeResolutionModal() {
