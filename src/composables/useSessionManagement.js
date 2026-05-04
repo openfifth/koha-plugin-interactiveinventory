@@ -116,71 +116,84 @@ export function useSessionManagement() {
 
     EventBus.emit('message', { type: 'status', text: 'Starting inventory session...' })
 
-    fetch(
-      `/cgi-bin/koha/plugins/run.pl?class=Koha::Plugin::Com::InteractiveInventory&method=tool&action=start_session&session_data=${encodeURIComponent(JSON.stringify(sessionData))}`,
-      {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json'
-        }
+    const pluginBase =
+      '/cgi-bin/koha/plugins/run.pl?class=Koha::Plugin::Com::InteractiveInventory&method=tool'
+    const fetchOpts = { method: 'GET', headers: { Accept: 'application/json' } }
+
+    const parseResponse = async (response) => {
+      if (!response.ok) {
+        const text = await response.text()
+        throw new Error(text || `Server error: ${response.status}`)
       }
-    )
-      .then((response) => {
-        if (!response.ok) {
-          return response.headers.get('content-type').includes('application/json')
-            ? response.json().then((errorData) => {
-                throw new Error(
-                  errorData.error || `Server error: ${response.status} ${response.statusText}`
-                )
-              })
-            : response.text().then((errorText) => {
-                throw new Error(`Non-JSON error response: ${errorText || response.statusText}`)
-              })
-        }
+      const text = await response.text()
+      const data = JSON.parse(text)
+      if (data.error) throw new Error(`API error: ${data.error}`)
+      return data
+    }
 
-        return response.text().then((responseText) => {
-          try {
-            return JSON.parse(responseText)
-          } catch (jsonError) {
-            console.error('JSON Parse Error:', jsonError, 'Response text:', responseText)
-            throw new Error(`Invalid JSON response: ${jsonError.message}`)
-          }
+    const PAGE_SIZE = 5000
+
+    const fetchAllPages = async (inventoryParams, totalRecords) => {
+      const allItems = []
+      let offset = 0
+      const encodedParams = encodeURIComponent(JSON.stringify(inventoryParams))
+
+      while (offset < totalRecords) {
+        const url = `${pluginBase}&action=get_inventory_page&inventory_params=${encodedParams}&offset=${offset}&size=${PAGE_SIZE}`
+        const data = await parseResponse(await fetch(url, fetchOpts))
+        const items = data.items || []
+
+        allItems.push(...items)
+
+        EventBus.emit('message', {
+          type: 'status',
+          text: `Loading items: ${allItems.length} / ${totalRecords}`
         })
-      })
+
+        if (items.length < PAGE_SIZE) break
+        offset += PAGE_SIZE
+      }
+
+      return allItems
+    }
+
+    fetch(
+      `${pluginBase}&action=start_session&session_data=${encodeURIComponent(JSON.stringify(sessionData))}`,
+      fetchOpts
+    )
+      .then((response) => parseResponse(response))
       .then((data) => {
-        if (!data) {
-          throw new Error('Empty response received')
-        }
-
-        if (data.error) {
-          throw new Error(`API error: ${data.error}`)
-        }
-
-        if (!data.location_data || !Array.isArray(data.location_data)) {
-          console.warn('Invalid location_data in response:', data)
-          data.location_data = []
-        }
-
         if (!data.right_place_list || !Array.isArray(data.right_place_list)) {
-          console.warn('Invalid right_place_list in response:', data)
           data.right_place_list = []
         }
 
-        sessionData.response_data = data
+        const totalRecords = data.total_records || 0
+        const inventoryParams = data.inventory_params || {}
 
-        return saveSession(sessionData).catch((error) => {
-          console.error('Inventory session error when saving session:', error)
-          EventBus.emit('message', {
-            text: `Error saving session data: ${error.message}. Try using fewer filters or a smaller item set.`,
-            type: 'error'
+        EventBus.emit('message', {
+          type: 'status',
+          text: `Session created. Loading ${totalRecords} items...`
+        })
+
+        return fetchAllPages(inventoryParams, totalRecords).then((locationData) => {
+          sessionData.response_data = {
+            location_data: locationData,
+            total_records: totalRecords,
+            right_place_list: data.right_place_list
+          }
+
+          return saveSession(sessionData).catch((error) => {
+            console.error('Inventory session error when saving session:', error)
+            EventBus.emit('message', {
+              text: `Error saving session data: ${error.message}. Try using fewer filters or a smaller item set.`,
+              type: 'error'
+            })
           })
         })
       })
       .then(() => {
-        const emptyItems = []
-        itemsSetter(emptyItems)
-        return saveItems(emptyItems).catch((error) => {
+        itemsSetter([])
+        return saveItems([]).catch((error) => {
           console.error('Error saving empty items list:', error)
         })
       })
@@ -226,7 +239,6 @@ export function useSessionManagement() {
 
         setTimeout(() => {
           sessionInitializingSetter(false)
-
           focusBarcodeInputFn()
         }, 1000)
       })
@@ -240,13 +252,6 @@ export function useSessionManagement() {
           text: `Error starting inventory session: ${error.message}`,
           type: 'error'
         })
-
-        if (error.message.includes('JSON')) {
-          EventBus.emit('message', {
-            text: 'There was a problem with the server response. Please try again or contact support.',
-            type: 'error'
-          })
-        }
       })
   }
 
