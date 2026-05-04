@@ -12,9 +12,10 @@ use JSON;
 use URI::Escape;
 use C4::Auth   qw( get_template_and_user );
 use C4::Output qw( output_html_with_http_headers );
-use C4::Items  qw( GetItemsForInventory );
+use C4::ClassSource qw( GetClassSort );
 use Koha::Items;
 use Koha::Checkouts;
+use Koha::Holds;
 use Koha::Item::Transfers;
 use Koha::ItemTypes;
 
@@ -189,59 +190,25 @@ sub start_session {
         # Only generate right_place_list if compareBarcodes is enabled
         my $rightPlaceList = [];
         if ($compareBarcodes) {
-            ($rightPlaceList) = GetItemsForInventory($common_params);
+            ($rightPlaceList) = _get_items_for_inventory({
+                %$common_params,
+                skip_in_transit     => $skipInTransitItems,
+                skip_branch_mismatch => $skipBranchMismatchItems,
+            });
         }
 
-        # Ensure rightPlaceList is an array reference, even if empty
-        $rightPlaceList = [] unless defined $rightPlaceList;
-
-        # Enrich items with holdingbranch/in_transit/checked_out and apply skip filters
-        $rightPlaceList = _enrich_and_filter_items($rightPlaceList, $skipInTransitItems, $skipBranchMismatchItems);
-
-        # Build parameters for location data query
-        my $location_params = {
-            %$common_params,  # Include common parameters
-            class_source        => $classSource,
-            ignoreissued        => $ignoreIssued,
-            datelastseen        => $dateLastSeen,
-            branchcode          => $selectedbranchcode,
-            offset              => 0,
-            statushash          => $selectedStatuses,
-            ignore_waiting_holds=> $ignoreWaitingHolds,
-            itemtypes           => \@selectedItypes,
-        };
-        
-        my ($location_data, $iTotalRecords) = GetItemsForInventory($location_params);
-
-        # Ensure location_data is an array reference, even if empty
-        $location_data = [] unless defined $location_data;
-
-        # Enrich items with holdingbranch/in_transit/checked_out and apply skip filters
-        $location_data = _enrich_and_filter_items($location_data, $skipInTransitItems, $skipBranchMismatchItems);
-
-        # Modify the keys in location_data to conform to the required format
-        foreach my $item (@$location_data) {
-            foreach my $key (keys %$item) {
-                my $new_key = $key;
-                $new_key =~ s/[^a-zA-Z0-9_-]/_/g;  # Replace invalid characters with underscores
-                $new_key = lcfirst($new_key);       # Ensure it starts with a lowercase letter
-                if ($new_key ne $key) {
-                    $item->{$new_key} = delete $item->{$key};
-                }
-            }
-        }
-        
-        # Do the same for rightPlaceList
-        foreach my $item (@$rightPlaceList) {
-            foreach my $key (keys %$item) {
-                my $new_key = $key;
-                $new_key =~ s/[^a-zA-Z0-9_-]/_/g;  # Replace invalid characters with underscores
-                $new_key = lcfirst($new_key);       # Ensure it starts with a lowercase letter
-                if ($new_key ne $key) {
-                    $item->{$new_key} = delete $item->{$key};
-                }
-            }
-        }
+        my ($location_data, $iTotalRecords) = _get_items_for_inventory({
+            %$common_params,
+            class_source         => $classSource,
+            ignoreissued         => $ignoreIssued,
+            datelastseen         => $dateLastSeen,
+            branchcode           => $selectedbranchcode,
+            statushash           => $selectedStatuses,
+            ignore_waiting_holds => $ignoreWaitingHolds,
+            itemtypes            => \@selectedItypes,
+            skip_in_transit      => $skipInTransitItems,
+            skip_branch_mismatch => $skipBranchMismatchItems,
+        });
 
         my $response = {
             location_data => $location_data,
@@ -263,61 +230,184 @@ sub start_session {
     }
 }
 
-sub _enrich_and_filter_items {
-    my ($items, $skipInTransitItems, $skipBranchMismatchItems) = @_;
+sub _get_items_for_inventory {
+    my ($params) = @_;
 
-    return [] unless $items && @$items;
+    my $minlocation  = $params->{minlocation}  // '';
+    my $maxlocation  = $params->{maxlocation}  // '';
+    my $class_source = $params->{class_source}
+        // C4::Context->preference('DefaultClassificationSource');
+    my $location             = $params->{location}             // '';
+    my $ignoreissued         = $params->{ignoreissued}         // '';
+    my $datelastseen         = $params->{datelastseen}         // '';
+    my $branchcode           = $params->{branchcode}           // '';
+    my $branch               = $params->{branch}               // '';
+    my $statushash           = $params->{statushash}           // '';
+    my $ignore_waiting_holds = $params->{ignore_waiting_holds} // '';
+    my $itemtypes            = $params->{itemtypes}            || [];
+    my $ccode                = $params->{ccode}                // '';
+    my $skip_in_transit      = $params->{skip_in_transit}      // 0;
+    my $skip_branch_mismatch = $params->{skip_branch_mismatch} // 0;
 
-    my @itemnumbers = map { $_->{itemnumber} } @$items;
+    # Build DBIC search conditions
+    my @conditions;
+    my @joins;
 
-    # Batch-fetch using Koha DBIC objects — 3 searches regardless of item count
-    # 1. Items: get holdingbranch for all items
-    my %holding_map;
-    my $items_rs = Koha::Items->search({ itemnumber => { -in => \@itemnumbers } });
-    while ( my $koha_item = $items_rs->next ) {
-        $holding_map{ $koha_item->itemnumber } = $koha_item->holdingbranch;
+    # Call number range — use GetClassSort to convert to sort keys
+    if ($minlocation) {
+        my $min_cnsort = GetClassSort($class_source, undef, $minlocation);
+        push @conditions, { 'me.cn_sort' => { '>=' => $min_cnsort } }
+            if $min_cnsort;
+    }
+    if ($maxlocation) {
+        my $max_cnsort = GetClassSort($class_source, undef, $maxlocation);
+        push @conditions, { 'me.cn_sort' => { '<=' => $max_cnsort } }
+            if $max_cnsort;
     }
 
-    # 2. Active transfers: find items currently in transit
-    my %transit_map;
-    my $transfers_rs = Koha::Item::Transfers->search({
-        itemnumber    => { -in => \@itemnumbers },
-        datearrived   => undef,
-        datecancelled => undef,
-        datesent      => { '!=' => undef },
-    });
-    while ( my $transfer = $transfers_rs->next ) {
-        $transit_map{ $transfer->itemnumber } = 1;
+    # Date last seen
+    if ($datelastseen) {
+        push @conditions, {
+            -or => [
+                { 'me.datelastseen' => { '<' => $datelastseen } },
+                { 'me.datelastseen' => undef },
+            ]
+        };
     }
 
-    # 3. Checkouts: find items currently checked out
-    my %checkout_map;
-    my $checkouts_rs = Koha::Checkouts->search({ itemnumber => { -in => \@itemnumbers } });
-    while ( my $checkout = $checkouts_rs->next ) {
-        $checkout_map{ $checkout->itemnumber } = 1;
+    # Shelving location
+    if ($location) {
+        push @conditions, { 'me.location' => $location };
     }
 
-    # Merge enrichment data into item hashes
-    foreach my $item_hash (@$items) {
-        my $id = $item_hash->{itemnumber};
-        $item_hash->{holdingbranch} = $holding_map{$id} if exists $holding_map{$id};
-        $item_hash->{in_transit}    = $transit_map{$id}   ? 1 : 0;
-        $item_hash->{checked_out}   = $checkout_map{$id}  ? 1 : 0;
+    # Branch filter
+    if ($branchcode) {
+        my $field = ($branch eq 'homebranch') ? 'me.homebranch' : 'me.holdingbranch';
+        push @conditions, { $field => $branchcode };
     }
 
-    # Apply server-side filtering for skip settings
-    if ($skipInTransitItems) {
-        $items = [ grep { !$_->{in_transit} } @$items ];
+    # Collection code
+    if ($ccode) {
+        push @conditions, { 'me.ccode' => $ccode };
     }
 
-    if ($skipBranchMismatchItems) {
-        $items = [ grep {
-            !defined $_->{holdingbranch} || !defined $_->{homebranch}
-            || $_->{holdingbranch} eq $_->{homebranch}
-        } @$items ];
+    # Status hash (e.g. 'items.notforloan' => [1,2])
+    if ($statushash && ref $statushash eq 'HASH') {
+        for my $field (keys %$statushash) {
+            next unless ref $statushash->{$field} eq 'ARRAY'
+                && @{ $statushash->{$field} };
+            my $dbic_field = $field;
+            $dbic_field =~ s/^items\./me./;
+            push @conditions, { $dbic_field => { -in => $statushash->{$field} } };
+        }
     }
 
-    return $items;
+    # Item types (match either biblioitems.itemtype or items.itype)
+    if (@$itemtypes) {
+        push @joins, 'biblioitem';
+        push @conditions, [
+            { 'biblioitem.itemtype' => { -in => $itemtypes } },
+            { 'me.itype'           => { -in => $itemtypes } },
+        ];
+    }
+
+    # Exclude checked-out items
+    if ($ignoreissued) {
+        my $checked_out_subq = Koha::Checkouts->search(
+            {},
+            { columns => ['itemnumber'] }
+        )->get_column('itemnumber')->as_query;
+        push @conditions, { 'me.itemnumber' => { -not_in => $checked_out_subq } };
+    }
+
+    # Exclude items with waiting holds
+    if ($ignore_waiting_holds) {
+        my $waiting_subq = Koha::Holds->search(
+            { found => 'W', itemnumber => { '!=' => undef } },
+            { columns => ['itemnumber'] }
+        )->get_column('itemnumber')->as_query;
+        push @conditions, { 'me.itemnumber' => { -not_in => $waiting_subq } };
+    }
+
+    # Skip branch mismatch in SQL (holdingbranch = homebranch)
+    if ($skip_branch_mismatch) {
+        push @conditions, -or => [
+            \[ 'me.holdingbranch = me.homebranch' ],
+            { 'me.holdingbranch' => undef },
+        ];
+    }
+
+    # Execute search with prefetch for biblio to avoid N+1
+    my $search_cond  = @conditions ? { -and => \@conditions } : {};
+    my $search_attrs = {
+        prefetch => ['biblio'],
+        order_by => { -asc => ['me.cn_sort', 'me.itemcallnumber'] },
+    };
+    $search_attrs->{join} = \@joins if @joins;
+
+    my $items_rs    = Koha::Items->search($search_cond, $search_attrs);
+    my $total_count = $items_rs->count;
+
+    # Build result hashrefs — keys match what frontend expects
+    my @items;
+    my @itemnumbers;
+    while (my $item = $items_rs->next) {
+        my $biblio = $item->biblio;
+        push @items, {
+            itemnumber     => $item->itemnumber,
+            barcode        => $item->barcode,
+            itemcallnumber => $item->itemcallnumber,
+            homebranch     => $item->homebranch,
+            holdingbranch  => $item->holdingbranch,
+            location       => $item->location,
+            cn_sort        => $item->cn_sort,
+            ccode          => $item->ccode,
+            datelastseen   => $item->datelastseen,
+            notforloan     => $item->notforloan,
+            damaged        => $item->damaged,
+            itemlost       => $item->itemlost,
+            withdrawn      => $item->withdrawn,
+            stocknumber    => $item->stocknumber,
+            title          => $biblio ? $biblio->title  : '',
+            author         => $biblio ? $biblio->author : '',
+            biblionumber   => $item->biblionumber,
+        };
+        push @itemnumbers, $item->itemnumber;
+    }
+
+    # Batch-enrich transit and checkout status (2 queries, not N)
+    if (@itemnumbers) {
+        my %transit_map;
+        my $transfers_rs = Koha::Item::Transfers->search({
+            itemnumber    => { -in => \@itemnumbers },
+            datearrived   => undef,
+            datecancelled => undef,
+            datesent      => { '!=' => undef },
+        });
+        while (my $t = $transfers_rs->next) {
+            $transit_map{ $t->itemnumber } = 1;
+        }
+
+        my %checkout_map;
+        my $checkouts_rs = Koha::Checkouts->search(
+            { itemnumber => { -in => \@itemnumbers } }
+        );
+        while (my $co = $checkouts_rs->next) {
+            $checkout_map{ $co->itemnumber } = 1;
+        }
+
+        for my $item_hash (@items) {
+            $item_hash->{in_transit}  = $transit_map{ $item_hash->{itemnumber} }  ? 1 : 0;
+            $item_hash->{checked_out} = $checkout_map{ $item_hash->{itemnumber} } ? 1 : 0;
+        }
+    }
+
+    # Filter in-transit items post-query (can't do conditional LEFT JOIN in DBIC)
+    if ($skip_in_transit) {
+        @items = grep { !$_->{in_transit} } @items;
+    }
+
+    return (\@items, $total_count);
 }
 
 =head3
