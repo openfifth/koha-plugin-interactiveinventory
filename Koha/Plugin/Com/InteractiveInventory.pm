@@ -56,6 +56,10 @@ sub tool {
         return $self->start_session($args);
     }
 
+    if ( $action eq 'get_inventory_page' ) {
+        return $self->get_inventory_page($args);
+    }
+
     # Default: render the main tool template
     # Get template using get_template() method
     my $template = $self->get_template( { file => 'InteractiveInventory.tt' } );
@@ -199,25 +203,29 @@ sub start_session {
             );
         }
 
-        my ( $location_data, $iTotalRecords ) = _get_items_for_inventory(
-            {
-                %$common_params,
-                class_source         => $classSource,
-                ignoreissued         => $ignoreIssued,
-                datelastseen         => $dateLastSeen,
-                branchcode           => $selectedbranchcode,
-                statushash           => $selectedStatuses,
-                ignore_waiting_holds => $ignoreWaitingHolds,
-                itemtypes            => \@selectedItypes,
-                skip_in_transit      => $skipInTransitItems,
-                skip_branch_mismatch => $skipBranchMismatchItems,
-            }
-        );
+        my $inventory_params = {
+            %$common_params,
+            class_source         => $classSource,
+            ignoreissued         => $ignoreIssued,
+            datelastseen         => $dateLastSeen,
+            branchcode           => $selectedbranchcode,
+            statushash           => $selectedStatuses,
+            ignore_waiting_holds => $ignoreWaitingHolds,
+            itemtypes            => \@selectedItypes,
+            skip_in_transit      => $skipInTransitItems,
+            skip_branch_mismatch => $skipBranchMismatchItems,
+        };
+
+        my ( $conditions, $joins ) = _build_inventory_conditions($inventory_params);
+        my $search_cond = @$conditions ? { -and => $conditions } : {};
+        my $count_attrs = {};
+        $count_attrs->{join} = $joins if @$joins;
+        my $iTotalRecords = Koha::Items->search( $search_cond, $count_attrs )->count;
 
         my $response = {
-            location_data    => $location_data,
             total_records    => $iTotalRecords,
             right_place_list => $rightPlaceList,
+            inventory_params => $inventory_params,
         };
 
         # Return the JSON response
@@ -233,6 +241,38 @@ sub start_session {
                 success => 0
             }
         );
+    }
+}
+
+sub get_inventory_page {
+    my ( $self, $args ) = @_;
+
+    my $cgi = $self->{cgi};
+    print $cgi->header('application/json');
+
+    eval {
+        my $params_json = uri_unescape( $cgi->param('inventory_params') || '{}' );
+        my $params      = decode_json($params_json);
+        my $offset      = int( $cgi->param('offset') || 0 );
+        my $size        = int( $cgi->param('size')    || 5000 );
+
+        my ( $items, $total_count ) = _get_items_for_inventory(
+            { %$params, offset => $offset, size => $size }
+        );
+
+        print encode_json(
+            {
+                items         => $items,
+                total_records => $total_count,
+                offset        => $offset,
+                size          => $size,
+            }
+        );
+    };
+
+    if ($@) {
+        warn "Error in get_inventory_page: $@";
+        print encode_json( { error => "Error: $@", success => 0 } );
     }
 }
 
