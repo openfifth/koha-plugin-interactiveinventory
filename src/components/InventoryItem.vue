@@ -144,10 +144,12 @@
             {{ item.transitInfo.from || item.homebranch }} to
             {{ item.transitInfo.to || item.holdingbranch }}.
           </span>
-          <span v-else>
-            This item is currently in transit from {{ item.homebranch }} to
-            {{ item.holdingbranch }}.
+          <span v-else-if="item.transfer">
+            This item is currently in transit from
+            {{ item.transfer.from_library || item.transfer.frombranch || item.homebranch }} to
+            {{ item.transfer.to_library || item.transfer.tobranch || item.holdingbranch }}.
           </span>
+          <span v-else> This item is currently in transit. </span>
         </p>
         <p
           v-if="item.homebranch !== item.holdingbranch && alertSettings.showBranchMismatchAlerts"
