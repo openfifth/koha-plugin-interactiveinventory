@@ -312,7 +312,7 @@ sub _get_items_for_inventory {
             author        => 'biblio.author',
             frameworkcode => 'biblio.frameworkcode',
         },
-        order_by => { -asc => [ 'me.cn_sort', 'me.itemcallnumber' ] },
+        order_by => { -asc => [ 'me.cn_sort', 'me.itemcallnumber', 'biblio.title' ] },
     };
 
     if ( defined $params->{offset} && $params->{size} ) {
