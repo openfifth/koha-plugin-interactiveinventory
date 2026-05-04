@@ -254,18 +254,17 @@ sub get_inventory_page {
         my $params_json = uri_unescape( $cgi->param('inventory_params') || '{}' );
         my $params      = decode_json($params_json);
         my $offset      = int( $cgi->param('offset') || 0 );
-        my $size        = int( $cgi->param('size')    || 5000 );
+        my $size        = int( $cgi->param('size')    || 25000 );
 
-        my ( $items, $total_count ) = _get_items_for_inventory(
-            { %$params, offset => $offset, size => $size }
+        my ( $items, undef ) = _get_items_for_inventory(
+            { %$params, offset => $offset, size => $size, skip_count => 1 }
         );
 
         print encode_json(
             {
-                items         => $items,
-                total_records => $total_count,
-                offset        => $offset,
-                size          => $size,
+                items  => $items,
+                offset => $offset,
+                size   => $size,
             }
         );
     };
@@ -282,9 +281,12 @@ sub _get_items_for_inventory {
     my ( $conditions, $joins ) = _build_inventory_conditions($params);
     my $search_cond = @$conditions ? { -and => $conditions } : {};
 
-    my $count_attrs = {};
-    $count_attrs->{join} = $joins if @$joins;
-    my $total_count = Koha::Items->search( $search_cond, $count_attrs )->count;
+    my $total_count = 0;
+    unless ( $params->{skip_count} ) {
+        my $count_attrs = {};
+        $count_attrs->{join} = $joins if @$joins;
+        $total_count = Koha::Items->search( $search_cond, $count_attrs )->count;
+    }
 
     my $data_attrs = {
         join    => [ 'biblio', @$joins ],
