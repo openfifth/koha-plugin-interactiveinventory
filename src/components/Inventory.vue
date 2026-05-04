@@ -989,8 +989,7 @@ export default {
         const statusAnalysis = this.analyzeItemStatus(combinedData)
         combinedData.statusAnalysis = statusAnalysis
 
-        // Add running 'fields to amend' variable
-        var fieldsToAmend = {}
+        let fieldsToAmend = {}
 
         if (this.sessionData.inventoryDate > combinedData.last_seen_date) {
           fieldsToAmend['datelastseen'] = 'now'
@@ -1140,6 +1139,11 @@ export default {
           )
         ) {
           this.checkItemStatuses(combinedData, this.sessionData.selectedStatuses)
+        }
+
+        if (Object.keys(fieldsToAmend).length > 0) {
+          await this.updateSingleItemStatus(combinedData.external_id, fieldsToAmend)
+          fieldsToAmend = {}
         }
 
         // Check for issues that might need manual resolution
