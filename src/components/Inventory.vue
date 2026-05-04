@@ -1009,6 +1009,110 @@ export default {
         // Check various status flags
         this.checkItemSpecialStatuses(combinedData)
 
+        // Check if item matches active filters (runs in ALL modes, not just compareBarcodes)
+        // This ensures items from wrong libraries/locations are flagged even in "Accept all" mode
+        // NOTE: This runs BEFORE manual resolution so wrongPlace is set on the item when the modal opens
+        {
+          const homeBranch = combinedData.homebranch || combinedData.home_library_id
+          const itemLocation = combinedData.location || combinedData.permanent_location
+          const filterReasons = []
+
+          if (
+            this.sessionData.selectedLibraryId &&
+            homeBranch !== this.sessionData.selectedLibraryId
+          ) {
+            filterReasons.push(
+              `home library is ${homeBranch || 'unknown'}, not ${this.sessionData.selectedLibraryId}`
+            )
+          }
+          if (
+            this.sessionData.shelvingLocation &&
+            itemLocation !== this.sessionData.shelvingLocation
+          ) {
+            filterReasons.push(
+              `shelving location is ${itemLocation || 'unset'}, not ${this.sessionData.shelvingLocation}`
+            )
+          }
+          if (this.sessionData.ccode && combinedData.collection_code !== this.sessionData.ccode) {
+            filterReasons.push(
+              `collection code is ${combinedData.collection_code || 'unset'}, not ${this.sessionData.ccode}`
+            )
+          }
+
+          if (filterReasons.length > 0) {
+            combinedData.wrongPlace = true
+            combinedData.wrongPlaceReason = ` (${filterReasons.join('; ')})`
+            EventBus.emit('message', {
+              type: 'warning',
+              text: `Item ${combinedData.external_id} does not match active filters${combinedData.wrongPlaceReason}`
+            })
+          }
+        }
+
+        // Check scanned barcodes against expected list if compareBarcodes is enabled
+        // NOTE: This runs BEFORE manual resolution so the "not in expected list" warning shows alongside the modal
+        if (this.sessionData.compareBarcodes) {
+          const rightPlaceList = this.sessionData.response_data.right_place_list || []
+          const isInRightPlaceList = rightPlaceList.some(
+            (item) => item.barcode === combinedData.external_id
+          )
+          if (!isInRightPlaceList) {
+            combinedData.wrongPlace = true
+
+            // Determine specific reason why item is unexpected
+            const reasons = []
+            const homeBranch = combinedData.homebranch || combinedData.home_library_id
+            if (
+              this.sessionData.selectedLibraryId &&
+              homeBranch !== this.sessionData.selectedLibraryId
+            ) {
+              reasons.push(
+                `home library is ${homeBranch || 'unknown'}, not ${this.sessionData.selectedLibraryId}`
+              )
+            }
+            const itemLocation = combinedData.location || combinedData.permanent_location
+            if (
+              this.sessionData.shelvingLocation &&
+              itemLocation !== this.sessionData.shelvingLocation
+            ) {
+              reasons.push(
+                `shelving location is ${itemLocation || 'unset'}, not ${this.sessionData.shelvingLocation}`
+              )
+            }
+            if (this.sessionData.ccode && combinedData.collection_code !== this.sessionData.ccode) {
+              reasons.push(
+                `collection code is ${combinedData.collection_code || 'unset'}, not ${this.sessionData.ccode}`
+              )
+            }
+            // Check call number range
+            if (this.sessionData.minLocation || this.sessionData.maxLocation) {
+              const itemCallNumber = combinedData.callnumber || combinedData.call_number || ''
+              if (itemCallNumber) {
+                const min = this.sessionData.minLocation || ''
+                const max = this.sessionData.maxLocation || ''
+                if ((min && itemCallNumber < min) || (max && itemCallNumber > max)) {
+                  reasons.push(
+                    `call number ${itemCallNumber} is outside the range ${min || '(start)'}–${max || '(end)'}`
+                  )
+                }
+              }
+            }
+
+            const reasonText = reasons.length > 0 ? ` (${reasons.join('; ')})` : ''
+            combinedData.wrongPlaceReason = reasonText
+
+            EventBus.emit('message', {
+              type: 'warning',
+              text: `Item ${combinedData.external_id} is not in the expected barcodes list${reasonText}`
+            })
+          } else {
+            EventBus.emit('message', {
+              type: 'status',
+              text: `Item ${combinedData.external_id} found in expected barcodes list`
+            })
+          }
+        }
+
         // Check for issues that might need manual resolution
         if (this.manualResolutionEnabled) {
           // Handle checked out items
@@ -1186,94 +1290,6 @@ export default {
               text: `Item ${combinedData.external_id} marked as found (was lost)`
             })
           } else {
-          }
-        }
-
-        // Check if item matches active filters (runs in ALL modes, not just compareBarcodes)
-        // This ensures items from wrong libraries/locations are flagged even in "Accept all" mode
-        const homeBranch = combinedData.homebranch || combinedData.home_library_id
-        const itemLocation = combinedData.location || combinedData.permanent_location
-        const filterReasons = []
-
-        if (
-          this.sessionData.selectedLibraryId &&
-          homeBranch !== this.sessionData.selectedLibraryId
-        ) {
-          filterReasons.push(
-            `home library is ${homeBranch || 'unknown'}, not ${this.sessionData.selectedLibraryId}`
-          )
-        }
-        if (
-          this.sessionData.shelvingLocation &&
-          itemLocation !== this.sessionData.shelvingLocation
-        ) {
-          filterReasons.push(
-            `shelving location is ${itemLocation || 'unset'}, not ${this.sessionData.shelvingLocation}`
-          )
-        }
-        if (this.sessionData.ccode && combinedData.collection_code !== this.sessionData.ccode) {
-          filterReasons.push(
-            `collection code is ${combinedData.collection_code || 'unset'}, not ${this.sessionData.ccode}`
-          )
-        }
-
-        if (filterReasons.length > 0) {
-          combinedData.wrongPlace = true
-          combinedData.wrongPlaceReason = ` (${filterReasons.join('; ')})`
-          EventBus.emit('message', {
-            type: 'warning',
-            text: `Item ${combinedData.external_id} does not match active filters${combinedData.wrongPlaceReason}`
-          })
-        }
-
-        // Only check scanned barcodes against expected list if compareBarcodes is enabled
-        if (this.sessionData.compareBarcodes) {
-          // Add defensive check before accessing right_place_list
-          const rightPlaceList = this.sessionData.response_data.right_place_list || []
-          const isInRightPlaceList = rightPlaceList.some(
-            (item) => item.barcode === combinedData.external_id
-          )
-          if (!isInRightPlaceList) {
-            combinedData.wrongPlace = true // Flag the item as in the wrong place
-
-            // Determine specific reason why item is unexpected
-            const reasons = []
-            const homeBranch = combinedData.homebranch || combinedData.home_library_id
-            if (
-              this.sessionData.selectedLibraryId &&
-              homeBranch !== this.sessionData.selectedLibraryId
-            ) {
-              reasons.push(
-                `home library is ${homeBranch || 'unknown'}, not ${this.sessionData.selectedLibraryId}`
-              )
-            }
-            const itemLocation = combinedData.location || combinedData.permanent_location
-            if (
-              this.sessionData.shelvingLocation &&
-              itemLocation !== this.sessionData.shelvingLocation
-            ) {
-              reasons.push(
-                `shelving location is ${itemLocation || 'unset'}, not ${this.sessionData.shelvingLocation}`
-              )
-            }
-            if (this.sessionData.ccode && combinedData.collection_code !== this.sessionData.ccode) {
-              reasons.push(
-                `collection code is ${combinedData.collection_code || 'unset'}, not ${this.sessionData.ccode}`
-              )
-            }
-
-            const reasonText = reasons.length > 0 ? ` (${reasons.join('; ')})` : ''
-            combinedData.wrongPlaceReason = reasonText
-
-            EventBus.emit('message', {
-              type: 'warning',
-              text: `Item ${combinedData.external_id} is not in the expected barcodes list${reasonText}`
-            })
-          } else {
-            EventBus.emit('message', {
-              type: 'status',
-              text: `Item ${combinedData.external_id} found in expected barcodes list`
-            })
           }
         }
 
