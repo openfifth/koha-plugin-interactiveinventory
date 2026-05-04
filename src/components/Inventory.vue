@@ -996,6 +996,11 @@ export default {
           fieldsToAmend['datelastseen'] = 'now'
         }
 
+        // Capture original branch values before any updates for wrongPlace checks
+        const originalHomeBranch = combinedData.homebranch || combinedData.home_library_id
+        const originalHoldingBranch = combinedData.holdingbranch || combinedData.holding_library_id
+        const branchField = this.sessionData.branchField || 'homebranch'
+
         if (
           this.sessionData.selectedLibraryId &&
           combinedData.holding_library_id !== this.sessionData.selectedLibraryId
@@ -1013,16 +1018,19 @@ export default {
         // This ensures items from wrong libraries/locations are flagged even in "Accept all" mode
         // NOTE: This runs BEFORE manual resolution so wrongPlace is set on the item when the modal opens
         {
-          const homeBranch = combinedData.homebranch || combinedData.home_library_id
+          // Use the branch field the user chose (home or holding), with original pre-update values
+          const itemBranch =
+            branchField === 'holdingbranch' ? originalHoldingBranch : originalHomeBranch
+          const branchLabel = branchField === 'holdingbranch' ? 'current library' : 'home library'
           const itemLocation = combinedData.location || combinedData.permanent_location
           const filterReasons = []
 
           if (
             this.sessionData.selectedLibraryId &&
-            homeBranch !== this.sessionData.selectedLibraryId
+            itemBranch !== this.sessionData.selectedLibraryId
           ) {
             filterReasons.push(
-              `home library is ${homeBranch || 'unknown'}, not ${this.sessionData.selectedLibraryId}`
+              `${branchLabel} is ${itemBranch || 'unknown'}, not ${this.sessionData.selectedLibraryId}`
             )
           }
           if (
@@ -1053,21 +1061,22 @@ export default {
         // NOTE: This runs BEFORE manual resolution so the "not in expected list" warning shows alongside the modal
         if (this.sessionData.compareBarcodes) {
           const rightPlaceList = this.sessionData.response_data.right_place_list || []
-          const isInRightPlaceList = rightPlaceList.some(
-            (item) => item.barcode === combinedData.external_id
-          )
+          const isInRightPlaceList = rightPlaceList.includes(combinedData.external_id)
           if (!isInRightPlaceList) {
             combinedData.wrongPlace = true
 
             // Determine specific reason why item is unexpected
             const reasons = []
-            const homeBranch = combinedData.homebranch || combinedData.home_library_id
+            const itemBranchForCompare =
+              branchField === 'holdingbranch' ? originalHoldingBranch : originalHomeBranch
+            const branchLabelForCompare =
+              branchField === 'holdingbranch' ? 'current library' : 'home library'
             if (
               this.sessionData.selectedLibraryId &&
-              homeBranch !== this.sessionData.selectedLibraryId
+              itemBranchForCompare !== this.sessionData.selectedLibraryId
             ) {
               reasons.push(
-                `home library is ${homeBranch || 'unknown'}, not ${this.sessionData.selectedLibraryId}`
+                `${branchLabelForCompare} is ${itemBranchForCompare || 'unknown'}, not ${this.sessionData.selectedLibraryId}`
               )
             }
             const itemLocation = combinedData.location || combinedData.permanent_location
@@ -1850,13 +1859,8 @@ export default {
         if (this.sessionData.compareBarcodes && this.sessionData.response_data.right_place_list) {
           const rightPlaceList = this.sessionData.response_data.right_place_list
 
-          // Check if the scanned item is in the "right place" list
-          const expectedItem = rightPlaceList.find(
-            (listItem) => listItem.barcode === item.external_id
-          )
-
-          // Set a flag to indicate if this item is on the expected list
-          item.isOnExpectedList = !!expectedItem
+          // Check if the scanned item is in the "right place" list (barcode array)
+          item.isOnExpectedList = rightPlaceList.includes(item.external_id)
         }
       }
 
