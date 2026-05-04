@@ -18,7 +18,6 @@ use Koha::Items;
 use Koha::Checkouts;
 use Koha::Holds;
 use Koha::Item::Transfers;
-use Koha::ItemTypes;
 
 our $VERSION = '1.4.2';
 
@@ -138,12 +137,6 @@ sub start_session {
             die "Session data must be a valid object";
         }
 
-        my @itemtypes      = Koha::ItemTypes->search->as_list;
-        my @itemtype_codes = map { $_->itemtype } @itemtypes;
-
-        # Quote each item type manually
-        my @quoted_itemtypes = map { "'$_'" } @itemtype_codes;
-
         # Extract and validate session parameters with defaults
         my $minLocation = $session_data->{'minLocation'} || '';
         my $maxLocation = $session_data->{'maxLocation'} || '';
@@ -165,10 +158,9 @@ sub start_session {
             $ignoreIssued = 1;
         }
 
-        # Ensure selectedItypes is an array
         my @selectedItypes;
         if ( defined $session_data->{'selectedItypes'} && ref( $session_data->{'selectedItypes'} ) eq 'ARRAY' ) {
-            @selectedItypes = map { "'$_'" } @{ $session_data->{'selectedItypes'} };
+            @selectedItypes = @{ $session_data->{'selectedItypes'} };
         }
 
         my $selectedbranchcode = $session_data->{'selectedLibraryId'} || '';
