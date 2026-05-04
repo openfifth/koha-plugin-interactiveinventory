@@ -1122,6 +1122,17 @@ export default {
           }
         }
 
+        if (
+          this.sessionData.checkShelvedOutOfOrder &&
+          this.isCallNumberOutOfOrder(combinedData.call_number_sort, this.highestCallNumberSort)
+        ) {
+          combinedData.outOfOrder = true
+        } else {
+          this.highestCallNumberSort = combinedData.call_number_sort || ''
+          this.itemWithHighestCallNumber = combinedData.external_id
+          this.biblioWithHighestCallNumber = combinedData.biblio_id || null
+        }
+
         // Check for issues that might need manual resolution
         if (this.manualResolutionEnabled) {
           // Handle checked out items
@@ -1395,17 +1406,6 @@ export default {
           combinedData.resolutionType = 'lost'
           combinedData.resolutionAction = 'marked found'
           combinedData.pendingResolution = false
-        }
-
-        if (
-          this.sessionData.checkShelvedOutOfOrder &&
-          this.isCallNumberOutOfOrder(combinedData.call_number_sort, this.highestCallNumberSort)
-        ) {
-          combinedData.outOfOrder = true
-        } else {
-          this.highestCallNumberSort = combinedData.call_number_sort || ''
-          this.itemWithHighestCallNumber = combinedData.external_id
-          this.biblioWithHighestCallNumber = combinedData.biblio_id || null
         }
 
         if (
