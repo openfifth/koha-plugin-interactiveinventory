@@ -131,7 +131,7 @@ export function useSessionManagement() {
       return data
     }
 
-    const PAGE_SIZE = 5000
+    const PAGE_SIZE = 25000
 
     const fetchAllPages = async (inventoryParams, totalRecords) => {
       const allItems = []
