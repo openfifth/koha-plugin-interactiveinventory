@@ -24,3 +24,7 @@ This is a plugin for the Koha Library Management System. It allows users to Mana
 ## Development
 
 This plugin was developed and maintained by PTFS-Europe. It is compatible with Koha version 21.11.00.000 and above.
+
+## Licence
+
+This plugin is licensed under the GNU Affero General Public License v3.0 or later (`AGPL-3.0-or-later`). See [LICENSE](LICENSE).
