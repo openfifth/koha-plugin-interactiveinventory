@@ -52,20 +52,84 @@ console.log('package.json updated successfully');
 console.log(`Updating plugin file: ${packageJson.plugin.pm_path}`);
 const pluginFile = packageJson.plugin.pm_path;
 let pluginContent = fs.readFileSync(pluginFile, 'utf8');
-const oldVersionMatch = pluginContent.match(/our \$VERSION = ["'](\d+\.\d+\.\d+)["'];/);
+const oldVersionMatch = pluginContent.match(/our \$VERSION\s+=\s+["'](\d+\.\d+\.\d+)["'];/);
 if (oldVersionMatch) {
     console.log(`Found current version in plugin file: ${oldVersionMatch[1]}`);
 } else {
     console.log('Warning: Could not find version in plugin file');
 }
 
+// Get today's date in YYYY-MM-DD format
+const today = new Date().toISOString().split('T')[0];
+console.log(`Today's date: ${today}`);
+
+// Update version (preserve original whitespace formatting)
 pluginContent = pluginContent.replace(
-    /our \$VERSION = ["']\d+\.\d+\.\d+["'];/,
-    `our \$VERSION = '${newVersion}';`
+    /our \$VERSION\s+=\s+["']\d+\.\d+\.\d+["'];/,
+    `our $VERSION         = '${newVersion}';`
 );
+
+// Update date_updated
+const oldDateMatch = pluginContent.match(/date_updated\s*=>\s*["']([^"']+)["']/);
+if (oldDateMatch) {
+    console.log(`Found current date_updated in plugin file: ${oldDateMatch[1]}`);
+} else {
+    console.log('Warning: Could not find date_updated in plugin file');
+}
+
+pluginContent = pluginContent.replace(
+    /date_updated\s*=>\s*["'][^"']+["']/,
+    `date_updated    => '${today}'`
+);
+
 fs.writeFileSync(pluginFile, pluginContent);
 console.log('Plugin file updated successfully');
+
+// Update CHANGELOG.md: promote [Unreleased] to the new version, refresh links
+updateChangelog(packageJson.previous_version, newVersion, today);
 
 console.log(`\nVersion bump complete!`);
 console.log(`Previous version: ${packageJson.previous_version}`);
 console.log(`New version: ${newVersion}`);
+console.log(`Date updated: ${today}`);
+
+function updateChangelog(oldVersion, newVersion, today) {
+    const changelogPath = 'CHANGELOG.md';
+    if (!fs.existsSync(changelogPath)) {
+        console.log('No CHANGELOG.md found — skipping changelog update');
+        return;
+    }
+
+    let changelog = fs.readFileSync(changelogPath, 'utf8');
+
+    const unreleasedHeader = '## [Unreleased]';
+    if (!changelog.includes(unreleasedHeader)) {
+        console.log('Warning: CHANGELOG.md has no [Unreleased] section — skipping');
+        return;
+    }
+
+    // Promote [Unreleased] to a dated version section, leaving a fresh empty
+    // [Unreleased] above it so the next release can accumulate entries.
+    changelog = changelog.replace(
+        unreleasedHeader,
+        `${unreleasedHeader}\n\n## [${newVersion}] - ${today}`
+    );
+
+    // Refresh the comparison links at the bottom of the file:
+    //   [Unreleased]: .../compare/vOLD...HEAD  →  vNEW...HEAD
+    //   insert       [NEW]: .../compare/vOLD...vNEW   above the previous one
+    const linkRegex = /^\[Unreleased\]:\s*(.+?)\/compare\/v[\d.]+\.\.\.HEAD\s*$/m;
+    const linkMatch = changelog.match(linkRegex);
+    if (linkMatch) {
+        const repoBase = linkMatch[1];
+        const replacement =
+            `[Unreleased]: ${repoBase}/compare/v${newVersion}...HEAD\n` +
+            `[${newVersion}]: ${repoBase}/compare/v${oldVersion}...v${newVersion}`;
+        changelog = changelog.replace(linkRegex, replacement);
+    } else {
+        console.log('Warning: Could not find [Unreleased] compare link — links not updated');
+    }
+
+    fs.writeFileSync(changelogPath, changelog);
+    console.log(`CHANGELOG.md: promoted [Unreleased] → [${newVersion}] (${today})`);
+}
