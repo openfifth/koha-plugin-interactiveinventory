@@ -36,13 +36,13 @@ use Koha::Checkouts;
 use Koha::Holds;
 use Koha::Item::Transfers;
 
-our $VERSION         = '1.5.1';
+our $VERSION         = '1.5.2';
 
 our $metadata = {
     name            => 'Interactive Inventory',
     author          => 'Jacob O\'Mara',
     date_authored   => '2024-06-12',
-    date_updated    => "2025-03-24",
+    date_updated    => '2026-11-05',
     minimum_version => '21.11.00.000',
     maximum_version => undef,
     version         => $VERSION,
